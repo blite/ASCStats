@@ -12,3 +12,4 @@ airflow/logs/
 *.p8
 secrets/
 k8s/**/*.secret.yaml
+airflow/.kube/

@@ -1,0 +1,88 @@
+# Airflow 3 with LocalExecutor. Airflow only orchestrates: every task launches the ascstats
+# image as a pod on Docker Desktop Kubernetes (where Postgres and MinIO live).
+#
+#   ./scripts/kubeconfig.sh                 # once: kubeconfig for the containers
+#   docker compose up -d                    # UI on http://localhost:8080
+#   docker compose exec airflow-scheduler airflow dags backfill ascstats_daily_sales \
+#       --from-date 2026-09-01 --to-date 2026-09-07
+name: ascstats-airflow
+
+x-airflow: &airflow
+  image: apache/airflow:3.3.2-python3.13
+  user: "50000:0"
+  env_file:
+    - defaults.env  # synthetic asc_default connection: the sensor never calls Apple
+    - path: .env  # optional overrides, e.g. a real asc_default from scripts/asc-conn-from-k8s.sh
+      required: false
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__PARALLELISM: "8"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+    AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "True"
+    AIRFLOW__CORE__FERNET_KEY: ""
+    AIRFLOW__API_AUTH__JWT_SECRET: local-dev-only-jwt-secret
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "True"  # local only: no login
+    AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: "30"
+    PYTHONPATH: /opt/airflow/dags
+    # Where the DAGs send pods (same variables you would set on Cloud Composer).
+    ASCSTATS_IMAGE: ascstats:dev
+    ASCSTATS_K8S_NAMESPACE: ascstats
+    ASCSTATS_K8S_CONN_ID: kubernetes_default
+    AIRFLOW_CONN_KUBERNETES_DEFAULT: '{"conn_type": "kubernetes", "extra": {"kube_config_path": "/opt/airflow/kube/config", "namespace": "ascstats", "in_cluster": false}}'
+  volumes:
+    - ./dags:/opt/airflow/dags:ro
+    - ./logs:/opt/airflow/logs
+    - ./.kube:/opt/airflow/kube:ro
+  depends_on: &airflow-depends
+    airflow-init: {condition: service_completed_successfully}
+
+services:
+  airflow-postgres:
+    image: postgres:18-alpine
+    environment: {POSTGRES_USER: airflow, POSTGRES_PASSWORD: airflow, POSTGRES_DB: airflow}
+    volumes: [airflow-pg:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 2s
+      retries: 30
+
+  airflow-init:
+    <<: *airflow
+    depends_on: {airflow-postgres: {condition: service_healthy}}
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        mkdir -p /opt/airflow/logs && airflow db migrate &&
+        airflow pools set asc_api 2 "Concurrent App Store Connect API calls"
+
+  airflow-apiserver:
+    <<: *airflow
+    command: api-server
+    ports: ["8080:8080"]
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/api/v2/version"]
+      interval: 10s
+      retries: 30
+
+  airflow-scheduler:
+    <<: *airflow
+    command: scheduler
+    depends_on:
+      <<: *airflow-depends
+      airflow-apiserver: {condition: service_healthy}
+
+  airflow-dag-processor:
+    <<: *airflow
+    command: dag-processor
+
+  airflow-triggerer:
+    <<: *airflow
+    command: triggerer
+    depends_on:
+      <<: *airflow-depends
+      airflow-apiserver: {condition: service_healthy}
+
+volumes:
+  airflow-pg:
