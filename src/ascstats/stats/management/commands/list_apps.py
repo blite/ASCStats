@@ -8,12 +8,15 @@ from ascstats.stats.models import App
 
 class Command(BaseCommand):
     help = "Print active app Apple IDs as JSON (and write Airflow's XCom file with --xcom)."
+    # Strings, not numbers: Airflow maps these straight into pod args, which must be strings.
 
     def add_arguments(self, parser):
         parser.add_argument("--xcom", action="store_true", help="write /airflow/xcom/return.json")
 
     def handle(self, *, xcom, **_):
-        ids = list(App.objects.filter(is_active=True).values_list("apple_id", flat=True))
+        ids = [
+            str(i) for i in App.objects.filter(is_active=True).values_list("apple_id", flat=True)
+        ]
         payload = json.dumps(ids)
         if xcom:
             Path("/airflow/xcom/return.json").write_text(payload)

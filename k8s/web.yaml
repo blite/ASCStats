@@ -37,6 +37,7 @@ spec:
           readinessProbe:
             httpGet: {path: /api/health, port: http, httpHeaders: [{name: Host, value: localhost}]}
             periodSeconds: 10
+            timeoutSeconds: 5
           resources:
             requests: {cpu: 50m, memory: 192Mi}
             limits: {memory: 512Mi}

@@ -4,6 +4,9 @@ metadata:
   name: postgres
 spec:
   clusterIP: None
+  # A single-replica database: keep its DNS record even while a probe is failing, so a
+  # momentary probe timeout does not become "could not resolve host" in every client.
+  publishNotReadyAddresses: true
   selector: {app.kubernetes.io/name: postgres}
   ports: [{name: postgres, port: 5432}]
 ---
@@ -29,6 +32,8 @@ spec:
           readinessProbe:
             exec: {command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\""]}
             periodSeconds: 5
+            timeoutSeconds: 5 # the 1s default flaps when a backfill starts many pods at once
+            failureThreshold: 6
           resources:
             requests: {cpu: 50m, memory: 128Mi}
             limits: {memory: 512Mi}

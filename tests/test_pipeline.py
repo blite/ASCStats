@@ -149,3 +149,13 @@ def test_seed_synthetic_is_repeatable():
     call_command("seed_synthetic", "--days", "3")
     assert (SalesRow.objects.count(), AnalyticsRow.objects.count()) == counts
     assert App.objects.count() == 3
+
+
+@pytest.mark.django_db
+def test_list_apps_emits_string_ids_for_pod_args(apps, capsys):
+    import json
+
+    call_command("list_apps")
+    ids = json.loads(capsys.readouterr().out)
+    assert ids
+    assert all(isinstance(i, str) for i in ids)
