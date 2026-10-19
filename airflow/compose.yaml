@@ -3,7 +3,7 @@
 #
 #   ./scripts/kubeconfig.sh                 # once: kubeconfig for the containers
 #   docker compose up -d                    # UI on http://localhost:8080
-#   docker compose exec airflow-scheduler airflow dags backfill ascstats_daily_sales \
+#   docker compose exec airflow-scheduler airflow backfill create --dag-id ascstats_daily_sales \
 #       --from-date 2026-09-01 --to-date 2026-09-07
 name: ascstats-airflow
 

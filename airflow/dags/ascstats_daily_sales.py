@@ -2,7 +2,7 @@
 
 One data interval = one report day. The vendor-wide file is downloaded and validated once,
 then loaded and checked per app (dynamic task mapping), each load an idempotent
-delete+insert of that (app, day). Backfill with catchup or ``airflow dags backfill``.
+delete+insert of that (app, day). Backfill with catchup or ``airflow backfill create``.
 """
 
 import pendulum
