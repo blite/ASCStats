@@ -13,6 +13,12 @@ resources:
   - web.yaml
   - cronjobs.yaml
 
+# Stable names: Airflow's KubernetesPodOperator pods reference these from outside Kustomize.
+# Without the hash suffix a config change no longer rolls the Deployment by itself:
+# run `kubectl -n ascstats rollout restart deploy/web` after changing them.
+generatorOptions:
+  disableNameSuffixHash: true
+
 configMapGenerator:
   - name: ascstats-config
     literals:

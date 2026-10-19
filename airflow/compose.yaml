@@ -16,7 +16,10 @@ x-airflow: &airflow
       required: false
   environment: &airflow-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
-    AIRFLOW__CORE__PARALLELISM: "8"
+    AIRFLOW__CORE__PARALLELISM: "4"
+    # Each task process re-imports its DAG file; the Kubernetes provider is heavy, and on a
+    # laptop sharing CPU with the cluster the default 30s can be exceeded under load.
+    AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: "120"
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
     AIRFLOW__CORE__LOAD_EXAMPLES: "False"
@@ -30,6 +33,7 @@ x-airflow: &airflow
     ASCSTATS_IMAGE: ascstats:dev
     ASCSTATS_K8S_NAMESPACE: ascstats
     ASCSTATS_K8S_CONN_ID: kubernetes_default
+    ASCSTATS_START_DATE: "2026-10-15"  # small catchup locally; use backfill for older days
     AIRFLOW_CONN_KUBERNETES_DEFAULT: '{"conn_type": "kubernetes", "extra": {"kube_config_path": "/opt/airflow/kube/config", "namespace": "ascstats", "in_cluster": false}}'
   volumes:
     - ./dags:/opt/airflow/dags:ro

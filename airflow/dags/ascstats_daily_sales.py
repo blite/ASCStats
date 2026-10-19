@@ -5,10 +5,16 @@ then loaded and checked per app (dynamic task mapping), each load an idempotent
 delete+insert of that (app, day). Backfill with catchup or ``airflow backfill create``.
 """
 
-import pendulum
 from airflow.sdk import CronDataIntervalTimetable, dag, task
 
-from ascstats_lib.pods import ASC_CONN_ID, DEFAULT_ARGS, SALES_ASSET, manage_py, partial_manage_py
+from ascstats_lib.pods import (
+    ASC_CONN_ID,
+    DEFAULT_ARGS,
+    SALES_ASSET,
+    START_DATE,
+    manage_py,
+    partial_manage_py,
+)
 from ascstats_lib.sensors import ReportAvailableSensor
 
 DAY = "{{ ds }}"
@@ -17,7 +23,7 @@ DAY = "{{ ds }}"
 @dag(
     dag_id="ascstats_daily_sales",
     schedule=CronDataIntervalTimetable("0 0 * * *", timezone="UTC"),
-    start_date=pendulum.datetime(2026, 9, 1, tz="UTC"),
+    start_date=START_DATE,
     catchup=True,
     max_active_runs=3,
     default_args=DEFAULT_ARGS,
@@ -38,15 +44,20 @@ def ascstats_daily_sales():
     )
     apps = manage_py("list_apps", ["list_apps", "--xcom"], do_xcom_push=True)
 
-    def step_args(step):
-        return lambda apple_id: [
-            "import_asc", "--report", "sales", "--date", DAY, "--step", step,
-            "--app", str(apple_id),
-        ]  # fmt: skip
+    @task
+    def per_app_arguments(apple_ids: list[int], step: str, ds=None) -> list[list[str]]:
+        """Arguments for one pod per app. Built in a task because values mapped from XCom
+        are not Jinja-rendered, so ``{{ ds }}`` must be resolved here."""
+        return [
+            ["import_asc", "--report", "sales", "--date", ds, "--step", step, "--app", str(a)]
+            for a in apple_ids
+        ]
 
-    load_day = partial_manage_py("load_day").expand(arguments=apps.output.map(step_args("load")))
+    load_day = partial_manage_py("load_day").expand(
+        arguments=per_app_arguments.override(task_id="load_arguments")(apps.output, "load")
+    )
     quality_checks = partial_manage_py("quality_checks").expand(
-        arguments=apps.output.map(step_args("quality"))
+        arguments=per_app_arguments.override(task_id="quality_arguments")(apps.output, "quality")
     )
 
     @task(outlets=[SALES_ASSET])

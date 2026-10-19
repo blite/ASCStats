@@ -6,10 +6,9 @@ checks independently. The ONGOING report request itself is created once, by hand
 the pipeline: the pipeline never writes to App Store Connect.
 """
 
-import pendulum
 from airflow.sdk import CronDataIntervalTimetable, dag, task, task_group
 
-from ascstats_lib.pods import ANALYTICS_ASSET, ASC_CONN_ID, DEFAULT_ARGS, manage_py
+from ascstats_lib.pods import ANALYTICS_ASSET, ASC_CONN_ID, DEFAULT_ARGS, START_DATE, manage_py
 from ascstats_lib.sensors import ReportAvailableSensor
 
 DAY = "{{ ds }}"
@@ -18,7 +17,7 @@ DAY = "{{ ds }}"
 @dag(
     dag_id="ascstats_daily_analytics",
     schedule=CronDataIntervalTimetable("0 0 * * *", timezone="UTC"),
-    start_date=pendulum.datetime(2026, 9, 1, tz="UTC"),
+    start_date=START_DATE,
     catchup=True,
     max_active_runs=3,
     default_args=DEFAULT_ARGS,

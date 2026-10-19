@@ -4,7 +4,6 @@ Asset-scheduled: runs after a sales AND an analytics asset event. The rebuild co
 7 days, so late or restated days are picked up without tracking which day triggered it.
 """
 
-import pendulum
 from airflow.sdk import dag
 
 from ascstats_lib.pods import (
@@ -12,6 +11,7 @@ from ascstats_lib.pods import (
     CONVERSION_ASSET,
     DEFAULT_ARGS,
     SALES_ASSET,
+    START_DATE,
     manage_py,
 )
 
@@ -19,7 +19,7 @@ from ascstats_lib.pods import (
 @dag(
     dag_id="ascstats_conversion_metrics",
     schedule=(SALES_ASSET & ANALYTICS_ASSET),
-    start_date=pendulum.datetime(2026, 9, 1, tz="UTC"),
+    start_date=START_DATE,
     catchup=False,
     default_args=DEFAULT_ARGS,
     tags=["ascstats", "metrics"],

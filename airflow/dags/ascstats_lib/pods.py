@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 
+import pendulum
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
 from airflow.sdk import Asset
 from kubernetes.client import models as k8s
@@ -15,6 +16,8 @@ from kubernetes.client import models as k8s
 NAMESPACE = os.environ.get("ASCSTATS_K8S_NAMESPACE", "ascstats")
 IMAGE = os.environ.get("ASCSTATS_IMAGE", "ascstats:dev")
 K8S_CONN_ID = os.environ.get("ASCSTATS_K8S_CONN_ID", "kubernetes_default")
+# First data interval for catchup. Local Compose sets it near today to keep catchup small.
+START_DATE = pendulum.parse(os.environ.get("ASCSTATS_START_DATE", "2026-09-01"), tz="UTC")
 ASC_CONN_ID = "asc_default"
 ASC_POOL = "asc_api"  # bounds concurrent App Store Connect calls across all DAGs
 

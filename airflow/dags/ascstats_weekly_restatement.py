@@ -5,10 +5,9 @@ previous 7 complete days. Because each load is a delete+insert per (app, report,
 re-running a day is always safe and simply replaces it.
 """
 
-import pendulum
 from airflow.sdk import CronTriggerTimetable, dag
 
-from ascstats_lib.pods import DEFAULT_ARGS, manage_py
+from ascstats_lib.pods import DEFAULT_ARGS, START_DATE, manage_py
 
 FROM = "{{ macros.ds_add(ds, -8) }}"
 TO = "{{ macros.ds_add(ds, -2) }}"
@@ -17,7 +16,7 @@ TO = "{{ macros.ds_add(ds, -2) }}"
 @dag(
     dag_id="ascstats_weekly_restatement",
     schedule=CronTriggerTimetable("0 18 * * 1", timezone="UTC"),
-    start_date=pendulum.datetime(2026, 9, 1, tz="UTC"),
+    start_date=START_DATE,
     catchup=False,
     default_args=DEFAULT_ARGS,
     tags=["ascstats", "restatement"],
