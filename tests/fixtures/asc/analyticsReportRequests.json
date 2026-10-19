@@ -1,0 +1,12 @@
+{
+  "data": [
+    {
+      "type": "analyticsReportRequests",
+      "id": "r-ongoing-1",
+      "attributes": {"accessType": "ONGOING", "stoppedDueToInactivity": false},
+      "links": {"self": "https://api.appstoreconnect.apple.com/v1/analyticsReportRequests/r-ongoing-1"}
+    }
+  ],
+  "links": {"self": "https://api.appstoreconnect.apple.com/v1/apps/1000000002/analyticsReportRequests?filter%5BaccessType%5D=ONGOING"},
+  "meta": {"paging": {"total": 1, "limit": 50}}
+}

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ASCStats</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4" crossorigin="anonymous"></script>
+  <style>
+    :root { --fg:#1d1d1f; --muted:#6e6e73; --bar:#0a84ff; --line:#ff9f0a; --bg:#fff; --card:#f5f5f7; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg:#f5f5f7; --muted:#a1a1a6; --bg:#111; --card:#1c1c1e; }
+    }
+    body { font: 15px/1.5 -apple-system, system-ui, sans-serif; color: var(--fg); background: var(--bg);
+           max-width: 800px; margin: 2rem auto; padding: 0 16px; }
+    .card { background: var(--card); border-radius: 12px; padding: 16px; margin: 16px 0; }
+    select { font: inherit; padding: 4px 8px; }
+    svg { width: 100%; height: auto; }
+    .muted { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #8883; }
+  </style>
+</head>
+<body>
+  <h1>ASCStats</h1>
+  <p class="muted">Daily units (bars) and product-page conversion (line). <a href="/admin/">Admin</a> · <a href="/api/docs">API</a></p>
+  <form class="card" hx-get="{% url 'chart' %}" hx-target="#chart" hx-trigger="load, change">
+    <label>App
+      <select name="app">
+        {% for app in apps %}<option value="{{ app.apple_id }}">{{ app.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Window
+      <select name="days">
+        <option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option>
+      </select>
+    </label>
+  </form>
+  <div id="chart" class="card"><p class="muted">Loading…</p></div>
+  <div class="card">
+    <h2>Recent ingestion runs</h2>
+    <table>
+      <tr><th>Started</th><th>Report</th><th>Date</th><th>Step</th><th>Status</th><th>Rows</th></tr>
+      {% for run in runs %}
+      <tr><td>{{ run.started_at|date:"m-d H:i" }}</td><td>{{ run.report }}</td><td>{{ run.report_date }}</td>
+          <td>{{ run.step }}</td><td>{{ run.status }}</td><td>{{ run.rows_loaded|default_if_none:"" }}</td></tr>
+      {% empty %}<tr><td colspan="6" class="muted">No runs yet. Try <code>manage.py seed_synthetic</code>.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</body>
+</html>

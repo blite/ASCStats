@@ -1,0 +1,10 @@
+{
+  "data": [
+    {"type": "analyticsReportInstances", "id": "inst-1", "attributes": {"granularity": "DAILY", "processingDate": "2026-10-10"}}
+  ],
+  "links": {
+    "self": "https://api.appstoreconnect.apple.com/v1/analyticsReports/rep-downloads/instances?filter%5Bgranularity%5D=DAILY&filter%5BprocessingDate%5D=2026-10-10&limit=1",
+    "next": "https://api.appstoreconnect.apple.com/v1/analyticsReports/rep-downloads/instances?cursor=Mg.AAAA&filter%5Bgranularity%5D=DAILY&filter%5BprocessingDate%5D=2026-10-10&limit=1"
+  },
+  "meta": {"paging": {"total": 2, "limit": 1}}
+}

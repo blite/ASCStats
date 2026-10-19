@@ -1,0 +1,7 @@
+{
+  "data": [
+    {"type": "analyticsReportInstances", "id": "inst-2", "attributes": {"granularity": "DAILY", "processingDate": "2026-10-10"}}
+  ],
+  "links": {"self": "https://api.appstoreconnect.apple.com/v1/analyticsReports/rep-downloads/instances?cursor=Mg.AAAA&limit=1"},
+  "meta": {"paging": {"total": 2, "limit": 1}}
+}

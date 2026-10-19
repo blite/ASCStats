@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+staticfiles/
+*.sqlite3
+.env
+airflow/.env
+airflow/logs/
+# never commit a real App Store Connect key or real report files
+*.p8
+secrets/
+k8s/**/*.secret.yaml

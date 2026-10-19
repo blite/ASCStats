@@ -1,0 +1,1 @@
+{"errors": [{"id": "fixture", "status": "404", "code": "NOT_FOUND", "title": "The specified resource does not exist", "detail": "There were no sales for the date specified."}]}

@@ -1,0 +1,11 @@
+{
+  "data": [
+    {
+      "type": "analyticsReports",
+      "id": "rep-downloads",
+      "attributes": {"name": "App Downloads Standard", "category": "COMMERCE"}
+    }
+  ],
+  "links": {"self": "https://api.appstoreconnect.apple.com/v1/analyticsReportRequests/r-ongoing-1/reports"},
+  "meta": {"paging": {"total": 1, "limit": 50}}
+}

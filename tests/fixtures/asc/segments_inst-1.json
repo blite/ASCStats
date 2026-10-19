@@ -1,0 +1,14 @@
+{
+  "data": [
+    {
+      "type": "analyticsReportSegments",
+      "id": "seg-1",
+      "attributes": {
+        "checksum": "fixture",
+        "sizeInBytes": 300,
+        "url": "https://segments.example-cdn.test/seg-1.csv.gz?X-Amz-Signature=fixture"
+      }
+    }
+  ],
+  "links": {"self": "https://api.appstoreconnect.apple.com/v1/analyticsReportInstances/inst-1/segments"}
+}

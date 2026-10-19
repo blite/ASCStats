@@ -1,0 +1,10 @@
+{% if empty %}<p class="muted">No apps yet. Run <code>manage.py seed_synthetic</code>.</p>{% else %}
+<h2>{{ app.name }}</h2>
+<p class="muted">{{ start }} – {{ end }} · {{ total }} units · peak {{ peak }}/day</p>
+<svg viewBox="0 0 {{ width }} {{ height }}" role="img" aria-label="Daily units and conversion for {{ app.name }}">
+  <line x1="{{ pad }}" y1="{{ baseline }}" x2="{{ width }}" y2="{{ baseline }}" stroke="currentColor" stroke-opacity=".3"/>
+  <text x="2" y="{{ pad }}" font-size="11" fill="currentColor" opacity=".6">{{ peak }}</text>
+  {% for b in bars %}<rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" fill="var(--bar)" rx="1"><title>{{ b.label }}</title></rect>{% endfor %}
+  {% if line %}<polyline points="{{ line }}" fill="none" stroke="var(--line)" stroke-width="2"/>{% endif %}
+</svg>
+{% endif %}
