@@ -1,0 +1,90 @@
+# A daily import is a CronJob, not a queue. concurrencyPolicy: Forbid means a slow run is
+# never overlapped by the next one; the per-day delete+insert makes reruns safe anyway.
+# Exit code 3 ("not published yet") fails the Job, and backoffLimit retries it later.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: import-sales
+spec:
+  schedule: "30 14 * * *" # UTC; Apple publishes the previous day's sales in the morning PT
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 6
+      activeDeadlineSeconds: 21600
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext: {runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001}
+          containers:
+            - name: import
+              image: ascstats
+              imagePullPolicy: IfNotPresent
+              args: ["python", "manage.py", "import_asc", "--report", "sales", "--date", "yesterday"]
+              envFrom:
+                - configMapRef: {name: ascstats-config}
+                - secretRef: {name: ascstats-app}
+              env:
+                - name: ASC_KEY_ID
+                  valueFrom: {secretKeyRef: {name: asc-api-key, key: ASC_KEY_ID, optional: true}}
+                - name: ASC_ISSUER_ID
+                  valueFrom: {secretKeyRef: {name: asc-api-key, key: ASC_ISSUER_ID, optional: true}}
+              volumeMounts: [{name: asc-key, mountPath: /var/run/secrets/asc, readOnly: true}]
+              resources:
+                requests: {cpu: 50m, memory: 192Mi}
+                limits: {memory: 512Mi}
+          volumes:
+            - name: asc-key
+              secret:
+                secretName: asc-api-key
+                optional: true # synthetic mode runs without it
+                items: [{key: AuthKey.p8, path: AuthKey.p8}]
+                defaultMode: 0440 # group-readable via fsGroup, nobody else
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: import-analytics
+spec:
+  schedule: "0 16 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 6
+      activeDeadlineSeconds: 21600
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext: {runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001}
+          containers:
+            - name: import
+              image: ascstats
+              imagePullPolicy: IfNotPresent
+              args: ["sh", "-c", "python manage.py import_asc --report analytics --date yesterday && python manage.py build_conversion_metrics --days 7"]
+              envFrom:
+                - configMapRef: {name: ascstats-config}
+                - secretRef: {name: ascstats-app}
+              env:
+                - name: ASC_KEY_ID
+                  valueFrom: {secretKeyRef: {name: asc-api-key, key: ASC_KEY_ID, optional: true}}
+                - name: ASC_ISSUER_ID
+                  valueFrom: {secretKeyRef: {name: asc-api-key, key: ASC_ISSUER_ID, optional: true}}
+              volumeMounts: [{name: asc-key, mountPath: /var/run/secrets/asc, readOnly: true}]
+              resources:
+                requests: {cpu: 50m, memory: 192Mi}
+                limits: {memory: 512Mi}
+          volumes:
+            - name: asc-key
+              secret:
+                secretName: asc-api-key
+                optional: true
+                items: [{key: AuthKey.p8, path: AuthKey.p8}]
+                defaultMode: 0440

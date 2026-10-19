@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  type: LoadBalancer # Docker Desktop publishes this on localhost:8000
+  selector: {app.kubernetes.io/name: web}
+  ports: [{name: http, port: 8000, targetPort: 8000}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: web}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: web}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001}
+      initContainers:
+        - name: migrate
+          image: ascstats
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py ensure_raw_bucket --wait 120"]
+          envFrom: &env
+            - configMapRef: {name: ascstats-config}
+            - secretRef: {name: ascstats-app}
+      containers:
+        - name: web
+          image: ascstats
+          imagePullPolicy: IfNotPresent
+          envFrom: *env
+          ports: [{containerPort: 8000, name: http}]
+          readinessProbe:
+            httpGet: {path: /api/health, port: http, httpHeaders: [{name: Host, value: localhost}]}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 50m, memory: 192Mi}
+            limits: {memory: 512Mi}

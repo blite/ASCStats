@@ -52,6 +52,11 @@ class S3Store:
         self.prefix = prefix.strip("/")
         self.s3 = boto3.client("s3", endpoint_url=endpoint_url)
 
+    def ensure_bucket(self) -> None:
+        existing = {b["Name"] for b in self.s3.list_buckets().get("Buckets", [])}
+        if self.bucket not in existing:
+            self.s3.create_bucket(Bucket=self.bucket)
+
     def _key(self, key: str) -> str:
         return f"{self.prefix}/{key}" if self.prefix else key
 

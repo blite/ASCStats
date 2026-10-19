@@ -1,0 +1,39 @@
+# kubectl apply -k k8s/   (Docker Desktop Kubernetes; build the image first: docker build -t ascstats:dev .)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ascstats
+labels:
+  - pairs: {app.kubernetes.io/part-of: ascstats}
+    includeSelectors: false
+
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - minio.yaml
+  - web.yaml
+  - cronjobs.yaml
+
+configMapGenerator:
+  - name: ascstats-config
+    literals:
+      - ASC_SOURCE=synthetic # "asc" once the asc-api-key Secret exists
+      - ASC_VENDOR_NUMBER=
+      - ASC_KEY_PATH=/var/run/secrets/asc/AuthKey.p8
+      - RAW_STORAGE_URL=s3://ascstats-raw
+      - S3_ENDPOINT_URL=http://minio:9000
+      - AWS_DEFAULT_REGION=us-east-1
+      - DJANGO_ALLOWED_HOSTS=*
+      - DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost:8000
+
+# Dev-only credentials so the stack comes up with one command. For any shared cluster delete
+# this generator and create the Secrets from secrets/*.example.yaml (or External Secrets).
+secretGenerator:
+  - name: ascstats-db
+    envs: [secrets/dev-db.env]
+  - name: ascstats-app
+    envs: [secrets/dev-app.env]
+
+images:
+  - name: ascstats
+    newName: ascstats
+    newTag: dev

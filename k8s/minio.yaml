@@ -1,0 +1,49 @@
+# S3-compatible raw landing zone. On EKS/GKE this whole file goes away: point RAW_STORAGE_URL
+# at an S3 bucket (IRSA) or GCS via its S3 interoperability endpoint.
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+spec:
+  selector: {app.kubernetes.io/name: minio}
+  ports:
+    - {name: s3, port: 9000}
+    - {name: console, port: 9001}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+spec:
+  serviceName: minio
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: minio}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: minio}
+    spec:
+      securityContext: {fsGroup: 65532}
+      containers:
+        - name: minio
+          # Official MinIO images are no longer published; Chainguard builds from source.
+          image: cgr.dev/chainguard/minio@sha256:2915cb406f38ed6ff9634de0a3e4a9423e2dda06a6f1aca18f8c968aa37a01f6
+          args: ["server", "/data", "--console-address", ":9001"]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom: {secretKeyRef: {name: ascstats-app, key: MINIO_ROOT_USER}}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom: {secretKeyRef: {name: ascstats-app, key: MINIO_ROOT_PASSWORD}}
+          ports: [{containerPort: 9000}, {containerPort: 9001}]
+          volumeMounts: [{name: data, mountPath: /data}]
+          readinessProbe:
+            httpGet: {path: /minio/health/ready, port: 9000}
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 512Mi}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 2Gi}}

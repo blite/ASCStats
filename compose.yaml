@@ -1,0 +1,66 @@
+# Local development: Django + Postgres + MinIO.
+#   docker compose up --build
+#   docker compose exec web python manage.py seed_synthetic
+#   docker compose exec web python manage.py createsuperuser
+name: ascstats
+
+x-app-env: &app-env
+  DATABASE_URL: postgres://ascstats:ascstats@postgres:5432/ascstats
+  DJANGO_SECRET_KEY: dev-only-not-secret
+  DJANGO_DEBUG: "1"
+  DJANGO_ALLOWED_HOSTS: "*"
+  RAW_STORAGE_URL: s3://ascstats-raw
+  S3_ENDPOINT_URL: http://minio:9000
+  AWS_ACCESS_KEY_ID: ascstats
+  AWS_SECRET_ACCESS_KEY: ascstats-dev-secret
+  AWS_DEFAULT_REGION: us-east-1
+  ASC_SOURCE: synthetic
+  # For real data: ASC_SOURCE=asc, ASC_KEY_ID, ASC_ISSUER_ID, ASC_VENDOR_NUMBER and mount
+  # the .p8 at /var/run/secrets/asc/AuthKey.p8 (see README). Never needed for development.
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ascstats
+      POSTGRES_PASSWORD: ascstats
+      POSTGRES_DB: ascstats
+    volumes: [pgdata:/var/lib/postgresql]
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ascstats"]
+      interval: 2s
+      retries: 30
+
+  minio:
+    # MinIO stopped publishing official container images in 2025; Chainguard builds it from
+    # source. Pinned by digest (RELEASE.2026-09-22T19-25-18Z).
+    image: cgr.dev/chainguard/minio@sha256:2915cb406f38ed6ff9634de0a3e4a9423e2dda06a6f1aca18f8c968aa37a01f6
+    command: ["server", "/data", "--console-address", ":9001"]
+    user: "0"  # named volumes are root-owned; fine for a local dev store
+    environment:
+      MINIO_ROOT_USER: ascstats
+      MINIO_ROOT_PASSWORD: ascstats-dev-secret
+    volumes: [miniodata:/data]
+    ports: ["9000:9000", "9001:9001"]
+
+  migrate:
+    build: .
+    image: ascstats:dev
+    command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py ensure_raw_bucket"]
+    environment: *app-env
+    depends_on:
+      postgres: {condition: service_healthy}
+      minio: {condition: service_started}
+
+  web:
+    image: ascstats:dev
+    command: ["gunicorn", "ascstats.wsgi", "--bind", "0.0.0.0:8000", "--reload", "--access-logfile", "-"]
+    environment: *app-env
+    ports: ["8000:8000"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+
+volumes:
+  pgdata:
+  miniodata:
