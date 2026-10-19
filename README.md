@@ -155,13 +155,16 @@ the ascstats image's management command on the cluster above.
   `airflow/scripts/asc-conn-from-k8s.sh` builds it from the same Kubernetes Secret.
   `airflow/defaults.env` sets it to `{"synthetic": true}`, so nothing calls Apple by default.
 - **Composer compatible**: no top-level Variable lookups, no custom Airflow config; the image,
-  namespace and Kubernetes connection come from environment variables.
+  namespace, Kubernetes connection and start date (`ASCSTATS_START_DATE`) come from
+  environment variables. The local stack sets the start date near today so unpausing a DAG
+  catches up a few days rather than months; older days are a `backfill create`.
 
 ```bash
 cd airflow
 ./scripts/kubeconfig.sh                                    # kubeconfig for the containers
 docker compose up -d                                       # UI: http://localhost:8080
-docker compose exec airflow-scheduler airflow dags unpause ascstats_daily_sales
+for d in ascstats_daily_sales ascstats_daily_analytics ascstats_conversion_metrics; do
+  docker compose exec airflow-scheduler airflow dags unpause $d; done
 docker compose exec airflow-scheduler \
   airflow backfill create --dag-id ascstats_daily_sales --from-date 2026-09-01 --to-date 2026-09-07
 uv run pytest                                              # DAG-integrity tests
