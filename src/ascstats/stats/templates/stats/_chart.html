@@ -11,9 +11,9 @@
 </svg>
 {% if impacts %}
 <h3>What each release did</h3>
-<p class="muted">First 14 days live vs the 14 days before (shorter when releases are closer). <b>Bold</b> = |t| ≥ 2, unlikely to be day-to-day noise.</p>
+<p class="muted">First 14 days live vs the 14 days before (shorter when releases are closer). <em>vs trend</em> compares downloads with what the previous 28 days' trend projected, so growth the app had anyway does not count. <b>Bold</b> = |t| ≥ 2, unlikely to be day-to-day noise.</p>
 <table>
-  <tr><th>Version</th><th>Released</th><th>Downloads/day</th><th>IAP/day</th><th>Conversion</th><th>Updates</th></tr>
+  <tr><th>Version</th><th>Released</th><th>Downloads/day</th><th>vs trend</th><th>IAP/day</th><th>Conversion</th><th>Updates</th></tr>
   {% for i in impacts %}
   <tr><td>{{ i.version }}{% if i.platform == "MAC_OS" %} <span class="muted">Mac</span>{% endif %}</td><td>{{ i.released_on }}</td>
     {% for d in i.deltas %}<td>{% if d.change_pct is not None %}{% if d.significant %}<b>{% endif %}{% if d.change_pct > 0 %}+{% endif %}{{ d.change_pct }}%{% if d.significant %}</b>{% endif %}{% else %}<span class="muted">–</span>{% endif %}</td>{% endfor %}

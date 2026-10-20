@@ -2,9 +2,19 @@
 
 A version is dated by the first day it appears in the sales report: new downloads and updates
 carry the version the customer received, so this works from data the pipeline already has.
-Impact compares the days a version was live with the days just before it. The comparison
-is naive (no seasonality or marketing controls), so every delta comes with a Welch t-score:
-anything under ~2 is indistinguishable from day-to-day noise.
+Impact compares the days a version was live with the days just before it, two ways:
+
+- naive: mean per day after vs before, with a Welch t-score;
+- vs trend (downloads): a log-linear trend with day-of-week effects is fitted to the
+  ``BASELINE_DAYS`` before the release and projected over the days the version was live. The
+  change is actual against that projection, so an app that was growing anyway does not
+  credit its releases with the growth. The t-score uses the fit's residual noise plus the
+  uncertainty of the projection itself. The first ``LAUNCH_DAYS`` of a platform's sales are
+  never used as a baseline.
+
+Neither is an experiment: a feature, a promotion or a previous release's bump inside the
+baseline still lands in the numbers. Anything with |t| under ~2 is indistinguishable from
+day-to-day noise.
 """
 
 from __future__ import annotations
@@ -15,6 +25,7 @@ import statistics
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
+import numpy as np
 from django.db import transaction
 from django.db.models import Max, Min, Q, Sum
 
@@ -36,6 +47,9 @@ from .models import (
 log = logging.getLogger(__name__)
 
 SIGNIFICANT_T = 2.0
+BASELINE_DAYS = 28  # history the trend is fitted on
+MIN_BASELINE_DAYS = 14  # two of each weekday; with less, no trend-adjusted estimate
+LAUNCH_DAYS = 21  # a launch ramp is not a trend: projecting it forward invents huge drops
 
 
 def build_versions(app: App) -> int:
@@ -156,6 +170,46 @@ def _mean_delta(metric: str, before: list[float], after: list[float]) -> Delta:
     )
 
 
+def _design(days: list[date], origin: date) -> np.ndarray:
+    """Intercept, days since ``origin`` and Monday..Saturday dummies (Sunday is the base)."""
+    x = np.zeros((len(days), 8))
+    for i, day in enumerate(days):
+        x[i, 0] = 1.0
+        x[i, 1] = (day - origin).days
+        if day.weekday() < 6:
+            x[i, 2 + day.weekday()] = 1.0
+    return x
+
+
+def _trend_delta(
+    metric: str, values: dict[date, int], baseline: tuple[date, date], live: tuple[date, date]
+) -> Delta:
+    """Actual per-day mean while live against the baseline trend projected over those days."""
+    b_days = [baseline[0] + timedelta(days=i) for i in range((baseline[1] - baseline[0]).days + 1)]
+    a_days = [live[0] + timedelta(days=i) for i in range((live[1] - live[0]).days + 1)]
+    if len(b_days) < MIN_BASELINE_DAYS or not a_days:
+        return Delta(metric, None, None, None)
+    xb, xa = _design(b_days, live[0]), _design(a_days, live[0])
+    yb = np.log1p([values.get(d, 0) for d in b_days])
+    actual = np.array([values.get(d, 0) for d in a_days], dtype=float)
+    beta, *_ = np.linalg.lstsq(xb, yb, rcond=None)
+    predicted = xa @ beta
+    expected = float(np.expm1(predicted).clip(min=0).mean())
+    observed = float(actual.mean())
+    residuals = yb - xb @ beta
+    s2 = float(residuals @ residuals) / (len(b_days) - xb.shape[1])
+    xbar = xa.mean(axis=0)
+    se = math.sqrt(s2 / len(a_days) + s2 * float(xbar @ np.linalg.pinv(xb.T @ xb) @ xbar))
+    t = float((np.log1p(actual) - predicted).mean()) / se if se > 0 else None
+    return Delta(
+        metric,
+        round(expected, 2),
+        round(observed, 2),
+        _pct(expected, observed),
+        None if t is None else round(t, 2),
+    )
+
+
 def _conversion(app: App, start: date, end: date) -> float | None:
     agg = ConversionMetric.objects.filter(app=app, date__range=(start, end)).aggregate(
         pv=Sum("page_views"), ft=Sum("first_time_downloads")
@@ -174,6 +228,8 @@ def version_impact(app: App, window: int = 14, platform: str | None = None) -> l
     if span["first"] is None:
         return []
     data_start, data_end = span["first"], span["last"]
+    # An app whose first sale is the first day loaded for any app may be older than the data.
+    dataset_start = SalesRow.objects.aggregate(first=Min("report_date"))["first"]
     out = []
     for plat in [platform] if platform else [IOS, MAC_OS]:
         versions = list(
@@ -185,6 +241,7 @@ def version_impact(app: App, window: int = 14, platform: str | None = None) -> l
             continue
         rows = platform_rows(plat)
         downloads = _daily(app, DOWNLOAD_ROWS & rows, data_start, data_end)
+        launched = min(downloads, default=None)
         iap = _daily(app, IAP_ROWS & rows, data_start, data_end)
         updates = _daily(app, UPDATE_ROWS & rows, data_start, data_end)
         for i, v in enumerate(versions):
@@ -206,12 +263,27 @@ def version_impact(app: App, window: int = 14, platform: str | None = None) -> l
                 after_days=(a_end - released).days + 1,
                 updates=int(sum(_series(updates, released, a_end))),
             )
-            for metric, values in (("downloads/day", downloads), ("in-app purchases/day", iap)):
-                impact.deltas.append(
-                    _mean_delta(
-                        metric, _series(values, b_start, b_end), _series(values, released, a_end)
-                    )
+            before = _series(downloads, b_start, b_end)
+            after = _series(downloads, released, a_end)
+            impact.deltas.append(_mean_delta("downloads/day", before, after))
+            trend_start = max(released - timedelta(days=BASELINE_DAYS), data_start)
+            if launched and launched > dataset_start:  # launched inside the loaded history
+                trend_start = max(trend_start, launched + timedelta(days=LAUNCH_DAYS))
+            impact.deltas.append(
+                _trend_delta(
+                    "downloads/day vs trend",
+                    downloads,
+                    (trend_start, released - timedelta(days=1)),
+                    (released, a_end),
                 )
+            )
+            impact.deltas.append(
+                _mean_delta(
+                    "in-app purchases/day",
+                    _series(iap, b_start, b_end),
+                    _series(iap, released, a_end),
+                )
+            )
             conv_b = conv_a = None
             if plat == IOS:
                 conv_b = _conversion(app, b_start, b_end) if impact.before_days else None
