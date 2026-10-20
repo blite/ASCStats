@@ -33,6 +33,9 @@ DEFAULT_ARGS = {
 
 _ENV_FROM = [
     k8s.V1EnvFromSource(config_map_ref=k8s.V1ConfigMapEnvSource(name="ascstats-config")),
+    # Real-data settings (ASC_SOURCE=asc, vendor number) live only in the cluster; later
+    # sources win, so this overrides the ConfigMap's synthetic defaults.
+    k8s.V1EnvFromSource(secret_ref=k8s.V1SecretEnvSource(name="asc-settings", optional=True)),
     k8s.V1EnvFromSource(secret_ref=k8s.V1SecretEnvSource(name="ascstats-app")),
 ]
 _ASC_ENV = [

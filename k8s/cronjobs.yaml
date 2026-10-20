@@ -27,6 +27,7 @@ spec:
               args: ["python", "manage.py", "import_asc", "--report", "sales", "--date", "yesterday"]
               envFrom:
                 - configMapRef: {name: ascstats-config}
+                - secretRef: {name: asc-settings, optional: true}  # overrides the ConfigMap
                 - secretRef: {name: ascstats-app}
               env:
                 - name: ASC_KEY_ID
@@ -71,6 +72,7 @@ spec:
               args: ["sh", "-c", "python manage.py import_asc --report analytics --date yesterday && python manage.py build_conversion_metrics --days 7 && python manage.py build_versions"]
               envFrom:
                 - configMapRef: {name: ascstats-config}
+                - secretRef: {name: asc-settings, optional: true}  # overrides the ConfigMap
                 - secretRef: {name: ascstats-app}
               env:
                 - name: ASC_KEY_ID

@@ -167,7 +167,7 @@ def version_impact(app: App, window: int = 14) -> list[VersionImpact]:
             released_on=released,
             before_days=(b_end - b_start).days + 1,
             after_days=(a_end - released).days + 1,
-            updates=sum(_series(updates, released, a_end)),
+            updates=int(sum(_series(updates, released, a_end))),
         )
         for metric, values in (("downloads/day", downloads), ("in-app purchases/day", iap)):
             impact.deltas.append(

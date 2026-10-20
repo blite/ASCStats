@@ -8,6 +8,8 @@ iOS apps into Postgres and serves them through Django.
 - **Land**: raw report files go unchanged into an S3-compatible bucket (MinIO locally).
 - **Load**: validated rows are loaded into Postgres with an idempotent delete+insert per
   `(app, report, date)` in one transaction; every attempt is written to a run log.
+- **Analyse**: every release is dated from the sales data and compared with the days before
+  it (downloads, in-app purchases, conversion), with a t-score so noise is not read as a win.
 - **Serve**: Django admin, a JSON API (Django Ninja, OpenAPI at `/api/docs`) and one
   server-rendered htmx page with a chart.
 - **Run**: Docker Compose for development, Kustomize manifests for Kubernetes (a CronJob per
@@ -61,7 +63,29 @@ own, and any day can be reloaded from raw without asking Apple again.
 | `SalesRow`         | One line of the SALES/SUMMARY/DAILY report. IAPs attributed via `Parent Identifier`.       |
 | `AnalyticsRow`     | One line of an Analytics Reports segment; common columns typed, the rest in `dimensions`. |
 | `ConversionMetric` | Derived daily funnel: impressions, page views, first-time downloads, units.               |
+| `AppVersion`       | Version dated by first appearance in sales; ASC state and creation time when on real data. |
 | `IngestionRun`     | The run log: report, day, app, step, source, status, row counts, error.                   |
+
+### Did that release help?
+
+`build_versions` dates every version by the first day it appears in the sales report (new
+downloads and updates carry the version the customer received), and
+`GET /api/apps/{apple_id}/versions?window=14` compares each version's first days live with
+the days just before it:
+
+| Metric                 | Before | After | Change | t     |
+|------------------------|-------:|------:|-------:|------:|
+| downloads/day          |  276.9 | 223.4 | −19.3% | −3.9  |
+| in-app purchases/day   |   11.2 |   7.5 | −33.1% | −2.7  |
+| conversion rate        |  0.322 | 0.319 |  −1.1% |       |
+
+(Synthetic Snake 2.1, a −20% regression planted in the generator. The planted +30%, −20%,
++20% and +20% of Snake 2.0, 2.1, 2.2 and 2.3 come back as +30%, −19%, +32% and +21%, all
+|t| > 2, while the no-effect 2.0.1 comes back as −2%, t = −0.3.) Windows stop at the neighbouring
+releases, so each side contains one version only. It is a before/after comparison, not an
+experiment: seasonality, features and marketing land in the same windows, which is why every
+delta carries a Welch t-score and the dashboard only bolds |t| ≥ 2. Update rows (product type
+`7`/`7F`/`7T`/`F7`) date releases but never count as downloads.
 
 ## Quick start (Docker Compose)
 
@@ -127,8 +151,17 @@ The `.p8` key is a Kubernetes Secret mounted **as a file** at `/var/run/secrets/
 (mode 0440, readable through `fsGroup` only) and read in exactly one place:
 `src/ascstats/asc/credentials.py`. It is never an environment variable, so it does not show up
 in `kubectl describe`, process listings or crash reports. See
-`k8s/secrets/asc-api-key.example.yaml` for the `kubectl create secret` command. Everything
-runs in synthetic mode until you set `ASC_SOURCE=asc` in the ConfigMap.
+`k8s/secrets/asc-api-key.example.yaml` for the `kubectl create secret` command. The key needs
+the Sales (or Finance/Admin) role for Sales & Trends.
+
+Everything runs in synthetic mode until an `asc-settings` Secret switches it over. It overrides
+the ConfigMap, so the vendor number never lands in git:
+
+```bash
+kubectl -n ascstats create secret generic asc-settings \
+  --from-literal=ASC_SOURCE=asc --from-literal=ASC_VENDOR_NUMBER=8xxxxxxx
+kubectl -n ascstats rollout restart deploy/web
+```
 
 The client cannot write: it has no POST/PATCH/DELETE method at all, and a test asserts that
 every recorded request is a GET. The one-time ONGOING Analytics report request is created by
@@ -144,7 +177,7 @@ the ascstats image's management command on the cluster above.
 |-------------------------------|----------------------------------|-----------------------------------------------------------------------------------------------|
 | `ascstats_daily_sales`        | daily data intervals, catchup    | `wait_for_report` (deferrable) → `download_raw` → `validate` → `load_day`[apps] → `quality_checks`[apps] |
 | `ascstats_daily_analytics`    | daily data intervals, catchup    | task group mapped over apps: `wait_for_report` → `download_raw` → `validate` → `load_day` → `quality_checks` |
-| `ascstats_conversion_metrics` | assets: sales **and** analytics  | rebuild the last 7 days of `ConversionMetric`                                                 |
+| `ascstats_conversion_metrics` | assets: sales **and** analytics  | rebuild the last 7 days of `ConversionMetric` → `build_versions`                              |
 | `ascstats_weekly_restatement` | Mondays                          | re-import the previous 7 complete days of both reports, rebuild metrics                     |
 
 - **Deferrable sensor**: `wait_for_report` hands off to the triggerer, which polls Apple with
@@ -207,7 +240,7 @@ src/ascstats/
   stats/parsing.py      report parsing and validation (pure functions)
   stats/synthetic.py    synthetic reports in Apple's file format
   stats/storage.py      raw landing zone (S3 API or local files)
-  stats/management/commands/  import_asc, seed_synthetic, build_conversion_metrics, list_apps
+  stats/management/commands/  import_asc, seed_synthetic, build_conversion_metrics, build_versions, list_apps
   api.py                Django Ninja API
 k8s/                    Kustomize manifests
 airflow/                Airflow 3 DAGs, Compose stack, DAG-integrity tests

@@ -27,6 +27,7 @@ spec:
           command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py ensure_raw_bucket --wait 120"]
           envFrom: &env
             - configMapRef: {name: ascstats-config}
+            - secretRef: {name: asc-settings, optional: true}  # overrides the ConfigMap
             - secretRef: {name: ascstats-app}
       containers:
         - name: web

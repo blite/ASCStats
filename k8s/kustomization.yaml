@@ -22,8 +22,11 @@ generatorOptions:
 configMapGenerator:
   - name: ascstats-config
     literals:
-      - ASC_SOURCE=synthetic # "asc" once the asc-api-key Secret exists
-      - ASC_VENDOR_NUMBER=
+      # Synthetic by default. Real data is switched on in the cluster only, so no account
+      # numbers ever land in git (later envFrom sources win over this ConfigMap):
+      #   kubectl -n ascstats create secret generic asc-settings \
+      #     --from-literal=ASC_SOURCE=asc --from-literal=ASC_VENDOR_NUMBER=8xxxxxxx
+      - ASC_SOURCE=synthetic
       - ASC_KEY_PATH=/var/run/secrets/asc/AuthKey.p8
       - RAW_STORAGE_URL=s3://ascstats-raw
       - S3_ENDPOINT_URL=http://minio:9000
