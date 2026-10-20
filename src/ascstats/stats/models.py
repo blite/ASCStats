@@ -46,7 +46,9 @@ class App(models.Model):
 class SalesRow(models.Model):
     """One line of the Sales & Trends SALES/SUMMARY/DAILY report, attributed to an app."""
 
-    app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="sales_rows")
+    app = models.ForeignKey(
+        App, on_delete=models.CASCADE, related_name="sales_rows", db_index=False
+    )
     report_date = models.DateField(db_index=True)
     sku = models.CharField(max_length=100)
     title = models.CharField(max_length=255)
@@ -84,29 +86,89 @@ def platform_rows(platform: str) -> Q:
     return MAC_ROWS if platform == MAC_OS else ~MAC_ROWS
 
 
-class AnalyticsRow(models.Model):
-    """One line of an Analytics Reports segment.
+def platform_of(device: str) -> str:
+    return MAC_OS if device in MAC_DEVICES else IOS
 
-    Analytics reports have different columns per report; the ones every dashboard needs are
-    real columns and the rest stay queryable in ``dimensions``.
-    """
 
-    app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="analytics_rows")
-    report_date = models.DateField(db_index=True)
-    report_name = models.CharField(max_length=120)
-    event = models.CharField(max_length=60, help_text="Event or Download Type")
-    source_type = models.CharField(max_length=60, blank=True)
-    device = models.CharField(max_length=60, blank=True)
-    territory = models.CharField(max_length=2, blank=True)
-    counts = models.BigIntegerField()
-    unique_counts = models.BigIntegerField(null=True, blank=True)
-    dimensions = models.JSONField(default=dict, blank=True)
+def sales_kind(product_type: str, parent_identifier: str) -> str:
+    """What a sales line counts as: the Python twin of DOWNLOAD_ROWS/UPDATE_ROWS/IAP_ROWS."""
+    if parent_identifier:
+        return "iap_units"
+    if product_type in UPDATE_PRODUCT_TYPES:
+        return "updates"
+    if product_type in REDOWNLOAD_PRODUCT_TYPES:
+        return "redownloads"
+    return "downloads"
+
+
+class SalesDay(models.Model):
+    """Daily rollup of the sales report per app and platform, emitted at load time, so stats
+    never re-add SalesRow lines. SalesRow keeps the detail (product, country, currency)."""
+
+    app = models.ForeignKey(App, on_delete=models.CASCADE, db_index=False)
+    date = models.DateField(db_index=True)
+    platform = models.CharField(max_length=10)
+    downloads = models.IntegerField(default=0, help_text="net of refunds")
+    redownloads = models.IntegerField(default=0)
+    updates = models.IntegerField(default=0)
+    iap_units = models.IntegerField(default=0, help_text="net of refunds")
 
     class Meta:
-        indexes = [models.Index(fields=["app", "report_name", "report_date"])]
+        constraints = [
+            models.UniqueConstraint(fields=["app", "date", "platform"], name="uniq_sales_day")
+        ]
 
     def __str__(self) -> str:
-        return f"{self.report_date} {self.report_name} {self.event} {self.counts}"
+        return f"{self.app_id} {self.date} {self.platform}"
+
+
+class FunnelDay(models.Model):
+    """App Store discovery and download totals per app, day and source, reduced at load time
+    from the Discovery and Engagement and App Downloads reports. Raw report rows stay in the
+    raw store; a new question means a new emitter and a replay, not a wider table."""
+
+    app = models.ForeignKey(App, on_delete=models.CASCADE, db_index=False)
+    date = models.DateField()
+    source_type = models.CharField(max_length=60, blank=True)
+    impressions = models.BigIntegerField(default=0)
+    unique_impressions = models.BigIntegerField(default=0)
+    page_views = models.BigIntegerField(default=0)
+    unique_page_views = models.BigIntegerField(default=0)
+    first_time_downloads = models.BigIntegerField(default=0)
+    redownloads = models.BigIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["app", "date", "source_type"], name="uniq_funnel_day")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.app_id} {self.date} {self.source_type}"
+
+
+class UsageDay(models.Model):
+    """Sessions and crashes per app, day, platform and app version, reduced at load time from
+    the App Sessions and App Crashes reports (users who share analytics only)."""
+
+    app = models.ForeignKey(App, on_delete=models.CASCADE, db_index=False)
+    date = models.DateField()
+    platform = models.CharField(max_length=10)
+    version = models.CharField(max_length=50, blank=True)
+    sessions = models.BigIntegerField(default=0)
+    session_seconds = models.BigIntegerField(default=0)
+    session_devices = models.BigIntegerField(default=0, help_text="summed per segment")
+    crashes = models.BigIntegerField(default=0)
+    crash_devices = models.BigIntegerField(default=0, help_text="summed per segment")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["app", "date", "platform", "version"], name="uniq_usage_day"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.app_id} {self.date} {self.platform} {self.version}"
 
 
 class ConversionMetric(models.Model):
@@ -119,7 +181,9 @@ class ConversionMetric(models.Model):
     downloads / unique impressions; downloads / page views can exceed 100%.
     """
 
-    app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="conversion_metrics")
+    app = models.ForeignKey(
+        App, on_delete=models.CASCADE, related_name="conversion_metrics", db_index=False
+    )
     date = models.DateField()
     impressions = models.BigIntegerField(default=0, help_text="total, repeats included")
     unique_impressions = models.BigIntegerField(default=0, help_text="unique devices")
@@ -163,7 +227,7 @@ class AppVersion(models.Model):
     report (downloads and updates carry the version the customer received). App Store
     Connect's own version list adds state and creation time when running on real data."""
 
-    app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="versions")
+    app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="versions", db_index=False)
     version = models.CharField(max_length=50)
     first_seen = models.DateField(null=True, blank=True, help_text="First day in sales data")
     platform = models.CharField(max_length=20, default=IOS, help_text="IOS or MAC_OS")
@@ -189,7 +253,9 @@ class RatingSnapshot(models.Model):
     consecutive snapshots give the exact count and average of the ratings in between.
     """
 
-    app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="rating_snapshots")
+    app = models.ForeignKey(
+        App, on_delete=models.CASCADE, related_name="rating_snapshots", db_index=False
+    )
     date = models.DateField()
     storefront = models.CharField(max_length=2, help_text="lowercase ISO country code")
     count = models.IntegerField()
@@ -200,7 +266,6 @@ class RatingSnapshot(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["app", "date", "storefront"], name="uniq_rating_day")
         ]
-        indexes = [models.Index(fields=["app", "date"])]
 
     def __str__(self) -> str:
         return f"{self.app_id} {self.date} {self.storefront} {self.count}"
@@ -213,8 +278,8 @@ class RatingSnapshot(models.Model):
 class CustomerReview(models.Model):
     """A written review, as App Store Connect files it: under the version it was written for."""
 
-    app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="reviews")
-    asc_id = models.CharField(max_length=64, unique=True)
+    app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="reviews", db_index=False)
+    asc_id = models.CharField(max_length=64)
     rating = models.PositiveSmallIntegerField()
     title = models.CharField(max_length=500, blank=True)
     body = models.TextField(blank=True)
@@ -226,6 +291,8 @@ class CustomerReview(models.Model):
     class Meta:
         ordering = ["-created"]
         indexes = [models.Index(fields=["app", "created"])]
+        # a constraint, not unique=True: that would add a LIKE-pattern index nothing uses
+        constraints = [models.UniqueConstraint(fields=["asc_id"], name="uniq_review_asc_id")]
 
     def __str__(self) -> str:
         return f"{self.app_id} {self.rating}* {self.created:%Y-%m-%d}"
@@ -234,7 +301,9 @@ class CustomerReview(models.Model):
 class ReviewSummary(models.Model):
     """Apple's AI-generated summary of an app's reviews in one territory (API 4.0+)."""
 
-    app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="review_summaries")
+    app = models.ForeignKey(
+        App, on_delete=models.CASCADE, related_name="review_summaries", db_index=False
+    )
     platform = models.CharField(max_length=20)
     territory = models.CharField(max_length=3, blank=True)
     locale = models.CharField(max_length=20, blank=True)

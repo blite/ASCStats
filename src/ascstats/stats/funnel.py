@@ -25,8 +25,7 @@ from datetime import date, timedelta
 from django.db.models import Max, Sum
 
 from .charts import days, month_ticks, nice_axis
-from .models import ACTIVE_ROWS, IOS, AnalyticsRow, App, AppVersion, ConversionMetric
-from .parsing import DISCOVERY_REPORT, DOWNLOADS_REPORT
+from .models import ACTIVE_ROWS, IOS, App, AppVersion, ConversionMetric, FunnelDay
 
 Z90 = 1.645
 WINDOW = 28  # days in the leak strip's current window
@@ -420,20 +419,12 @@ def source_mix(app: App, end: date) -> dict:
     weeks = _weeks(end)
     imp = defaultdict(float)
     dl = defaultdict(float)
-    for report, event, value, target in (
-        (DISCOVERY_REPORT, "Impression", "unique_counts", imp),
-        (DOWNLOADS_REPORT, "First-time download", "counts", dl),
-    ):
-        rows = (
-            AnalyticsRow.objects.filter(
-                app=app, report_name=report, event=event, report_date__range=(weeks[0][0], end)
-            )
-            .values("report_date", "source_type")
-            .annotate(v=Sum(value))
-        )
-        for r in rows:
-            i = (_week_start(r["report_date"]) - weeks[0][0]).days // 7
-            target[(i, _source(r["source_type"]))] += r["v"] or 0
+    for day, source, impressions, downloads in FunnelDay.objects.filter(
+        app=app, date__range=(weeks[0][0], end)
+    ).values_list("date", "source_type", "unique_impressions", "first_time_downloads"):
+        key = ((_week_start(day) - weeks[0][0]).days // 7, _source(source))
+        imp[key] += impressions
+        dl[key] += downloads
     totals = defaultdict(float)
     for (_i, src), v in dl.items():
         totals[src] += v

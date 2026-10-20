@@ -21,6 +21,7 @@ x-app-env: &app-env
 services:
   postgres:
     image: postgres:18-alpine
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "random_page_cost=1.1"]
     environment:
       POSTGRES_USER: ascstats
       POSTGRES_PASSWORD: ascstats

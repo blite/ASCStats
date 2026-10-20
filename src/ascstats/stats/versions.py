@@ -30,20 +30,20 @@ from datetime import date, datetime, timedelta
 
 import numpy as np
 from django.db import transaction
-from django.db.models import Max, Min, Q, Sum
+from django.db.models import Max, Min
 
 from ascstats.asc.client import ASCClient, ReportNotReady
 
 from .charts import days, pct_change
 from .models import (
     DOWNLOAD_ROWS,
-    IAP_ROWS,
     IOS,
     MAC_OS,
     UPDATE_ROWS,
     App,
     AppVersion,
     ConversionMetric,
+    SalesDay,
     SalesRow,
     platform_rows,
 )
@@ -166,11 +166,11 @@ def _pct(before: float | None, after: float | None) -> float | None:
     return None if change is None else round(change, 1)
 
 
-def _daily(app: App, q: Q, start: date, end: date) -> dict[date, int]:
+def _daily(app: App, field: str, platform: str, start: date, end: date) -> dict[date, int]:
     return dict(
-        SalesRow.objects.filter(q, app=app, report_date__range=(start, end))
-        .values_list("report_date")
-        .annotate(Sum("units"))
+        SalesDay.objects.filter(app=app, platform=platform, date__range=(start, end)).values_list(
+            "date", field
+        )
     )
 
 
@@ -268,14 +268,12 @@ def version_impact(
     platform and at the edges of the loaded data, so each side only ever contains one version.
     Conversion comes from App Store analytics, which is iOS-only here. ``since`` skips
     versions released before that day (their windows still use earlier data)."""
-    span = SalesRow.objects.filter(app=app).aggregate(
-        first=Min("report_date"), last=Max("report_date")
-    )
+    span = SalesDay.objects.filter(app=app).aggregate(first=Min("date"), last=Max("date"))
     if span["first"] is None:
         return []
     data_start, data_end = span["first"], span["last"]
     # An app whose first sale is the first day loaded for any app may be older than the data.
-    dataset_start = SalesRow.objects.aggregate(first=Min("report_date"))["first"]
+    dataset_start = SalesDay.objects.aggregate(first=Min("date"))["first"]
     install_rate = _install_rates(app)
     out = []
     for plat in [platform] if platform else [IOS, MAC_OS]:
@@ -286,11 +284,10 @@ def version_impact(
         )
         if not versions:
             continue
-        rows = platform_rows(plat)
-        downloads = _daily(app, DOWNLOAD_ROWS & rows, data_start, data_end)
+        downloads = _daily(app, "downloads", plat, data_start, data_end)
         launched = min(downloads, default=None)
-        iap = _daily(app, IAP_ROWS & rows, data_start, data_end)
-        updates = _daily(app, UPDATE_ROWS & rows, data_start, data_end)
+        iap = _daily(app, "iap_units", plat, data_start, data_end)
+        updates = _daily(app, "updates", plat, data_start, data_end)
         for i, v in enumerate(versions):
             if since and v.first_seen < since:
                 continue

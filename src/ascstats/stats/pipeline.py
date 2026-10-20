@@ -23,8 +23,9 @@ from django.utils import timezone
 from ascstats.asc.client import ASCClient, ReportNotReady
 
 from . import synthetic
-from .models import AnalyticsRow, App, IngestionRun, Report, SalesRow
+from .models import App, FunnelDay, IngestionRun, Report, SalesDay, SalesRow, UsageDay
 from .parsing import ANALYTICS_REPORTS, ValidationError, parse_analytics, parse_sales
+from .reducers import reduce_analytics, reduce_sales, rows, totals
 from .storage import RawStore, raw_store
 
 log = logging.getLogger(__name__)
@@ -247,8 +248,10 @@ class Pipeline:
     # --- load ----------------------------------------------------------------------------
 
     def load(self, report: str, day: date, app: App | None = None) -> StepResult:
-        """Delete+insert per (app, report, date), all in one transaction: a re-run replaces
-        the day exactly, and readers never see a half-loaded day."""
+        """Delete+insert per (app, date), all in one transaction: a re-run replaces the day
+        exactly, and readers never see a half-loaded day. Sales lines are stored as they are
+        (SalesRow) and reduced into SalesDay; analytics lines are only reduced (FunnelDay,
+        UsageDay): their raw rows live in the raw store."""
         deleted = loaded = parsed = 0
         with transaction.atomic():
             if report == Report.SALES:
@@ -256,10 +259,10 @@ class Pipeline:
                 if app is None:
                     targets = {aid: self._ensure_app(aid, lines) for aid, lines in by_app.items()}
                     # Apps that had sales before but are absent from the restated file.
-                    stale = SalesRow.objects.filter(report_date=day).exclude(
-                        app_id__in=[a.pk for a in targets.values()]
-                    )
+                    keep = [a.pk for a in targets.values()]
+                    stale = SalesRow.objects.filter(report_date=day).exclude(app_id__in=keep)
                     deleted += stale.delete()[0]
+                    SalesDay.objects.filter(date=day).exclude(app_id__in=keep).delete()
                 else:
                     targets = {app.apple_id: app}
                 for apple_id, target in targets.items():
@@ -269,17 +272,17 @@ class Pipeline:
                     loaded += len(SalesRow.objects.bulk_create(
                         [_sales_row(target, day, ln) for ln in lines], batch_size=2000
                     ))  # fmt: skip
+                    SalesDay.objects.filter(app=target, date=day).delete()
+                    SalesDay.objects.bulk_create(rows(reduce_sales(lines), target)[SalesDay])
             else:
                 for a in self._apps(app):
-                    for name, lines in self._analytics_for(day, a).items():
-                        parsed += len(lines)
-                        dates = {ln.date for ln in lines} | {day}
-                        deleted += AnalyticsRow.objects.filter(
-                            app=a, report_name=name, report_date__in=dates
-                        ).delete()[0]
-                        loaded += len(AnalyticsRow.objects.bulk_create(
-                            [_analytics_row(a, name, ln) for ln in lines], batch_size=2000
-                        ))  # fmt: skip
+                    by_report = self._analytics_for(day, a)
+                    parsed += sum(len(lines) for lines in by_report.values())
+                    dates = _dates(by_report, day)
+                    for model in (FunnelDay, UsageDay):
+                        deleted += model.objects.filter(app=a, date__in=dates).delete()[0]
+                    for model, objs in rows(reduce_analytics(by_report), a).items():
+                        loaded += len(model.objects.bulk_create(objs, batch_size=2000))
         log.info("%s %s: deleted %d, loaded %d", report, day, deleted, loaded)
         return StepResult(rows_parsed=parsed, rows_deleted=deleted, rows_loaded=loaded)
 
@@ -313,17 +316,17 @@ class Pipeline:
                 for aid in expected.keys() | actual.keys()
                 if expected.get(aid, (0, 0)) != actual.get(aid, (0, 0))
             ]
+            for aid, lines in by_app.items():
+                if app is None or aid == app.apple_id:
+                    problems += _reduced_mismatches(
+                        reduce_sales(lines), App.objects.get(apple_id=aid), {day}
+                    )
         else:
             for a in self._apps(app):
-                for name, lines in self._analytics_for(day, a).items():
-                    want = (len(lines), sum(ln.counts for ln in lines))
-                    dates = {ln.date for ln in lines} | {day}
-                    agg = AnalyticsRow.objects.filter(
-                        app=a, report_name=name, report_date__in=dates
-                    ).aggregate(n=Count("id"), counts=Sum("counts"))
-                    got = (agg["n"], agg["counts"] or 0)
-                    if want != got:
-                        problems.append(f"{a.apple_id} {name}: expected {want}, found {got}")
+                by_report = self._analytics_for(day, a)
+                problems += _reduced_mismatches(
+                    reduce_analytics(by_report), a, _dates(by_report, day)
+                )
         if problems:
             raise QualityError("; ".join(problems))
         return StepResult()
@@ -348,16 +351,19 @@ def _sales_row(app: App, day: date, ln) -> SalesRow:
     )
 
 
-def _analytics_row(app: App, report_name: str, ln) -> AnalyticsRow:
-    return AnalyticsRow(
-        app=app,
-        report_date=ln.date,
-        report_name=report_name,
-        event=ln.event,
-        source_type=ln.source_type,
-        device=ln.device,
-        territory=ln.territory,
-        counts=ln.counts,
-        unique_counts=ln.unique_counts,
-        dimensions=ln.dimensions,
-    )
+def _dates(by_report: dict[str, list], day: date) -> set[date]:
+    """Every data date a day's reports touch (late batches can restate earlier days)."""
+    return {ln.date for lines in by_report.values() for ln in lines} | {day}
+
+
+def _reduced_mismatches(reduced, app: App, dates: set[date]) -> list[str]:
+    """The stored aggregates must sum to exactly what the raw files reduce to."""
+    problems = []
+    for model, want in totals(reduced).items():
+        got = model.objects.filter(app=app, date__in=dates).aggregate(**{f: Sum(f) for f in want})
+        for field, value in want.items():
+            if (got[field] or 0) != value:
+                problems.append(
+                    f"{app.apple_id} {model.__name__}.{field}: expected {value}, found {got[field]}"
+                )
+    return problems

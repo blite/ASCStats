@@ -48,7 +48,9 @@ def test_admin_lists_synthetic_rows(client, seeded):
     for model in (
         "app",
         "salesrow",
-        "analyticsrow",
+        "salesday",
+        "funnelday",
+        "usageday",
         "conversionmetric",
         "appversion",
         "ingestionrun",
@@ -79,3 +81,16 @@ def test_inactive_apps_are_left_out_of_every_stat(client, seeded):
     for path in ("sales/daily", "versions", "ratings", "conversion"):
         assert client.get(f"/api/apps/1000000002/{path}").status_code == 404
     assert b"No data for this app" in client.get("/chart/", {"app": 1000000002}).content
+
+
+def test_pages_are_cached_until_the_data_changes(client, seeded, django_assert_max_num_queries):
+    from ascstats.stats.models import App
+
+    first = client.get("/")
+    with django_assert_max_num_queries(1):  # only the data-version query
+        again = client.get("/")
+    assert again.content == first.content
+    sudoku = App.objects.get(apple_id=1000000002)
+    sudoku.is_active = False  # any data change moves the version: the page is rebuilt
+    sudoku.save()
+    assert client.get("/").content != first.content

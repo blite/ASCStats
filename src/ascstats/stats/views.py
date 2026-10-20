@@ -5,11 +5,13 @@ from django.shortcuts import render
 from . import dashboard as d
 from . import funnel as f
 from . import revenue as r
+from .cache import cached_page
 from .models import App, IngestionRun
 
 WINDOWS = [30, 90, 180, 365]
 
 
+@cached_page
 def dashboard(request):
     end = d.last_day()
     if end is None:
@@ -36,6 +38,7 @@ def dashboard(request):
     return render(request, "stats/dashboard.html", context)
 
 
+@cached_page
 def chart(request):
     app = App.objects.active().filter(apple_id=request.GET.get("app")).first()
     end = d.last_day()
@@ -46,6 +49,7 @@ def chart(request):
     return render(request, "stats/_chart.html", d.app_detail(app, end, days))
 
 
+@cached_page
 def revenue(request):
     end = d.last_day()
     if end is None:
@@ -53,6 +57,7 @@ def revenue(request):
     return render(request, "stats/revenue.html", {"page": "revenue", "end": end, **r.revenue(end)})
 
 
+@cached_page
 def funnel(request):
     end = f.last_day()
     if end is None:
@@ -61,6 +66,7 @@ def funnel(request):
     return render(request, "stats/funnel.html", context)
 
 
+@cached_page
 def funnel_app(request):
     app = App.objects.active().filter(apple_id=request.GET.get("app")).first()
     end = f.last_day()

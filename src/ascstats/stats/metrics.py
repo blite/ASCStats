@@ -3,51 +3,37 @@
 from datetime import date
 
 from django.db import transaction
-from django.db.models import Q, Sum
+from django.db.models import Sum
 
-from .models import DOWNLOAD_ROWS, IAP_ROWS, AnalyticsRow, ConversionMetric, SalesRow
-from .parsing import DISCOVERY_REPORT, DOWNLOADS_REPORT
+from .models import ConversionMetric, FunnelDay, SalesDay
 
-
-def _counts(report_name: str, event: str, field: str = "counts") -> Sum:
-    return Sum(field, filter=Q(report_name=report_name, event=event))
-
-
-FIELDS = [
+FUNNEL_FIELDS = [
     "impressions", "unique_impressions", "page_views", "unique_page_views",
-    "first_time_downloads", "units", "iap_units",
+    "first_time_downloads",
 ]  # fmt: skip
+FIELDS = [*FUNNEL_FIELDS, "units", "iap_units"]
 
 
 def build_conversion_metrics(start: date, end: date) -> int:
-    """Recompute ConversionMetric for every active app and every day in [start, end]: one
-    grouped query per source, merged in memory, upserted in one statement."""
-    window = {"app__is_active": True, "report_date__range": (start, end)}
+    """Recompute ConversionMetric for every active app and every day in [start, end] from the
+    FunnelDay and SalesDay rollups: two grouped queries, one upsert."""
+    window = {"app__is_active": True, "date__range": (start, end)}
     merged: dict[tuple[int, date], dict[str, int]] = {}
     for r in (
-        AnalyticsRow.objects.filter(**window)
-        .values("app_id", "report_date")
-        .annotate(
-            impressions=_counts(DISCOVERY_REPORT, "Impression"),
-            unique_impressions=_counts(DISCOVERY_REPORT, "Impression", "unique_counts"),
-            page_views=_counts(DISCOVERY_REPORT, "Page view"),
-            unique_page_views=_counts(DISCOVERY_REPORT, "Page view", "unique_counts"),
-            first_time_downloads=_counts(DOWNLOADS_REPORT, "First-time download"),
-        )
+        FunnelDay.objects.filter(**window)
+        .values("app_id", "date")
+        .annotate(**{f: Sum(f) for f in FUNNEL_FIELDS})
     ):
-        merged[(r.pop("app_id"), r.pop("report_date"))] = r
+        merged[(r.pop("app_id"), r.pop("date"))] = r
     for r in (
-        SalesRow.objects.filter(**window)
-        .values("app_id", "report_date")
-        # aliases must not be "units": that would shadow the column for the second Sum
-        .annotate(dl=Sum("units", filter=DOWNLOAD_ROWS), iap=Sum("units", filter=IAP_ROWS))
+        SalesDay.objects.filter(**window)
+        .values("app_id", "date")
+        .annotate(dl=Sum("downloads"), iap=Sum("iap_units"))
     ):
-        key = (r["app_id"], r["report_date"])
-        merged.setdefault(key, {}).update(units=r["dl"], iap_units=r["iap"])
+        merged.setdefault((r["app_id"], r["date"]), {}).update(units=r["dl"], iap_units=r["iap"])
     rows = [
         ConversionMetric(app_id=app_id, date=day, **{f: values.get(f) or 0 for f in FIELDS})
         for (app_id, day), values in merged.items()
-        if any(v is not None for v in values.values())
     ]
     with transaction.atomic():
         ConversionMetric.objects.bulk_create(

@@ -9,6 +9,7 @@ from ascstats.stats import synthetic
 from ascstats.stats.metrics import build_conversion_metrics
 from ascstats.stats.models import DOWNLOAD_ROWS, App, AppVersion, SalesRow
 from ascstats.stats.pipeline import Pipeline
+from ascstats.stats.reducers import rebuild_sales_days
 from ascstats.stats.versions import (
     Delta,
     _trend_delta,
@@ -153,6 +154,7 @@ def test_mac_and_ios_versions_are_dated_and_compared_separately(apps):
             _row(app, day, "F3", 100, ios_version),  # redownloads: not downloads
         ]
     SalesRow.objects.bulk_create(rows)
+    rebuild_sales_days()
     build_versions(app)
     assert set(AppVersion.objects.filter(app=app).values_list("platform", "version")) == {
         ("IOS", "1.0"), ("IOS", "1.1"), ("MAC_OS", "2.0"),
@@ -218,6 +220,7 @@ def test_version_impact_reports_both_naive_and_trend(apps):
     SalesRow.objects.bulk_create(
         [_row(app, day, "1F", n, "2.0" if day >= release else "1.0") for day, n in values.items()]
     )
+    rebuild_sales_days()
     build_versions(app)
     (impact,) = [i for i in version_impact(app, platform="IOS") if i.version == "2.0"]
     naive, trend = impact.deltas[0], impact.deltas[1]
@@ -234,6 +237,7 @@ def test_no_trend_estimate_without_two_weeks_of_history(apps):
         [_row(app, date(2026, 1, 1) + timedelta(days=n), "1F", 10, "1.0" if n < 10 else "1.1")
          for n in range(20)]
     )  # fmt: skip
+    rebuild_sales_days()
     build_versions(app)
     (impact,) = [i for i in version_impact(app, platform="IOS") if i.version == "1.1"]
     assert impact.deltas[1].change_pct is None
@@ -244,11 +248,13 @@ def test_launch_ramp_is_not_used_as_a_trend(apps):
     app = App.objects.get(apple_id=SNAKE)
     other = App.objects.get(apple_id=1000000002)  # history starts before Snake launched
     SalesRow.objects.bulk_create([_row(other, date(2025, 12, 1), "1F", 5, "1.0")])
+    rebuild_sales_days()
     SalesRow.objects.bulk_create(
         [_row(app, date(2026, 1, 1) + timedelta(days=n), "1F", 2 + 3 * n if n < 25 else 40,
               "1.0" if n < 25 else "1.1")
          for n in range(40)]
     )  # fmt: skip
+    rebuild_sales_days()
     build_versions(app)
     (impact,) = [i for i in version_impact(app, platform="IOS") if i.version == "1.1"]
     assert impact.deltas[0].change_pct is not None  # naive still compares

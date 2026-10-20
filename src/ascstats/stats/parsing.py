@@ -30,7 +30,7 @@ ANALYTICS_REQUIRED = ["Date", "App Apple Identifier"]
 # The count column is named per report: Counts (engagement, downloads), Crashes, Sessions.
 COUNT_COLUMNS = {"Counts": "", "Crashes": "Crash", "Sessions": "Session"}
 UNIQUE_COLUMNS = ["Unique Counts", "Unique Devices"]
-# Columns promoted to real fields; everything else goes into AnalyticsRow.dimensions.
+# Columns promoted to typed fields; everything else stays in AnalyticsLine.dimensions.
 ANALYTICS_PROMOTED = {
     "Date",
     "App Name",

@@ -6,8 +6,8 @@ from django.core.management.base import CommandError
 
 from ascstats.asc.client import ReportNotReady
 from ascstats.stats.crashes import version_crashes
-from ascstats.stats.models import AnalyticsRow, App
-from ascstats.stats.parsing import CRASHES_REPORT, SESSIONS_REPORT
+from ascstats.stats.models import App, UsageDay
+from ascstats.stats.parsing import CRASHES_REPORT
 from ascstats.stats.pipeline import NO_DATA, Pipeline, analytics_prefix
 from tests.fake_asc import FakeASC
 
@@ -30,10 +30,8 @@ def test_crash_rate_per_version_finds_the_buggy_release(apps):
 @pytest.mark.django_db
 def test_too_few_sessions_shows_counts_not_a_rate(apps):
     snake = App.objects.get(apple_id=SNAKE)
-    for report, n in ((CRASHES_REPORT, 1), (SESSIONS_REPORT, 40)):
-        AnalyticsRow.objects.create(app=snake, report_date=date(2026, 1, 1), report_name=report,
-                                    event="x", device="iPhone", counts=n,
-                                    dimensions={"App Version": "9.9"})  # fmt: skip
+    UsageDay.objects.create(app=snake, date=date(2026, 1, 1), platform="IOS", version="9.9",
+                            crashes=1, sessions=40)  # fmt: skip
     row = version_crashes(snake)["9.9"]
     assert (row.crashes, row.sessions, row.per_1k_sessions) == (1, 40, None)
 
@@ -55,8 +53,9 @@ def test_report_below_privacy_threshold_lands_no_data_marker(apps, monkeypatch):
     pipeline.run("analytics", day, app=sudoku)
     keys = pipeline.store.list(analytics_prefix(day, sudoku.apple_id, CRASHES_REPORT))
     assert [k.rsplit("/", 1)[-1] for k in keys] == [NO_DATA]
-    assert not AnalyticsRow.objects.filter(report_name=CRASHES_REPORT).exists()
-    assert AnalyticsRow.objects.filter(report_name=SESSIONS_REPORT).exists()
+    usage = UsageDay.objects.filter(app=sudoku)
+    assert sum(usage.values_list("crashes", flat=True)) == 0  # nothing published, nothing stored
+    assert all(u.version for u in usage)
 
 
 @pytest.mark.django_db

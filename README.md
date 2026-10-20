@@ -6,8 +6,11 @@ iOS apps into Postgres and serves them through Django.
 - **Ingest**: a minimal, read-only App Store Connect client (ES256 JWT, JSON:API paging,
   retries on GET only) fetches Sales & Trends daily summaries and Analytics Reports.
 - **Land**: raw report files go unchanged into an S3-compatible bucket (MinIO locally).
-- **Load**: validated rows are loaded into Postgres with an idempotent delete+insert per
-  `(app, report, date)` in one transaction; every attempt is written to a run log.
+- **Load**: sales lines are stored as they are and every report is map-reduced at load time:
+  per-report emitters turn each parsed line into `(table, key, counts)`, a reducer sums them,
+  and only the sums reach Postgres (`SalesDay`, `FunnelDay`, `UsageDay`), with an idempotent
+  delete+insert per `(app, date)` in one transaction. The raw files stay in the bucket, so a
+  new question is a new emitter plus a replay of the load step. Every attempt is logged.
 - **Analyse**: every release is dated from the sales data and compared with the days before
   it (downloads, in-app purchases, conversion), with a t-score so noise is not read as a win.
 - **Revenue**: developer proceeds from every storefront, converted to USD at daily European
@@ -70,7 +73,9 @@ own, and any day can be reloaded from raw without asking Apple again.
 |--------------------|-------------------------------------------------------------------------------------------|
 | `App`              | Apple ID, name, SKU, bundle ID, `is_active` (included in imports).                         |
 | `SalesRow`         | One line of the SALES/SUMMARY/DAILY report. IAPs attributed via `Parent Identifier`.       |
-| `AnalyticsRow`     | One line of an Analytics Reports segment; common columns typed, the rest in `dimensions`. |
+| `SalesDay`         | Sales rollup per app, day and platform (downloads, redownloads, updates, purchases), emitted at load. |
+| `FunnelDay`        | Impressions, page views and downloads per app, day and source, reduced at load from the analytics reports. |
+| `UsageDay`         | Sessions and crashes per app, day, platform and app version, reduced at load. |
 | `ConversionMetric` | Derived daily funnel: unique impressions, unique page views, first-time downloads, sales downloads, in-app purchases. Rates are computed over windows, never stored. |
 | `AppVersion`       | Version dated by first appearance in sales; ASC state and creation time when on real data. |
 | `FxDay`            | One row per day: JSON of currency -> USD per unit (ECB via Frankfurter); as-of lookup on weekends. Apple pays at its own rates, so this is an estimate. |

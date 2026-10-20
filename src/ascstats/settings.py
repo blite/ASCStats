@@ -26,6 +26,7 @@ def database_from_url(url: str) -> dict:
         "HOST": parsed.hostname or "",
         "PORT": str(parsed.port or 5432),
         "CONN_MAX_AGE": 60,
+        "CONN_HEALTH_CHECKS": True,  # a reused connection is checked before each request
     }
 
 

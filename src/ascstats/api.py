@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404
 from ninja import NinjaAPI, Schema
 
 from ascstats.stats.crashes import version_crashes
-from ascstats.stats.models import DOWNLOAD_ROWS, App, ConversionMetric, IngestionRun, SalesRow
+from ascstats.stats.models import App, ConversionMetric, IngestionRun, SalesDay, SalesRow
 from ascstats.stats.ratings import current, version_ratings
 from ascstats.stats.versions import version_impact
 
@@ -147,11 +147,13 @@ def daily_sales(request, apple_id: int, start: date | None = None, end: date | N
         day.proceeds[r["currency_of_proceeds"]] = round(float(r["total"]), 2)
     # downloads only: in-app purchases and updates are not
     for r in (
-        SalesRow.objects.filter(DOWNLOAD_ROWS, app=app, report_date__range=(start, end))
-        .values("report_date")
-        .annotate(units=Sum("units"))
+        SalesDay.objects.filter(app=app, date__range=(start, end))
+        .values("date")
+        .annotate(units=Sum("downloads"))
     ):
-        days[r["report_date"]].units = r["units"]
+        days.setdefault(r["date"], DailySales(date=r["date"], units=0, proceeds={})).units = r[
+            "units"
+        ]
     return list(days.values())
 
 

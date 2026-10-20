@@ -32,17 +32,15 @@ from ascstats.asc.client import ASCClient, ReportNotReady
 from . import synthetic
 from .models import (
     ACTIVE_ROWS,
-    DOWNLOAD_ROWS,
     IOS,
     MAC_OS,
-    UPDATE_ROWS,
     App,
     AppVersion,
     CustomerReview,
     RatingSnapshot,
     ReviewSummary,
+    SalesDay,
     SalesRow,
-    platform_rows,
 )
 
 log = logging.getLogger(__name__)
@@ -248,12 +246,12 @@ def version_ratings(
     if not versions:
         return []
     last = max([*daily, versions[-1].first_seen])
-    rows = platform_rows(IOS)
-    active = dict(
-        SalesRow.objects.filter((DOWNLOAD_ROWS | UPDATE_ROWS) & rows, app=app)
-        .values_list("report_date")
-        .annotate(Sum("units"))
-    )
+    active = {
+        d: dl + up
+        for d, dl, up in SalesDay.objects.filter(app=app, platform=IOS).values_list(
+            "date", "downloads", "updates"
+        )
+    }
     reviews = {
         r["version"]: r
         for r in CustomerReview.objects.filter(app=app)

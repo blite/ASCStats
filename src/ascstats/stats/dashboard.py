@@ -6,36 +6,27 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from django.db.models import Max, Q, Sum
+from django.db.models import Max, Sum
 
 from .charts import days as _days
 from .charts import fmt_day as _fmt_day
 from .charts import nice_axis, smooth, spark
 from .crashes import version_crashes
-from .models import (
-    ACTIVE_ROWS,
-    DOWNLOAD_ROWS,
-    IAP_ROWS,
-    IOS,
-    UPDATE_ROWS,
-    App,
-    IngestionRun,
-    Report,
-    SalesRow,
-)
+from .models import ACTIVE_ROWS, IOS, App, IngestionRun, Report, SalesDay
 from .ratings import current, daily_new_ratings, version_ratings
 from .versions import VersionImpact, version_impact
 
 
 def last_day() -> date | None:
-    return SalesRow.objects.filter(ACTIVE_ROWS).aggregate(last=Max("report_date"))["last"]
+    return SalesDay.objects.filter(ACTIVE_ROWS).aggregate(last=Max("date"))["last"]
 
 
-def _daily(q: Q, start: date, end: date, **filters) -> dict[date, int]:
+def _daily(field: str, start: date, end: date, **filters) -> dict[date, int]:
+    """One SalesDay measure per day (all platforms) for active apps."""
     return dict(
-        SalesRow.objects.filter(q & ACTIVE_ROWS, report_date__range=(start, end), **filters)
-        .values_list("report_date")
-        .annotate(Sum("units"))
+        SalesDay.objects.filter(ACTIVE_ROWS, date__range=(start, end), **filters)
+        .values_list("date")
+        .annotate(Sum(field))
     )
 
 
@@ -76,14 +67,14 @@ def tiles(end: date) -> list[Tile]:
     start, prev_start = end - timedelta(days=29), end - timedelta(days=59)
     spark_days = _days(end - timedelta(days=89), end)
     out = []
-    for label, q in (
-        ("Downloads", DOWNLOAD_ROWS),
-        ("In-app purchases", IAP_ROWS),
-        ("Updates installed", UPDATE_ROWS),
+    for label, measure in (
+        ("Downloads", "downloads"),
+        ("In-app purchases", "iap_units"),
+        ("Updates installed", "updates"),
     ):
-        daily = _daily(q, spark_days[0], end)
+        daily = _daily(measure, spark_days[0], end)
         current = sum(v for d, v in daily.items() if d >= start)
-        previous = sum(_daily(q, prev_start, start - timedelta(days=1)).values())
+        previous = sum(_daily(measure, prev_start, start - timedelta(days=1)).values())
         series = smooth([daily.get(d, 0) for d in spark_days])
         out.append(
             Tile(label, current, previous, spark(series, 120, 32), "last 30 days vs the 30 before")
@@ -124,9 +115,9 @@ def scoreboard(end: date, days: int = 365) -> Scoreboard:
         return round(LANE_X0 + (day - start).days * step, 1)
 
     totals = dict(
-        SalesRow.objects.filter(DOWNLOAD_ROWS & ACTIVE_ROWS, report_date__range=(start, end))
+        SalesDay.objects.filter(ACTIVE_ROWS, date__range=(start, end))
         .values_list("app")
-        .annotate(Sum("units"))
+        .annotate(Sum("downloads"))
     )
     apps = sorted(
         (a for a in App.objects.active() if totals.get(a.pk, 0) > 0),
@@ -137,7 +128,7 @@ def scoreboard(end: date, days: int = 365) -> Scoreboard:
     for n, app in enumerate(apps):
         top = LANE_TOP + n * LANE_H
         base, height = top + LANE_H - 10, LANE_H - 18
-        daily = _daily(DOWNLOAD_ROWS, start, end, app=app)
+        daily = _daily("downloads", start, end, app=app)
         series = smooth([daily.get(d, 0) for d in span])
         peak = max(series) or 1
         pts = [(LANE_X0 + i * step, base - height * v / peak) for i, v in enumerate(series)]
@@ -230,7 +221,7 @@ W, H, PAD_L, PAD_R, PAD_T, PAD_B = 1000, 300, 44, 12, 34, 28
 def app_detail(app: App, end: date, days: int) -> dict:
     start = end - timedelta(days=days - 1)
     span = _days(start, end)
-    daily = _daily(DOWNLOAD_ROWS, start, end, app=app)
+    daily = _daily("downloads", start, end, app=app)
     values = [daily.get(d, 0) for d in span]
     avg = smooth(values)
     impacts = version_impact(app)

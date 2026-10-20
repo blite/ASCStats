@@ -17,7 +17,7 @@ from django.db.models import F, Sum
 
 from .charts import month_ticks, nice_axis, pct_change, spark
 from .fx import Converter
-from .models import ACTIVE_ROWS, DOWNLOAD_ROWS, App, SalesRow
+from .models import ACTIVE_ROWS, App, SalesDay, SalesRow
 
 SLOTS = 5  # apps with their own color; the rest fold into "Other"
 
@@ -164,9 +164,9 @@ def revenue(end: date) -> dict:
 
     # --- per-app table
     downloads30 = dict(
-        SalesRow.objects.filter(DOWNLOAD_ROWS & ACTIVE_ROWS, report_date__range=(d30, end))
+        SalesDay.objects.filter(ACTIVE_ROWS, date__range=(d30, end))
         .values_list("app_id")
-        .annotate(Sum("units"))
+        .annotate(Sum("downloads"))
     )
     app_rows = []
     year_total = sum(year_by_app.values())

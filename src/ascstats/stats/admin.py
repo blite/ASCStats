@@ -1,6 +1,15 @@
 from django.contrib import admin
 
-from .models import AnalyticsRow, App, AppVersion, ConversionMetric, IngestionRun, SalesRow
+from .models import (
+    App,
+    AppVersion,
+    ConversionMetric,
+    FunnelDay,
+    IngestionRun,
+    SalesDay,
+    SalesRow,
+    UsageDay,
+)
 
 
 @admin.register(App)
@@ -22,14 +31,30 @@ class SalesRowAdmin(admin.ModelAdmin):
     list_select_related = ["app"]
 
 
-@admin.register(AnalyticsRow)
-class AnalyticsRowAdmin(admin.ModelAdmin):
+@admin.register(SalesDay)
+class SalesDayAdmin(admin.ModelAdmin):
+    list_display = ["date", "app", "platform", "downloads", "redownloads", "updates", "iap_units"]
+    list_filter = ["app", "platform"]
+    date_hierarchy = "date"
+    list_select_related = ["app"]
+
+
+@admin.register(FunnelDay)
+class FunnelDayAdmin(admin.ModelAdmin):
     list_display = [
-        "report_date", "app", "report_name", "event", "source_type", "device", "territory",
-        "counts", "unique_counts",
+        "date", "app", "source_type", "unique_impressions", "unique_page_views",
+        "first_time_downloads", "redownloads",
     ]  # fmt: skip
-    list_filter = ["app", "report_name", "event", "source_type", "device"]
-    date_hierarchy = "report_date"
+    list_filter = ["app", "source_type"]
+    date_hierarchy = "date"
+    list_select_related = ["app"]
+
+
+@admin.register(UsageDay)
+class UsageDayAdmin(admin.ModelAdmin):
+    list_display = ["date", "app", "platform", "version", "sessions", "crashes", "crash_devices"]
+    list_filter = ["app", "platform"]
+    date_hierarchy = "date"
     list_select_related = ["app"]
 
 

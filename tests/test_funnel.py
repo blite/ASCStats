@@ -4,7 +4,7 @@ import pytest
 from django.core.management import call_command
 
 from ascstats.stats import funnel
-from ascstats.stats.models import AnalyticsRow, ConversionMetric
+from ascstats.stats.models import ConversionMetric, FunnelDay
 
 END = date(2026, 10, 18)
 STEP = {s.key: s for s in funnel.STEPS}
@@ -80,12 +80,9 @@ def test_source_mix_shares_add_up_and_thin_sources_fold(apps):
         # web referrer brings impressions but no downloads: too thin to have its own line
         for source, imp, dl in [("App Store search", 600, 30), ("App Store browse", 400, 8),
                                 ("Web referrer", 20, 0)]:  # fmt: skip
-            common = {"app": app, "report_date": day, "source_type": source}
-            rows.append(AnalyticsRow(report_name=funnel.DISCOVERY_REPORT, event="Impression",
-                                     counts=imp, unique_counts=imp, **common))  # fmt: skip
-            rows.append(AnalyticsRow(report_name=funnel.DOWNLOADS_REPORT,
-                                     event="First-time download", counts=dl, **common))  # fmt: skip
-    AnalyticsRow.objects.bulk_create(rows)
+            rows.append(FunnelDay(app=app, date=day, source_type=source, impressions=imp,
+                                  unique_impressions=imp, first_time_downloads=dl))  # fmt: skip
+    FunnelDay.objects.bulk_create(rows)
     mix = funnel.source_mix(app, END)
     sources = [line["src"] for line in mix["lines"]]
     assert "Web referrer" not in sources

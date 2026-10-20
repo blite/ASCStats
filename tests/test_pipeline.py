@@ -6,7 +6,7 @@ from django.core.management.base import CommandError
 
 from ascstats.asc.client import ReportNotReady
 from ascstats.stats.metrics import build_conversion_metrics
-from ascstats.stats.models import AnalyticsRow, App, ConversionMetric, IngestionRun, SalesRow
+from ascstats.stats.models import App, ConversionMetric, FunnelDay, IngestionRun, SalesDay, SalesRow
 from ascstats.stats.parsing import ValidationError
 from ascstats.stats.pipeline import Pipeline, QualityError, sales_prefix
 from tests.fake_asc import FakeASC
@@ -107,10 +107,10 @@ def test_asc_source_end_to_end_with_recorded_fixtures(apps):
         pipeline.run("analytics", DAY, app=sudoku)
     finally:
         p.ANALYTICS_REPORTS = original
-    assert sorted(AnalyticsRow.objects.values_list("event", "counts")) == [
-        ("First-time download", 11),
-        ("Redownload", 2),
-    ]
+    # the raw rows are reduced, not stored: one FunnelDay per (day, source)
+    assert list(
+        FunnelDay.objects.values_list("source_type", "first_time_downloads", "redownloads")
+    ) == [("App Store search", 11, 2)]
     assert {r.method for r in fake.requests} == {"GET"}
 
 
@@ -146,9 +146,9 @@ def test_import_command_backfill_and_exit_codes(apps):
 @pytest.mark.django_db
 def test_seed_synthetic_is_repeatable():
     call_command("seed_synthetic", "--days", "3")
-    counts = (SalesRow.objects.count(), AnalyticsRow.objects.count())
+    counts = (SalesRow.objects.count(), SalesDay.objects.count(), FunnelDay.objects.count())
     call_command("seed_synthetic", "--days", "3")
-    assert (SalesRow.objects.count(), AnalyticsRow.objects.count()) == counts
+    assert (SalesRow.objects.count(), SalesDay.objects.count(), FunnelDay.objects.count()) == counts
     assert App.objects.count() == 3
 
 
