@@ -10,6 +10,9 @@ airflow/.env
 airflow/logs/
 # never commit a real App Store Connect key or real report files
 *.p8
-secrets/
+# k8s/secrets/ keeps only *.example.yaml templates and the dev-only .env files
+**/secrets/*
+!k8s/secrets/*.example.yaml
+!k8s/secrets/dev-*.env
 k8s/**/*.secret.yaml
 airflow/.kube/
