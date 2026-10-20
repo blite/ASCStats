@@ -73,7 +73,7 @@ own, and any day can be reloaded from raw without asking Apple again.
 | `AnalyticsRow`     | One line of an Analytics Reports segment; common columns typed, the rest in `dimensions`. |
 | `ConversionMetric` | Derived daily funnel: unique impressions, unique page views, first-time downloads, sales downloads, in-app purchases. Rates are computed over windows, never stored. |
 | `AppVersion`       | Version dated by first appearance in sales; ASC state and creation time when on real data. |
-| `FxRate`           | Daily ECB reference rate, USD per unit of currency (Frankfurter API); as-of lookup on weekends. |
+| `FxDay`            | One row per day: JSON of currency -> USD per unit (ECB via Frankfurter); as-of lookup on weekends. Apple pays at its own rates, so this is an estimate. |
 | `IngestionRun`     | The run log: report, day, app, step, source, status, row counts, error.                   |
 
 ### Did that release help?

@@ -252,21 +252,20 @@ class ReviewSummary(models.Model):
         return f"{self.app_id} {self.platform} {self.territory}"
 
 
-class FxRate(models.Model):
-    """Daily reference rate (European Central Bank, via Frankfurter): USD per one unit of
-    ``currency``. Only used to put proceeds from many storefronts on one scale; Apple's own
-    payout FX differs a little, so converted revenue is an estimate."""
+class FxDay(models.Model):
+    """One day's reference rates (European Central Bank, via Frankfurter): ``rates`` maps a
+    currency code to USD per one unit of it, exactly as fetched, plus USD itself. Only used to
+    put proceeds from many storefronts on one scale; Apple's payouts use its own rates, so
+    converted revenue is an estimate and float precision is plenty."""
 
-    date = models.DateField()
-    currency = models.CharField(max_length=3)
-    usd_per_unit = models.DecimalField(max_digits=20, decimal_places=10)
+    date = models.DateField(unique=True)
+    rates = models.JSONField(default=dict, help_text="{currency: USD per unit}")
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["date", "currency"], name="uniq_fx")]
-        indexes = [models.Index(fields=["currency", "date"])]
+        ordering = ["date"]
 
     def __str__(self) -> str:
-        return f"{self.date} {self.currency} {self.usd_per_unit}"
+        return f"{self.date} ({len(self.rates)} currencies)"
 
 
 class IngestionRun(models.Model):

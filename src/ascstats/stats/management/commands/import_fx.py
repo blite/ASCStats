@@ -24,4 +24,4 @@ class Command(BaseCommand):
             first = SalesRow.objects.aggregate(first=Min("report_date"))["first"] or end
             start = first - timedelta(days=7)  # a rate for a Monday-after-a-holiday weekend
         start = start or end - timedelta(days=days - 1)
-        self.stdout.write(f"fx {start}..{end}: {fx.load(start, end)} rates")
+        self.stdout.write(f"fx {start}..{end}: {fx.load(start, end)} days of rates")
