@@ -9,6 +9,7 @@ anything under ~2 is indistinguishable from day-to-day noise.
 
 from __future__ import annotations
 
+import logging
 import math
 import statistics
 from dataclasses import dataclass, field
@@ -17,7 +18,7 @@ from datetime import date, datetime, timedelta
 from django.db import transaction
 from django.db.models import Max, Min, Q, Sum
 
-from ascstats.asc.client import ASCClient
+from ascstats.asc.client import ASCClient, ReportNotReady
 
 from .models import (
     DOWNLOAD_ROWS,
@@ -31,6 +32,8 @@ from .models import (
     SalesRow,
     platform_rows,
 )
+
+log = logging.getLogger(__name__)
 
 SIGNIFICANT_T = 2.0
 
@@ -60,9 +63,16 @@ def build_versions(app: App) -> int:
 
 
 def sync_asc_versions(client: ASCClient, app: App) -> int:
-    """Add App Store Connect's state and creation time (read-only GET)."""
+    """Add App Store Connect's state and creation time (read-only GET). Apps that still show
+    up in sales but are no longer visible to the API (removed or transferred) 404: their
+    versions stay dated from sales alone."""
+    try:
+        resources = client.app_store_versions(app.apple_id)
+    except ReportNotReady:
+        log.warning("app %s is not visible to this API key; versions from sales only", app)
+        return 0
     written = 0
-    for resource in client.app_store_versions(app.apple_id):
+    for resource in resources:
         attrs = resource["attributes"]
         created = attrs.get("createdDate")
         AppVersion.objects.update_or_create(

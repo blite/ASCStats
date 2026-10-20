@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 
+import httpx
 import pytest
 
 from ascstats.stats import synthetic
@@ -149,3 +150,13 @@ def test_mac_and_ios_versions_are_dated_and_compared_separately(apps):
     (mac,) = version_impact(app, platform="MAC_OS")
     assert mac.before_days == 0
     assert mac.deltas[0].after == 5
+
+
+@pytest.mark.django_db
+def test_apps_the_api_cannot_see_keep_sales_versions(apps):
+    fake = FakeASC()
+    fake.queue(
+        f"/v1/apps/{SNAKE}/appStoreVersions",
+        httpx.Response(404, json={"errors": [{"detail": "not found"}]}),
+    )
+    assert sync_asc_versions(fake.client(), App.objects.get(apple_id=SNAKE)) == 0
