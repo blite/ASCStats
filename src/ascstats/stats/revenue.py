@@ -16,7 +16,7 @@ from decimal import Decimal
 from django.db.models import F, Sum
 
 from .fx import Converter
-from .models import DOWNLOAD_ROWS, App, SalesRow
+from .models import ACTIVE_ROWS, DOWNLOAD_ROWS, App, SalesRow
 
 SLOTS = 5  # apps with their own color; the rest fold into "Other"
 
@@ -37,7 +37,7 @@ class Line:
 def _lines(start: date, end: date) -> list[Line]:
     convert = Converter()
     rows = (
-        SalesRow.objects.filter(report_date__range=(start, end))
+        SalesRow.objects.filter(ACTIVE_ROWS, report_date__range=(start, end))
         .exclude(developer_proceeds=0)
         .values("report_date", "app_id", "sku", "title", "country_code", "currency_of_proceeds")
         .annotate(n_units=Sum("units"), local=Sum(F("units") * F("developer_proceeds")))
@@ -171,7 +171,7 @@ def revenue(end: date) -> dict:
 
     # --- per-app table
     downloads30 = dict(
-        SalesRow.objects.filter(DOWNLOAD_ROWS, report_date__range=(d30, end))
+        SalesRow.objects.filter(DOWNLOAD_ROWS & ACTIVE_ROWS, report_date__range=(d30, end))
         .values_list("app_id")
         .annotate(Sum("units"))
     )

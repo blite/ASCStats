@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from django.db.models import Max, Q, Sum
 
 from .models import (
+    ACTIVE_ROWS,
     DOWNLOAD_ROWS,
     IAP_ROWS,
     IOS,
@@ -24,12 +25,12 @@ from .versions import VersionImpact, version_impact
 
 
 def last_day() -> date | None:
-    return SalesRow.objects.aggregate(last=Max("report_date"))["last"]
+    return SalesRow.objects.filter(ACTIVE_ROWS).aggregate(last=Max("report_date"))["last"]
 
 
 def _daily(q: Q, start: date, end: date, **filters) -> dict[date, int]:
     return dict(
-        SalesRow.objects.filter(q, report_date__range=(start, end), **filters)
+        SalesRow.objects.filter(q & ACTIVE_ROWS, report_date__range=(start, end), **filters)
         .values_list("report_date")
         .annotate(Sum("units"))
     )
@@ -144,12 +145,12 @@ def scoreboard(end: date, days: int = 365) -> Scoreboard:
         return round(LANE_X0 + (day - start).days * step, 1)
 
     totals = dict(
-        SalesRow.objects.filter(DOWNLOAD_ROWS, report_date__range=(start, end))
+        SalesRow.objects.filter(DOWNLOAD_ROWS & ACTIVE_ROWS, report_date__range=(start, end))
         .values_list("app")
         .annotate(Sum("units"))
     )
     apps = sorted(
-        (a for a in App.objects.filter(is_active=True) if totals.get(a.pk, 0) >= 20),
+        (a for a in App.objects.filter(is_active=True) if totals.get(a.pk, 0) > 0),
         key=lambda a: -totals[a.pk],
     )
     lanes, releases = [], []

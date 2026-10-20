@@ -67,6 +67,9 @@ DOWNLOAD_ROWS = Q(parent_identifier="") & ~Q(
 )
 UPDATE_ROWS = Q(parent_identifier="", product_type__in=UPDATE_PRODUCT_TYPES)
 IAP_ROWS = ~Q(parent_identifier="")
+# Stats only ever cover active apps. Sales files are vendor-wide, so inactive apps' rows are
+# still loaded (raw fidelity, quality checks) but never counted.
+ACTIVE_ROWS = Q(app__is_active=True)
 
 
 def platform_rows(platform: str) -> Q:

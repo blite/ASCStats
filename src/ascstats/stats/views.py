@@ -24,7 +24,7 @@ def dashboard(request):
         "calendar": d.pipeline_calendar(end),
         "apps": apps,
         "windows": WINDOWS,
-        "app_count": len(apps),
+        "app_count": App.objects.filter(is_active=True).count(),
         "best": max(
             (r for r in board.releases if r["kind"] == "up"),
             key=lambda r: r["impact"].deltas[1].change_pct,
@@ -36,7 +36,7 @@ def dashboard(request):
 
 
 def chart(request):
-    app = App.objects.filter(apple_id=request.GET.get("app")).first()
+    app = App.objects.filter(apple_id=request.GET.get("app"), is_active=True).first()
     end = d.last_day()
     if app is None or end is None:
         return render(request, "stats/_chart.html", {"empty": True})

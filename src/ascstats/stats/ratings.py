@@ -31,6 +31,7 @@ from ascstats.asc.client import ASCClient, ReportNotReady
 
 from . import synthetic
 from .models import (
+    ACTIVE_ROWS,
     DOWNLOAD_ROWS,
     IOS,
     UPDATE_ROWS,
@@ -55,7 +56,7 @@ LOOKUP_PAUSE = 3.0  # seconds between storefronts: the public endpoint allows ~2
 def storefronts(end: date) -> list[str]:
     """Every storefront with sales in the past year, plus the US."""
     codes = set(
-        SalesRow.objects.filter(report_date__gt=end - timedelta(days=365))
+        SalesRow.objects.filter(ACTIVE_ROWS, report_date__gt=end - timedelta(days=365))
         .values_list("country_code", flat=True)
         .distinct()
     )

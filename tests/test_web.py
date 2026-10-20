@@ -54,3 +54,28 @@ def test_admin_lists_synthetic_rows(client, seeded):
         "ingestionrun",
     ):
         assert client.get(f"/admin/stats/{model}/").status_code == 200
+
+
+def test_inactive_apps_are_left_out_of_every_stat(client, seeded):
+    from datetime import date, timedelta
+
+    from ascstats.stats import dashboard
+    from ascstats.stats.models import App, SalesRow
+    from ascstats.stats.revenue import revenue
+
+    end = date.today() - timedelta(days=1)
+    before = dashboard.tiles(end)[0].value
+    sudoku = App.objects.get(apple_id=1000000002)
+    sudoku.is_active = False
+    sudoku.save()
+    assert SalesRow.objects.filter(app=sudoku).exists()  # still loaded, just not counted
+    assert dashboard.tiles(end)[0].value < before
+    assert sudoku not in [lane.app for lane in dashboard.scoreboard(end).lanes]
+    assert sudoku not in [a["app"] for a in revenue(end)["apps"]]
+    assert 1000000002 not in [a["apple_id"] for a in client.get("/api/apps").json()]
+    assert 1000000002 in [
+        a["apple_id"] for a in client.get("/api/apps?include_inactive=true").json()
+    ]
+    for path in ("sales/daily", "versions", "ratings", "conversion"):
+        assert client.get(f"/api/apps/1000000002/{path}").status_code == 404
+    assert b"No data for this app" in client.get("/chart/", {"app": 1000000002}).content
