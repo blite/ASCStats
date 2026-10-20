@@ -1,4 +1,4 @@
-"""Rebuild the derived conversion table and the version dates once both daily imports landed.
+"""Rebuild the derived tables (conversion, version dates, FX rates) once both imports landed.
 
 Asset-scheduled: runs after a sales AND an analytics asset event. The rebuild covers the last
 7 days, so late or restated days are picked up without tracking which day triggered it.
@@ -34,6 +34,8 @@ def ascstats_conversion_metrics():
         outlets=[CONVERSION_ASSET],
     )
     conversion >> manage_py("build_versions", ["build_versions"], talks_to_asc=True)
+    # ECB rates for converting proceeds to USD (public API, not App Store Connect).
+    manage_py("import_fx", ["import_fx", "--days", "14"])
 
 
 ascstats_conversion_metrics()

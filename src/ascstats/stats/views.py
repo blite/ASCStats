@@ -3,6 +3,7 @@
 from django.shortcuts import render
 
 from . import dashboard as d
+from . import revenue as r
 from .models import App, IngestionRun
 
 WINDOWS = [30, 90, 180, 365]
@@ -11,11 +12,12 @@ WINDOWS = [30, 90, 180, 365]
 def dashboard(request):
     end = d.last_day()
     if end is None:
-        return render(request, "stats/dashboard.html", {"empty": True})
+        return render(request, "stats/dashboard.html", {"empty": True, "page": "overview"})
     tiles = d.tiles(end)
     board = d.scoreboard(end)
     apps = [lane.app for lane in board.lanes] or list(App.objects.filter(is_active=True))
     context = {
+        "page": "overview",
         "end": end,
         "tiles": tiles,
         "board": board,
@@ -41,3 +43,10 @@ def chart(request):
     days = int(request.GET.get("days", 90))
     days = days if days in WINDOWS else 90
     return render(request, "stats/_chart.html", d.app_detail(app, end, days))
+
+
+def revenue(request):
+    end = d.last_day()
+    if end is None:
+        return render(request, "stats/revenue.html", {"empty": True, "page": "revenue"})
+    return render(request, "stats/revenue.html", {"page": "revenue", **r.revenue(end)})

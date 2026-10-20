@@ -10,6 +10,9 @@ iOS apps into Postgres and serves them through Django.
   `(app, report, date)` in one transaction; every attempt is written to a run log.
 - **Analyse**: every release is dated from the sales data and compared with the days before
   it (downloads, in-app purchases, conversion), with a t-score so noise is not read as a win.
+- **Revenue**: developer proceeds from every storefront, converted to USD at daily European
+  Central Bank reference rates (`import_fx`), on a `/revenue` page: weekly proceeds by app,
+  apps at a glance, top sellers and storefronts.
 - **Serve**: Django admin, a JSON API (Django Ninja, OpenAPI at `/api/docs`) and one
   server-rendered htmx page with a chart.
 - **Run**: Docker Compose for development, Kustomize manifests for Kubernetes (a CronJob per
@@ -64,6 +67,7 @@ own, and any day can be reloaded from raw without asking Apple again.
 | `AnalyticsRow`     | One line of an Analytics Reports segment; common columns typed, the rest in `dimensions`. |
 | `ConversionMetric` | Derived daily funnel: impressions, page views, first-time downloads, units.               |
 | `AppVersion`       | Version dated by first appearance in sales; ASC state and creation time when on real data. |
+| `FxRate`           | Daily ECB reference rate, USD per unit of currency (Frankfurter API); as-of lookup on weekends. |
 | `IngestionRun`     | The run log: report, day, app, step, source, status, row counts, error.                   |
 
 ### Did that release help?
@@ -71,7 +75,9 @@ own, and any day can be reloaded from raw without asking Apple again.
 `build_versions` dates every version by the first day it appears in the sales report (new
 downloads and updates carry the version the customer received), and
 `GET /api/apps/{apple_id}/versions?window=14` compares each version's first days live with
-the days just before it:
+the days just before it, two ways: naive before/after, and against the trend the app was
+already on (a log-linear fit with day-of-week effects on the 28 days before, with a level
+shift for any earlier release in that window, projected over the days the version was live):
 
 | Metric                 | Before | After | Change | t     |
 |------------------------|-------:|------:|-------:|------:|
@@ -243,7 +249,7 @@ src/ascstats/
   stats/parsing.py      report parsing and validation (pure functions)
   stats/synthetic.py    synthetic reports in Apple's file format
   stats/storage.py      raw landing zone (S3 API or local files)
-  stats/management/commands/  import_asc, seed_synthetic, build_conversion_metrics, build_versions, list_apps
+  stats/management/commands/  import_asc, seed_synthetic, build_conversion_metrics, build_versions, import_fx, list_apps
   api.py                Django Ninja API
 k8s/                    Kustomize manifests
 airflow/                Airflow 3 DAGs, Compose stack, DAG-integrity tests

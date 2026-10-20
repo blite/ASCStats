@@ -1,0 +1,98 @@
+{% extends "stats/base.html" %}{% load humanize stats_extras %}
+{% block title %}Revenue · ASCStats{% endblock %}
+{% block content %}
+{% if empty %}
+<section class="hero"><h1>No sales yet.</h1></section>
+{% else %}
+<section class="hero fade">
+  <p class="eyebrow">Proceeds · last 30 days · USD</p>
+  <h1><span class="num">{{ total30|money }}</span> earned{% if change30 is not None %}, {% if change30 >= 0 %}up{% else %}down{% endif %} {{ change30|floatformat:0|cut:"-" }}%{% endif %}.</h1>
+  <p>{{ year|money }} over the past year across {{ apps|length }} app{{ apps|length|pluralize }}{% if best %}; <strong>{{ best.app.name }}</strong> brought in {{ best.share|floatformat:0 }}% of it{% endif %}.</p>
+</section>
+
+<div class="grid4">
+  <div class="card tile fade"><div class="label">Proceeds, 30 days</div><div class="value">{{ total30|money }}</div>
+    <span class="chip {% if change30 is None %}flat{% elif change30 >= 0 %}up{% else %}down{% endif %}">{% if change30 is None %}● new{% elif change30 >= 0 %}▲ {{ change30|floatformat:0 }}%{% else %}▼ {{ change30|floatformat:0 }}%{% endif %}</span>
+    <div class="note">vs the 30 days before</div></div>
+  <div class="card tile fade" style="animation-delay:100ms"><div class="label">Past 12 months</div><div class="value">{{ year|money }}</div>
+    <div class="note">{{ apps|length }} earning app{{ apps|length|pluralize }}</div></div>
+  <div class="card tile fade" style="animation-delay:200ms"><div class="label">Paid transactions, 30 days</div><div class="value">{{ paid_units30|intcomma }}</div>
+    <div class="note">purchases and subscriptions, net of refunds</div></div>
+  <div class="card tile fade" style="animation-delay:300ms"><div class="label">Per 1,000 downloads</div><div class="value">{{ per_1k|money }}</div>
+    <div class="note">30-day proceeds ÷ 30-day downloads</div></div>
+</div>
+
+<section class="card fade">
+  <div class="card-head">
+    <div>
+      <h2>Weekly proceeds by app</h2>
+      <p class="sub">52 weeks, each bar stacked by app. Hover a week for the breakdown.</p>
+    </div>
+    <div class="split" aria-label="Legend">{% for s in series %}<span class="key"><span class="sw {{ s.cls }}"></span>{{ s.name }}</span>{% endfor %}</div>
+  </div>
+  <div class="scroll">
+    <svg viewBox="0 0 {{ width }} {{ height }}" style="min-width: 680px" role="img" aria-label="Weekly proceeds by app over the past year">
+      {% for g in grid %}<line class="{% if forloop.first %}axis{% else %}hair{% endif %}" x1="{{ pad_l }}" y1="{{ g.y }}" x2="{{ plot_r }}" y2="{{ g.y }}"/>
+      <text class="tick" x="{{ pad_l|add:'-8' }}" y="{{ g.y }}" dy="4" text-anchor="end">{{ g.label }}</text>{% endfor %}
+      {% for t in xticks %}<text class="tick" x="{{ t.x }}" y="{{ height|add:'-6' }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
+      {% for b in bars %}<g class="week" data-tip="{{ b.tip }}">
+        <rect x="{{ b.hit_x }}" y="{{ pad_t }}" width="{{ b.hit_w }}" height="{{ plot_h }}" fill="transparent"/>
+        {% for r in b.rects %}<rect class="{{ r.cls }} rise" x="{{ r.x }}" y="{{ r.y }}" width="{{ r.w }}" height="{{ r.h }}" rx="1.5" style="animation-delay: {{ forloop.parentloop.counter0 }}0ms"/>{% endfor %}
+      </g>{% endfor %}
+    </svg>
+  </div>
+  <style>.week:hover rect:not([fill]) { filter: brightness(1.12); }</style>
+</section>
+
+<section class="card fade">
+  <h2>Apps at a glance</h2>
+  <p class="sub">Ranked by the past year. Share is of the year's total; the sparkline is the last 12 weeks.</p>
+  <div class="scroll">
+  <table style="min-width: 760px">
+    <tr><th>App</th><th class="num">Last 30 days</th><th class="num">Change</th><th class="num">Past year</th><th>Share of year</th><th class="num">Per 1k downloads</th><th>Top seller</th><th>12 weeks</th></tr>
+    {% for a in apps %}
+    <tr>
+      <td><span class="key"><span class="sw {{ a.cls }}"></span>{{ a.app.name }}</span></td>
+      <td class="num"><strong>{{ a.last30|money }}</strong></td>
+      <td class="num">{% if a.change is None %}<span class="muted">–</span>{% else %}<span class="chip {% if a.change >= 0 %}up{% else %}down{% endif %}">{% if a.change >= 0 %}▲{% else %}▼{% endif %} {{ a.change|floatformat:0|cut:"-" }}%</span>{% endif %}</td>
+      <td class="num">{{ a.year|money }}</td>
+      <td><span style="display:inline-flex;align-items:center;gap:8px"><svg width="120" height="10" aria-hidden="true"><rect x="0" y="1" width="120" height="8" rx="3" fill="var(--grid)"/><rect class="{{ a.cls }}" x="0" y="1" width="{{ a.share_w }}" height="8" rx="3"/></svg>{{ a.share|floatformat:0 }}%</span></td>
+      <td class="num">{% if a.per_1k is None %}<span class="muted">–</span>{% else %}{{ a.per_1k|money }}{% endif %}</td>
+      <td class="muted">{{ a.top_product|truncatechars:28 }}</td>
+      <td><svg width="96" height="24" role="img" aria-label="{{ a.app.name }}, weekly proceeds, last 12 weeks"><polyline points="{{ a.spark }}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/></svg></td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+</section>
+
+<div class="two">
+  <section class="card fade">
+    <h2>Top sellers</h2>
+    <p class="sub">In-app purchases, subscriptions and paid apps, past year.</p>
+    <table>
+      <tr><th>Product</th><th class="num">Units</th><th class="num">Last 30 days</th><th class="num">Past year</th></tr>
+      {% for p in products %}<tr>
+        <td><span class="key"><span class="sw {{ p.cls }}"></span>{{ p.title|truncatechars:34 }}</span><div class="muted" style="font-size:12px">{{ p.app.name }}</div></td>
+        <td class="num">{{ p.units|intcomma }}</td><td class="num">{{ p.last30|money }}</td><td class="num"><strong>{{ p.usd|money }}</strong></td></tr>{% endfor %}
+    </table>
+  </section>
+  <section class="card fade">
+    <h2>Where it comes from</h2>
+    <p class="sub">Top storefronts by proceeds, past year.</p>
+    {% for c in countries %}
+    <div style="display:grid;grid-template-columns:34px 1fr 76px;align-items:center;gap:10px;margin:7px 0;font-size:13px" data-tip="{{ c.code }}&#10;{{ c.usd|money }} in the past year">
+      <span style="font-weight:600">{{ c.code }}</span>
+      <svg height="12" width="100%" preserveAspectRatio="none" viewBox="0 0 100 12" aria-hidden="true"><rect class="rise" x="0" y="2" width="{{ c.w }}" height="8" rx="2" fill="var(--series-1)"/></svg>
+      <span class="num" style="text-align:right;font-variant-numeric:tabular-nums">{{ c.usd|money }}</span>
+    </div>
+    {% endfor %}
+  </section>
+</div>
+
+<p class="muted" style="font-size:12px;margin-top:16px;max-width:90ch">
+  Proceeds are what Apple pays you per unit, after its commission and before tax, net of refunds. Each day converts to USD at that day's European Central Bank reference rate (latest earlier rate on weekends), so these are estimates; Apple's payout uses its own rates.
+  {% if unconverted %}Not converted (no ECB rate): {% for c, v in unconverted %}{{ v }} {{ c }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %}
+</p>
+{% endif %}
+{% endblock %}

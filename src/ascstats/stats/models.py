@@ -142,6 +142,23 @@ class AppVersion(models.Model):
         return f"{self.app_id} {self.platform} {self.version}"
 
 
+class FxRate(models.Model):
+    """Daily reference rate (European Central Bank, via Frankfurter): USD per one unit of
+    ``currency``. Only used to put proceeds from many storefronts on one scale; Apple's own
+    payout FX differs a little, so converted revenue is an estimate."""
+
+    date = models.DateField()
+    currency = models.CharField(max_length=3)
+    usd_per_unit = models.DecimalField(max_digits=20, decimal_places=10)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["date", "currency"], name="uniq_fx")]
+        indexes = [models.Index(fields=["currency", "date"])]
+
+    def __str__(self) -> str:
+        return f"{self.date} {self.currency} {self.usd_per_unit}"
+
+
 class IngestionRun(models.Model):
     """Run log: one row per (report, date[, app], step) attempt."""
 

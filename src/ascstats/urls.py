@@ -7,6 +7,7 @@ from ascstats.stats import views
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     path("chart/", views.chart, name="chart"),
+    path("revenue/", views.revenue, name="revenue"),
     path("admin/", admin.site.urls),
     path("api/", api.urls),
 ]

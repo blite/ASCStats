@@ -24,7 +24,8 @@ spec:
             - name: import
               image: ascstats
               imagePullPolicy: IfNotPresent
-              args: ["python", "manage.py", "import_asc", "--report", "sales", "--date", "yesterday"]
+              # sh keeps import_asc's exit code (3 = not published yet) when it fails
+              args: ["sh", "-c", "python manage.py import_asc --report sales --date yesterday && python manage.py import_fx --days 14"]
               envFrom:
                 - configMapRef: {name: ascstats-config}
                 - secretRef: {name: asc-settings, optional: true}  # overrides the ConfigMap
