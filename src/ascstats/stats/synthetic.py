@@ -20,7 +20,7 @@ import random
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from .parsing import DISCOVERY_REPORT, DOWNLOADS_REPORT
+from .parsing import CRASHES_REPORT, DISCOVERY_REPORT, DOWNLOADS_REPORT, SESSIONS_REPORT
 
 
 @dataclass(frozen=True)
@@ -110,6 +110,23 @@ DISCOVERY_HEADER = [
     "Date", "App Name", "App Apple Identifier", "Event", "Page Type", "Source Type",
     "Engagement Type", "Device", "Platform Version", "Territory", "Counts", "Unique Counts",
 ]  # fmt: skip
+CRASHES_HEADER = [
+    "Date", "App Name", "App Apple Identifier", "App Version", "Device", "Platform Version",
+    "Crashes", "Unique Devices",
+]  # fmt: skip
+SESSIONS_HEADER = [
+    "Date", "App Name", "App Apple Identifier", "App Version", "Device", "Platform Version",
+    "Source Type", "Source Info", "Campaign", "Page Type", "Page Title", "App Download Date",
+    "Territory", "Sessions", "Total Session Duration", "Unique Devices",
+]  # fmt: skip
+SESSIONS_PER_DOWNLOAD = 12  # daily sessions per first-time download: a proxy for active users
+
+
+def crash_rate(effect: float) -> float:
+    """Crashes per session for a version: regressions ship with crash bugs."""
+    return 0.002 if effect >= 1.0 else 0.012
+
+
 DOWNLOADS_HEADER = [
     "Date", "App Name", "App Apple Identifier", "Download Type", "App Version", "Device",
     "Platform Version", "Source Type", "Source Info", "Campaign", "Page Type", "Page Title",
@@ -209,6 +226,29 @@ def sales_report(day: date) -> bytes:
 def analytics_report(app: SyntheticApp, report_name: str, day: date) -> bytes:
     rng = _rng("analytics", report_name, app.apple_id, day)
     rows = []
+    if report_name in (CRASHES_REPORT, SESSIONS_REPORT):
+        version, _, _ = version_on(app, day)
+        effect = next(r[2] for r in RELEASES[app.apple_id] if r[0] == version)
+        for device in DEVICES:
+            total = sum(n for (_, d), n in downloads(app, day).items() if d == device)
+            sessions = round(total * SESSIONS_PER_DOWNLOAD * rng.uniform(0.9, 1.1))
+            devices = max(1, round(sessions / 3))
+            if report_name == SESSIONS_REPORT and sessions:
+                rows.append([
+                    day.isoformat(), app.name, str(app.apple_id), version, device, "iOS 26",
+                    "App Store search", "", "", "Product page", "", "", "US", str(sessions),
+                    str(sessions * 240), str(devices),
+                ])  # fmt: skip
+            elif report_name == CRASHES_REPORT:
+                expected = sessions * crash_rate(effect)
+                crashes = int(expected) + (1 if rng.random() < expected % 1 else 0)
+                if crashes:
+                    rows.append([
+                        day.isoformat(), app.name, str(app.apple_id), version, device, "iOS 26",
+                        str(crashes), str(max(1, round(crashes * 0.8))),
+                    ])  # fmt: skip
+        header = SESSIONS_HEADER if report_name == SESSIONS_REPORT else CRASHES_HEADER
+        return _gzip_tsv(header, rows)
     for (country, device), first_time in sorted(downloads(app, day).items()):
         for source, sweight in SOURCES.items():
             share = first_time * sweight

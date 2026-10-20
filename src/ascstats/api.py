@@ -6,6 +6,7 @@ from django.db.models import F, Sum
 from django.shortcuts import get_object_or_404
 from ninja import NinjaAPI, Schema
 
+from ascstats.stats.crashes import version_crashes
 from ascstats.stats.models import DOWNLOAD_ROWS, App, ConversionMetric, IngestionRun, SalesRow
 from ascstats.stats.ratings import current, version_ratings
 from ascstats.stats.versions import version_impact
@@ -86,6 +87,14 @@ class RatingsOut(Schema):
     summary: str | None  # Apple's AI-written review summary (US first)
     versions: list[VersionRatingsOut]
     recent_reviews: list[ReviewOut]
+
+
+class VersionCrashesOut(Schema):
+    version: str
+    crashes: int
+    unique_devices: int
+    sessions: int
+    per_1k_sessions: float | None  # null below 200 sessions: too few for a rate
 
 
 class RunOut(Schema):
@@ -173,6 +182,14 @@ def ratings(request, apple_id: int):
         "versions": version_ratings(app),
         "recent_reviews": now.get("recent", []),
     }
+
+
+@api.get("/apps/{apple_id}/crashes", response=list[VersionCrashesOut], tags=["versions"])
+def crashes(request, apple_id: int):
+    """iOS crashes and sessions per app version (Apple's App Crashes and App Sessions reports,
+    from users who share analytics; days under five such users are omitted by Apple)."""
+    app = get_object_or_404(App, apple_id=apple_id, is_active=True)
+    return sorted(version_crashes(app).values(), key=lambda v: v.version)
 
 
 @api.get("/runs", response=list[RunOut], tags=["ops"])

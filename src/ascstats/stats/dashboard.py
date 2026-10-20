@@ -8,6 +8,7 @@ from datetime import date, timedelta
 
 from django.db.models import Max, Q, Sum
 
+from .crashes import version_crashes
 from .models import (
     ACTIVE_ROWS,
     DOWNLOAD_ROWS,
@@ -318,6 +319,7 @@ def app_detail(app: App, end: date, days: int) -> dict:
         reverse=True,
     )
     rated = {v.version: v for v in version_ratings(app)}
+    crashed = version_crashes(app)
     table = []
     for imp in rows:
         kind, verdict = _effect(imp)
@@ -331,6 +333,7 @@ def app_detail(app: App, end: date, days: int) -> dict:
                 "trend": trend,
                 "iap": imp.deltas[2],
                 "ratings": rated.get(imp.version) if imp.platform == IOS else None,
+                "crashes": crashed.get(imp.version) if imp.platform == IOS else None,
                 "bar_x": 60 if pct >= 0 else round(60 + 0.58 * pct, 1),
                 "bar_w": round(abs(0.58 * pct), 1),
             }

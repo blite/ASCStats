@@ -12,7 +12,15 @@ class Command(BaseCommand):
         "Connect write. No-op in synthetic mode."
     )
 
-    def handle(self, **_):
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--check-only",
+            action="store_true",
+            help="never create: fail, naming the apps, if any app has no running request "
+            "(for a key without the Admin role, which can read requests but not create them)",
+        )
+
+    def handle(self, *, check_only, **_):
         if settings.ASC_SOURCE != "asc":
             self.stdout.write("synthetic mode: nothing to request")
             return
@@ -22,6 +30,16 @@ class Command(BaseCommand):
         requester = ReportRequester(client_from_env())
         errors = []
         for app in App.objects.filter(is_active=True):
+            if check_only:
+                running = requester.running_request(app.apple_id)
+                if running is None:
+                    errors.append(app.name)
+                    self.stderr.write(
+                        f"{app.name}: no running request; create one with an Admin key"
+                    )
+                else:
+                    self.stdout.write(f"{app.name}: running ({running})")
+                continue
             try:
                 result = requester.ensure_ongoing(app.apple_id)
             except ASCError as exc:

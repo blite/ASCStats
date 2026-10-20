@@ -22,7 +22,15 @@ from airflow.sdk import BaseHook, BaseSensorOperator
 from airflow.triggers.base import BaseTrigger, TriggerEvent
 
 ASC = "https://api.appstoreconnect.apple.com"
-ANALYTICS_REPORTS = ("App Store Discovery and Engagement Standard", "App Downloads Standard")
+ANALYTICS_REPORTS = (
+    "App Store Discovery and Engagement Standard",
+    "App Downloads Standard",
+    "App Crashes",
+    "App Sessions Standard",
+)
+# Apple completes analytics within five days and omits reports with fewer than five users,
+# so after that window a missing report means "no data that day", not "not published yet".
+COMPLETE_AFTER_DAYS = 5
 
 
 class ReportAvailableTrigger(BaseTrigger):
@@ -94,6 +102,8 @@ class ReportAvailableTrigger(BaseTrigger):
                     },
                 )
                 return r.status_code == 200
+            day = date.fromisoformat(self.report_date)
+            old_enough = (datetime.now(UTC).date() - day).days >= COMPLETE_AFTER_DAYS
             for apple_id in self.apple_ids:
                 requests = await http.get(
                     f"/v1/apps/{apple_id}/analyticsReportRequests",
@@ -102,13 +112,14 @@ class ReportAvailableTrigger(BaseTrigger):
                 if requests.status_code != 200 or not requests.json()["data"]:
                     return False
                 request_id = requests.json()["data"][0]["id"]
+                published = False
                 for name in ANALYTICS_REPORTS:
                     reports = await http.get(
                         f"/v1/analyticsReportRequests/{request_id}/reports",
                         params={"filter[name]": name},
                     )
                     if reports.status_code != 200 or not reports.json()["data"]:
-                        return False
+                        continue
                     instances = await http.get(
                         f"/v1/analyticsReports/{reports.json()['data'][0]['id']}/instances",
                         params={
@@ -116,8 +127,11 @@ class ReportAvailableTrigger(BaseTrigger):
                             "filter[processingDate]": self.report_date,
                         },
                     )
-                    if instances.status_code != 200 or not instances.json()["data"]:
-                        return False
+                    if instances.status_code == 200 and instances.json()["data"]:
+                        published = True
+                        break
+                if not published and not old_enough:
+                    return False
             return True
 
 

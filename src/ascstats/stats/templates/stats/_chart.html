@@ -31,7 +31,7 @@
 <p class="sub">Each version's first 14 days live (shorter when the next release came sooner). <em>Before → after</em> is the naive change; <em>vs trend</em> compares downloads with what the previous 28 days' trend projected, so growth the app was already on is not credited to the release. Bold means |t| ≥ 2, unlikely to be day-to-day noise.</p>
 <div class="scroll">
 <table style="min-width: 640px">
-  <tr><th>Version</th><th>Released</th><th class="num">Downloads/day before → after</th><th>vs trend</th><th class="num">IAP/day</th><th class="num">Updates</th><th class="num">New ratings</th><th class="num">Reviews</th></tr>
+  <tr><th>Version</th><th>Released</th><th class="num">Downloads/day before → after</th><th>vs trend</th><th class="num">IAP/day</th><th class="num">Updates</th><th class="num">New ratings</th><th class="num">Reviews</th><th class="num">Crashes / 1k sessions</th></tr>
   {% for r in table %}
   <tr>
     <td>{{ r.impact.version }}{% if r.impact.platform == "MAC_OS" %} <span class="muted">Mac</span>{% endif %}</td>
@@ -49,6 +49,7 @@
     <td class="num">{{ r.impact.updates|intcomma }}</td>
     <td class="num">{% if r.ratings.ratings_per_day is not None %}{{ r.ratings.ratings_per_day }}/day{% if r.ratings.new_average %} · {{ r.ratings.new_average }}★{% endif %}{% else %}<span class="muted">–</span>{% endif %}</td>
     <td class="num">{% if r.ratings.reviews %}{{ r.ratings.reviews }} · {{ r.ratings.review_average }}★{% else %}<span class="muted">–</span>{% endif %}</td>
+    <td class="num">{% if r.crashes.per_1k_sessions is not None %}<span title="{{ r.crashes.crashes }} crashes on {{ r.crashes.unique_devices }} devices in {{ r.crashes.sessions|intcomma }} sessions">{{ r.crashes.per_1k_sessions }}</span>{% elif r.crashes %}<span class="muted" title="{{ r.crashes.crashes }} crashes in {{ r.crashes.sessions }} sessions: too few sessions for a rate">{{ r.crashes.crashes }} crash{{ r.crashes.crashes|pluralize:"es" }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
   </tr>
   {% endfor %}
 </table>

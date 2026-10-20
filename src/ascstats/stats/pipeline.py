@@ -13,7 +13,7 @@ from collections import defaultdict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from django.conf import settings
 from django.db import transaction
@@ -30,6 +30,11 @@ from .storage import RawStore, raw_store
 log = logging.getLogger(__name__)
 
 STEPS = ["check", "download", "validate", "load", "quality"]
+# Apple says analytics data is complete within five days. It also omits a report for a day
+# when fewer than five users had the event, so for a small app "no instance" after that
+# window means "nothing to report", not "not published yet".
+COMPLETE_AFTER_DAYS = 5
+NO_DATA = "_no-data"  # marker landed in place of a report Apple did not publish
 
 
 class QualityError(Exception):
@@ -132,12 +137,21 @@ class Pipeline:
             if report == Report.SALES:
                 self.client.sales_report(settings.ASC_VENDOR_NUMBER, day)
             else:
-                for a in self._apps(app):
-                    for name in ANALYTICS_REPORTS:
-                        self.client.analytics_segments(a.apple_id, name, day)
+                old_enough = day <= datetime.now(UTC).date() - timedelta(days=COMPLETE_AFTER_DAYS)
+                return old_enough or all(self._any_report(a, day) for a in self._apps(app))
         except ReportNotReady:
             return False
         return True
+
+    def _any_report(self, a: App, day: date) -> bool:
+        """Has Apple published anything for this app and day yet?"""
+        for name in ANALYTICS_REPORTS:
+            try:
+                self.client.analytics_segments(a.apple_id, name, day)
+                return True
+            except ReportNotReady:
+                continue
+        return False
 
     # --- download ------------------------------------------------------------------------
 
@@ -162,11 +176,15 @@ class Pipeline:
                             synthetic.app_by_apple_id(a.apple_id), name, day
                         )]  # fmt: skip
                     else:
-                        segments = [
-                            self.client.download_segment(s)
-                            for s in self.client.analytics_segments(a.apple_id, name, day)
-                        ]
+                        try:
+                            found = self.client.analytics_segments(a.apple_id, name, day)
+                        except ReportNotReady:
+                            found = None  # below Apple's privacy threshold that day
+                        segments = [self.client.download_segment(s) for s in found] if found else []
                     self.store.delete_prefix(prefix)  # a re-download replaces every segment
+                    if not segments:
+                        self.store.put(prefix + NO_DATA, b"")
+                        keys.append(prefix + NO_DATA)
                     for n, data in enumerate(segments):
                         key = f"{prefix}segment-{n:03d}.tsv.gz"
                         self.store.put(key, data)
@@ -206,7 +224,8 @@ class Pipeline:
         for name in ANALYTICS_REPORTS:
             lines = []
             for key in self._raw_keys(analytics_prefix(day, a.apple_id, name)):
-                lines += parse_analytics(self.store.get(key))
+                if not key.endswith(NO_DATA):
+                    lines += parse_analytics(self.store.get(key))
             wrong = {ln.app_apple_id for ln in lines} - {a.apple_id}
             if wrong:
                 raise ValidationError([f"{name}: rows for other apps {sorted(wrong)}"])

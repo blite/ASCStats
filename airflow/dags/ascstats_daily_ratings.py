@@ -3,7 +3,8 @@
 - ``snapshot_ratings``: today's public App Store rating totals (iTunes Lookup, no App Store
   Connect key). Apple publishes no rating history, so a missed day is a gap forever: no
   catchup, and retries matter more than anywhere else.
-- ``build_versions`` then ``import_reviews``: App Store Connect (GET only, ``asc_api`` pool).
+- ``build_versions`` then ``import_reviews``, and ``check_report_requests``: App Store
+  Connect (GET only, ``asc_api`` pool).
   Versions first, so each written review can be filed under the version Apple says it is
   about.
 """
@@ -28,6 +29,11 @@ def ascstats_daily_ratings():
     manage_py("snapshot_ratings", ["snapshot_ratings"])
     versions = manage_py("build_versions", ["build_versions"], talks_to_asc=True)
     versions >> manage_py("import_reviews", ["import_reviews"], talks_to_asc=True)
+    # Read-only: fails, naming the apps, if an Analytics report request stopped (Apple stops
+    # idle ones). Re-creating it needs an Admin key, which the cluster deliberately lacks.
+    manage_py(
+        "check_report_requests", ["ensure_report_requests", "--check-only"], talks_to_asc=True
+    )
 
 
 ascstats_daily_ratings()

@@ -115,8 +115,9 @@ spec:
             - name: ratings
               image: ascstats
               imagePullPolicy: IfNotPresent
-              # The snapshot runs even if App Store Connect is down; the job fails if either part did.
-              args: ["sh", "-c", "python manage.py snapshot_ratings; s=$?; python manage.py build_versions && python manage.py import_reviews; r=$?; exit $(( s || r ))"]
+              # Each part runs even if another failed; the job fails if any did. The report-request
+              # check is read-only: it names apps whose Analytics request needs an Admin re-request.
+              args: ["sh", "-c", "python manage.py snapshot_ratings; s=$?; python manage.py build_versions && python manage.py import_reviews; r=$?; python manage.py ensure_report_requests --check-only; c=$?; exit $(( s || r || c ))"]
               envFrom:
                 - configMapRef: {name: ascstats-config}
                 - secretRef: {name: asc-settings, optional: true}  # overrides the ConfigMap
