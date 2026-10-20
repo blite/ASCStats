@@ -31,7 +31,7 @@
 <p class="sub">Each version's first 14 days live (shorter when the next release came sooner). <em>Before → after</em> is the naive change; <em>vs trend</em> compares downloads with what the previous 28 days' trend projected, so growth the app was already on is not credited to the release. Bold means |t| ≥ 2, unlikely to be day-to-day noise.</p>
 <div class="scroll">
 <table style="min-width: 640px">
-  <tr><th>Version</th><th>Released</th><th class="num">Downloads/day before → after</th><th>vs trend</th><th class="num">IAP/day</th><th class="num">Updates</th></tr>
+  <tr><th>Version</th><th>Released</th><th class="num">Downloads/day before → after</th><th>vs trend</th><th class="num">IAP/day</th><th class="num">Updates</th><th class="num">New ratings</th><th class="num">Reviews</th></tr>
   {% for r in table %}
   <tr>
     <td>{{ r.impact.version }}{% if r.impact.platform == "MAC_OS" %} <span class="muted">Mac</span>{% endif %}</td>
@@ -47,9 +47,35 @@
       {% else %}<span class="muted">not enough history</span>{% endif %}</td>
     <td class="num">{% if r.iap.change_pct is not None %}{% if r.iap.change_pct > 0 %}+{% endif %}{{ r.iap.change_pct|floatformat:0 }}%{% else %}<span class="muted">–</span>{% endif %}</td>
     <td class="num">{{ r.impact.updates|intcomma }}</td>
+    <td class="num">{% if r.ratings.ratings_per_day is not None %}{{ r.ratings.ratings_per_day }}/day{% if r.ratings.new_average %} · {{ r.ratings.new_average }}★{% endif %}{% else %}<span class="muted">–</span>{% endif %}</td>
+    <td class="num">{% if r.ratings.reviews %}{{ r.ratings.reviews }} · {{ r.ratings.review_average }}★{% else %}<span class="muted">–</span>{% endif %}</td>
   </tr>
   {% endfor %}
 </table>
+</div>
+{% endif %}
+{% if rating %}
+<div class="two" style="margin-top:18px">
+  <div>
+    <h3 style="margin: 0 0 4px; font-size: 16px">Ratings</h3>
+    {% if rating.count is not None %}
+    <div class="value" style="font-size:34px;font-weight:650;letter-spacing:-.02em">{{ rating.average|floatformat:2 }}★</div>
+    <p class="sub" style="margin:2px 0">{{ rating.count|intcomma }} ratings across storefronts{% if rating.us_count is not None %} · US {{ rating.us_average|floatformat:2 }}★ from {{ rating.us_count|intcomma }}{% endif %}{% if rating.week_new is not None %} · <strong>{{ rating.week_new }}</strong> new in the last {{ rating.week_days }} day{{ rating.week_days|pluralize }}{% endif %}</p>
+    <p class="muted" style="font-size:12px">Apple publishes only current totals, so per-version rating velocity starts with the first daily snapshot ({{ rating.date|date:"M j, Y" }} is the latest).</p>
+    {% endif %}
+    {% if rating.summary %}<blockquote style="margin:10px 0 0;padding:10px 14px;border-left:3px solid var(--series-1);background:var(--raised);border-radius:8px;font-size:14px">{{ rating.summary.text }}<div class="muted" style="font-size:12px;margin-top:4px">Apple's review summary · {{ rating.summary.territory|default:"all" }}</div></blockquote>{% endif %}
+  </div>
+  <div>
+    <h3 style="margin: 0 0 4px; font-size: 16px">Latest written reviews</h3>
+    {% for rv in rating.recent %}
+    <div style="padding:8px 0;border-bottom:1px solid var(--grid);font-size:13px">
+      <div><span aria-label="{{ rv.rating }} of 5 stars" style="letter-spacing:1px">{% for i in "12345" %}{% if forloop.counter <= rv.rating %}★{% else %}<span class="muted">☆</span>{% endif %}{% endfor %}</span>
+        <strong style="margin-left:6px">{{ rv.title|truncatechars:60 }}</strong></div>
+      <div class="muted" style="font-size:12px">{{ rv.created|date:"M j, Y" }} · {{ rv.territory }}{% if rv.version %} · v{{ rv.version }}{% endif %}</div>
+      {% if rv.body %}<div style="color:var(--ink-2);margin-top:2px">{{ rv.body|truncatechars:180 }}</div>{% endif %}
+    </div>
+    {% empty %}<p class="muted">No written reviews yet.</p>{% endfor %}
+  </div>
 </div>
 {% endif %}
 <details>

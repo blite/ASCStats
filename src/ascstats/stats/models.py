@@ -131,6 +131,7 @@ class AppVersion(models.Model):
     platform = models.CharField(max_length=20, default=IOS, help_text="IOS or MAC_OS")
     asc_state = models.CharField(max_length=40, blank=True)
     asc_created = models.DateTimeField(null=True, blank=True)
+    asc_id = models.CharField(max_length=64, blank=True, help_text="appStoreVersions resource id")
 
     class Meta:
         constraints = [
@@ -140,6 +141,77 @@ class AppVersion(models.Model):
 
     def __str__(self) -> str:
         return f"{self.app_id} {self.platform} {self.version}"
+
+
+class RatingSnapshot(models.Model):
+    """The App Store's public rating totals for one app in one storefront on one day.
+
+    Apple only publishes the current totals (iTunes Lookup), not history, so history is built
+    by snapshotting daily. The average comes unrounded, so ``star_sum`` is exact and two
+    consecutive snapshots give the exact count and average of the ratings in between.
+    """
+
+    app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="rating_snapshots")
+    date = models.DateField()
+    storefront = models.CharField(max_length=2, help_text="lowercase ISO country code")
+    count = models.IntegerField()
+    star_sum = models.IntegerField(help_text="count x average, rounded: total stars given")
+    version = models.CharField(max_length=50, blank=True, help_text="version on sale that day")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["app", "date", "storefront"], name="uniq_rating_day")
+        ]
+        indexes = [models.Index(fields=["app", "date"])]
+
+    def __str__(self) -> str:
+        return f"{self.app_id} {self.date} {self.storefront} {self.count}"
+
+    @property
+    def average(self) -> float | None:
+        return self.star_sum / self.count if self.count else None
+
+
+class CustomerReview(models.Model):
+    """A written review, as App Store Connect files it: under the version it was written for."""
+
+    app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="reviews")
+    asc_id = models.CharField(max_length=64, unique=True)
+    rating = models.PositiveSmallIntegerField()
+    title = models.CharField(max_length=500, blank=True)
+    body = models.TextField(blank=True)
+    territory = models.CharField(max_length=3, help_text="ISO alpha-3, as Apple sends it")
+    created = models.DateTimeField()
+    version = models.CharField(max_length=50, blank=True)
+    platform = models.CharField(max_length=20, blank=True)
+
+    class Meta:
+        ordering = ["-created"]
+        indexes = [models.Index(fields=["app", "created"])]
+
+    def __str__(self) -> str:
+        return f"{self.app_id} {self.rating}* {self.created:%Y-%m-%d}"
+
+
+class ReviewSummary(models.Model):
+    """Apple's AI-generated summary of an app's reviews in one territory (API 4.0+)."""
+
+    app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="review_summaries")
+    platform = models.CharField(max_length=20)
+    territory = models.CharField(max_length=3, blank=True)
+    locale = models.CharField(max_length=20, blank=True)
+    created = models.DateTimeField(null=True, blank=True)
+    text = models.TextField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["app", "platform", "territory"], name="uniq_review_summary"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.app_id} {self.platform} {self.territory}"
 
 
 class FxRate(models.Model):

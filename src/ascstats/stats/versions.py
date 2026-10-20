@@ -98,6 +98,7 @@ def sync_asc_versions(client: ASCClient, app: App) -> int:
             platform=attrs.get("platform") or IOS,
             version=attrs["versionString"],
             defaults={
+                "asc_id": resource["id"],
                 "asc_state": attrs.get("appVersionState") or attrs.get("appStoreState") or "",
                 "asc_created": datetime.fromisoformat(created) if created else None,
             },

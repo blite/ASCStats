@@ -1,0 +1,9 @@
+{
+  "data": [
+    {"type": "customerReviews", "id": "rev-2",
+     "attributes": {"rating": 1, "title": "Crashes", "body": "Crashes since the update.", "reviewerNickname": "someone", "createdDate": "2026-10-06T08:00:00-07:00", "territory": "GBR"}},
+    {"type": "customerReviews", "id": "rev-1",
+     "attributes": {"rating": 5, "title": "Lovely", "body": "No ads, great puzzles.", "reviewerNickname": "someone else", "createdDate": "2026-09-01T10:00:00-07:00", "territory": "USA"}}
+  ],
+  "links": {"self": "https://api.appstoreconnect.apple.com/v1/apps/1000000001/customerReviews"}
+}

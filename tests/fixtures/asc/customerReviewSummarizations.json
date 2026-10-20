@@ -1,0 +1,4 @@
+{"data": [{"type": "customerReviewSummarizations", "id": "sum-1",
+           "attributes": {"createdDate": "2026-10-10T00:00:00Z", "locale": "en-US", "platform": "IOS", "text": "Players like the calm pace; some report crashes after the update."},
+           "relationships": {"territory": {"data": {"type": "territories", "id": "USA"}}}}],
+ "links": {"self": "https://api.appstoreconnect.apple.com/v1/apps/1000000001/customerReviewSummarizations"}}

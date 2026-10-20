@@ -39,6 +39,15 @@ class FakeASC:
             if fixture.exists():
                 return httpx.Response(200, content=fixture.read_bytes())
             return _json(404, "error_404_sales.json")
+        if path.endswith("/customerReviewSummarizations"):
+            return _json(200, "customerReviewSummarizations.json")
+        if path.startswith("/v1/appStoreVersions/") and path.endswith("/customerReviews"):
+            fixture = FIXTURES / f"versionReviews_{path.split('/')[3]}.json"
+            if fixture.exists():
+                return httpx.Response(200, content=fixture.read_bytes())
+            return httpx.Response(200, json={"data": [], "links": {}})
+        if path.endswith("/customerReviews"):
+            return _json(200, "customerReviews.json")
         if path.endswith("/appStoreVersions"):
             return _json(200, "appStoreVersions.json")
         if path.endswith("/analyticsReportRequests"):

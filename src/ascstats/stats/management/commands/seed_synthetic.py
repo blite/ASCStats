@@ -9,6 +9,7 @@ from ascstats.stats import synthetic
 from ascstats.stats.metrics import build_conversion_metrics
 from ascstats.stats.models import App, Report
 from ascstats.stats.pipeline import Pipeline
+from ascstats.stats.ratings import import_reviews, import_summaries, snapshot
 from ascstats.stats.versions import build_versions
 
 
@@ -31,10 +32,14 @@ class Command(BaseCommand):
         while day <= end:
             for report in Report.values:
                 pipeline.run(report, day)
+            snapshot(day, source="synthetic")
+            for app in App.objects.filter(is_active=True):
+                import_reviews(app, None, day)
             day += timedelta(days=1)
         metrics = build_conversion_metrics(start, end)
         for app in App.objects.filter(is_active=True):
             build_versions(app)
+            import_summaries(app, None)
         self.stdout.write(
             f"seeded {len(synthetic.APPS)} apps, {start}..{end}, {metrics} conversion rows"
         )

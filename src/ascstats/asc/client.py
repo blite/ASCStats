@@ -155,6 +155,35 @@ class ASCClient:
             )
         )
 
+    # --- Ratings and reviews -------------------------------------------------------------
+
+    def customer_reviews(self, app_apple_id: int) -> list[dict[str, Any]]:
+        return list(
+            self.paginate(
+                f"/v1/apps/{app_apple_id}/customerReviews",
+                {"limit": 200, "sort": "-createdDate"},
+            )
+        )
+
+    def version_review_ids(self, version_id: str) -> list[str]:
+        """IDs of the written reviews App Store Connect files under one appStoreVersion."""
+        return [
+            r["id"]
+            for r in self.paginate(
+                f"/v1/appStoreVersions/{version_id}/customerReviews",
+                {"limit": 200, "fields[customerReviews]": "rating"},
+            )
+        ]
+
+    def review_summaries(self, app_apple_id: int, platform: str) -> list[dict[str, Any]]:
+        """Apple's AI-written review summaries, one per territory that has enough reviews."""
+        return list(
+            self.paginate(
+                f"/v1/apps/{app_apple_id}/customerReviewSummarizations",
+                {"filter[platform]": platform, "limit": 50},
+            )
+        )
+
     # --- Analytics Reports ---------------------------------------------------------------
 
     def ongoing_report_request_id(self, app_apple_id: int) -> str:

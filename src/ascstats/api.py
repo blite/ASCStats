@@ -1,12 +1,13 @@
 """Read-only JSON API (Django Ninja). OpenAPI docs at /api/docs."""
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from django.db.models import F, Sum
 from django.shortcuts import get_object_or_404
 from ninja import NinjaAPI, Schema
 
 from ascstats.stats.models import DOWNLOAD_ROWS, App, ConversionMetric, IngestionRun, SalesRow
+from ascstats.stats.ratings import current, version_ratings
 from ascstats.stats.versions import version_impact
 
 api = NinjaAPI(title="ASCStats", version="1", description="App Store Connect stats, read-only.")
@@ -52,6 +53,39 @@ class VersionImpactOut(Schema):
     after_days: int
     updates: int
     deltas: list[DeltaOut]
+
+
+class VersionRatingsOut(Schema):
+    version: str
+    released_on: date
+    days_observed: int  # days with consecutive rating snapshots while this version was live
+    new_ratings: int
+    ratings_per_day: float | None
+    new_average: float | None  # stars of only the ratings given while this version was live
+    per_1k_active: float | None  # new ratings per 1,000 downloads + updates
+    reviews: int  # written reviews Apple files under this version
+    review_average: float | None
+
+
+class ReviewOut(Schema):
+    rating: int
+    title: str
+    body: str
+    territory: str
+    created: datetime
+    version: str
+
+
+class RatingsOut(Schema):
+    snapshot_date: date | None
+    count: int | None  # all storefronts
+    average: float | None
+    us_count: int | None
+    us_average: float | None
+    new_last_7_days: int | None
+    summary: str | None  # Apple's AI-written review summary (US first)
+    versions: list[VersionRatingsOut]
+    recent_reviews: list[ReviewOut]
 
 
 class RunOut(Schema):
@@ -119,6 +153,25 @@ def versions(request, apple_id: int, window: int = 14, platform: str | None = No
     platform (``IOS`` or ``MAC_OS``; both by default)."""
     app = get_object_or_404(App, apple_id=apple_id)
     return version_impact(app, window=max(3, min(window, 90)), platform=platform)
+
+
+@api.get("/apps/{apple_id}/ratings", response=RatingsOut, tags=["versions"])
+def ratings(request, apple_id: int):
+    """Star ratings (daily public snapshots), written reviews and Apple's summary, per iOS
+    version. Rating velocity exists only from the first snapshot on."""
+    app = get_object_or_404(App, apple_id=apple_id)
+    now = current(app) or {}
+    return {
+        "snapshot_date": now.get("date"),
+        "count": now.get("count"),
+        "average": now.get("average"),
+        "us_count": now.get("us_count"),
+        "us_average": now.get("us_average"),
+        "new_last_7_days": now.get("week_new"),
+        "summary": now["summary"].text if now.get("summary") else None,
+        "versions": version_ratings(app),
+        "recent_reviews": now.get("recent", []),
+    }
 
 
 @api.get("/runs", response=list[RunOut], tags=["ops"])

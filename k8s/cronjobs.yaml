@@ -91,3 +91,49 @@ spec:
                 optional: true
                 items: [{key: AuthKey.p8, path: AuthKey.p8}]
                 defaultMode: 0440
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ratings
+spec:
+  schedule: "0 17 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 6
+      activeDeadlineSeconds: 21600
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext: {runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001}
+          containers:
+            - name: ratings
+              image: ascstats
+              imagePullPolicy: IfNotPresent
+              # The snapshot runs even if App Store Connect is down; the job fails if either part did.
+              args: ["sh", "-c", "python manage.py snapshot_ratings; s=$?; python manage.py build_versions && python manage.py import_reviews; r=$?; exit $(( s || r ))"]
+              envFrom:
+                - configMapRef: {name: ascstats-config}
+                - secretRef: {name: asc-settings, optional: true}  # overrides the ConfigMap
+                - secretRef: {name: ascstats-app}
+              env:
+                - name: ASC_KEY_ID
+                  valueFrom: {secretKeyRef: {name: asc-api-key, key: ASC_KEY_ID, optional: true}}
+                - name: ASC_ISSUER_ID
+                  valueFrom: {secretKeyRef: {name: asc-api-key, key: ASC_ISSUER_ID, optional: true}}
+              volumeMounts: [{name: asc-key, mountPath: /var/run/secrets/asc, readOnly: true}]
+              resources:
+                requests: {cpu: 50m, memory: 192Mi}
+                limits: {memory: 512Mi}
+          volumes:
+            - name: asc-key
+              secret:
+                secretName: asc-api-key
+                optional: true
+                items: [{key: AuthKey.p8, path: AuthKey.p8}]
+                defaultMode: 0440

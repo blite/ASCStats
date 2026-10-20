@@ -11,13 +11,14 @@ The public repository must never contain real sales numbers; this module is how 
 from __future__ import annotations
 
 import csv
+import functools
 import gzip
 import hashlib
 import io
 import math
 import random
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 from .parsing import DISCOVERY_REPORT, DOWNLOADS_REPORT
 
@@ -242,3 +243,76 @@ def app_by_apple_id(apple_id: int) -> SyntheticApp:
         if app.apple_id == apple_id:
             return app
     raise KeyError(f"{apple_id} is not a synthetic app")
+
+
+# --- ratings and reviews ---------------------------------------------------------------------
+
+RATING_RATE = 0.03  # new ratings per first-time download
+
+
+def version_stars(effect: float) -> float:
+    """Mean stars of ratings given while a version is live: regressions rate worse."""
+    return max(1.5, min(4.9, 4.4 + 2.5 * (effect - 1.0)))
+
+
+@functools.cache
+def _rating_history(apple_id: int, until: date) -> dict[date, tuple[int, int]]:
+    """Cumulative (count, star_sum) per day since EPOCH, all storefronts together."""
+    app = app_by_apple_id(apple_id)
+    count = stars = 0
+    out, day = {}, EPOCH
+    while day <= until:
+        rng = _rng("ratings", apple_id, day)
+        new = sum(downloads(app, day).values()) * RATING_RATE
+        n = int(new) + (1 if rng.random() < new % 1 else 0)
+        release = next(r for r in reversed(RELEASES[apple_id]) if r[1] <= day)
+        mean = version_stars(release[2])
+        for _ in range(n):
+            stars += max(1, min(5, round(rng.gauss(mean, 0.9))))
+        count += n
+        out[day] = (count, stars)
+        day += timedelta(days=1)
+    return out
+
+
+def rating_snapshot(app: SyntheticApp, day: date) -> dict[str, tuple[int, int]]:
+    """{storefront: (count, star_sum)} as the public lookup would report on ``day``."""
+    count, stars = _rating_history(app.apple_id, day)[day]
+    return {
+        country.lower(): (round(count * weight), round(stars * weight))
+        for country, (weight, _, _) in COUNTRIES.items()
+    }
+
+
+REVIEW_TEXT = {
+    5: ("Love it", "Exactly what I wanted, and no ads."),
+    4: ("Really good", "Great little game; would like more levels."),
+    3: ("Okay", "Fine, but the last update changed things I liked."),
+    2: ("Not great", "Since the update it feels slower."),
+    1: ("Broken", "Crashes since the latest version."),
+}
+
+
+def reviews(app: SyntheticApp, day: date) -> list[dict]:
+    """Written reviews posted on ``day``: about one per ten new ratings."""
+    rng = _rng("reviews", app.apple_id, day)
+    history = _rating_history(app.apple_id, day)
+    new = history[day][0] - history.get(day - timedelta(days=1), (0, 0))[0]
+    version, _released, _ = version_on(app, day)
+    effect = next(r[2] for r in RELEASES[app.apple_id] if r[0] == version)
+    out = []
+    for k in range(sum(rng.random() < 0.1 for _ in range(new))):
+        rating = max(1, min(5, round(rng.gauss(version_stars(effect), 1.0))))
+        title, body = REVIEW_TEXT[rating]
+        out.append({
+            "id": f"syn-{app.apple_id}-{day.isoformat()}-{k}", "rating": rating, "title": title,
+            "body": body, "territory": "USA", "created": day, "version": version,
+        })  # fmt: skip
+    return out
+
+
+def review_summary(app: SyntheticApp) -> str:
+    return (
+        f"People enjoy {app.name}'s relaxed pace and the absence of ads. Some reviewers "
+        "mention slowdowns after a recent update and ask for more content."
+    )

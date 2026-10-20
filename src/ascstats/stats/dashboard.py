@@ -19,6 +19,7 @@ from .models import (
     Report,
     SalesRow,
 )
+from .ratings import current, version_ratings
 from .versions import VersionImpact, version_impact
 
 
@@ -315,6 +316,7 @@ def app_detail(app: App, end: date, days: int) -> dict:
         key=lambda i: i.released_on,
         reverse=True,
     )
+    rated = {v.version: v for v in version_ratings(app)}
     table = []
     for imp in rows:
         kind, verdict = _effect(imp)
@@ -327,6 +329,7 @@ def app_detail(app: App, end: date, days: int) -> dict:
                 "naive": imp.deltas[0],
                 "trend": trend,
                 "iap": imp.deltas[2],
+                "ratings": rated.get(imp.version) if imp.platform == IOS else None,
                 "bar_x": 60 if pct >= 0 else round(60 + 0.58 * pct, 1),
                 "bar_w": round(abs(0.58 * pct), 1),
             }
@@ -353,6 +356,7 @@ def app_detail(app: App, end: date, days: int) -> dict:
         "base": base,
         "plot_h": plot_h,
         "has_mac": any(i.platform == MAC_OS for i in impacts),
+        "rating": current(app),
     }
 
 

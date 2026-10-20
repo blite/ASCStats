@@ -17,6 +17,7 @@ EXPECTED = {
     "ascstats_daily_analytics",
     "ascstats_conversion_metrics",
     "ascstats_weekly_restatement",
+    "ascstats_daily_ratings",
 }
 
 
@@ -93,3 +94,11 @@ def test_trigger_round_trips_through_serialization():
 
 def _all_downstream(dag, task_id):
     return {t.task_id for t in dag.get_task(task_id).get_flat_relatives(upstream=False)}
+
+
+def test_ratings_snapshot_never_catches_up_and_reviews_follow_versions(dagbag):
+    dag = dagbag.dags["ascstats_daily_ratings"]
+    assert not dag.catchup  # the public lookup has no history to backfill
+    assert dag.get_task("import_reviews").pool == ASC_POOL
+    assert "import_reviews" in _all_downstream(dag, "build_versions")
+    assert dag.get_task("snapshot_ratings").pool != ASC_POOL  # public endpoint, not ASC

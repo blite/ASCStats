@@ -1,0 +1,2 @@
+{"data": [{"type": "customerReviews", "id": "rev-2", "attributes": {"rating": 1}}],
+ "links": {"self": "https://api.appstoreconnect.apple.com/v1/appStoreVersions/ver-2/customerReviews"}}
