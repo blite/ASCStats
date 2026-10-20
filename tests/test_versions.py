@@ -118,11 +118,11 @@ def test_synthetic_versions_follow_the_release_table():
     assert synthetic.version_on(snake, date(2026, 10, 5))[0] == "2.3"
 
 
-def _row(app, day, ptype, units, version):
+def _row(app, day, ptype, units, version, device="iPhone"):
     return SalesRow(
         app=app, report_date=day, sku=app.sku, title=app.name, version=version,
         product_type=ptype, units=units, developer_proceeds=0, currency_of_proceeds="USD",
-        customer_price=0, customer_currency="USD", country_code="US",
+        customer_price=0, customer_currency="USD", country_code="US", device=device,
     )  # fmt: skip
 
 
@@ -136,8 +136,9 @@ def test_mac_and_ios_versions_are_dated_and_compared_separately(apps):
         ios_version, mac_version = ("1.0", "2.0") if n < 14 else ("1.1", "2.0")
         rows += [
             _row(app, day, "1F", 10 if n < 14 else 20, ios_version),
-            _row(app, day, "F1", 5, mac_version),
-            _row(app, day, "3F", 100, ios_version),  # redownloads: not downloads
+            _row(app, day, "F1", 5, mac_version, device="Desktop"),
+            _row(app, day, "F7", 50, ios_version, device="iPad"),  # an iOS update, despite F
+            _row(app, day, "F3", 100, ios_version),  # redownloads: not downloads
         ]
     SalesRow.objects.bulk_create(rows)
     build_versions(app)
@@ -146,7 +147,8 @@ def test_mac_and_ios_versions_are_dated_and_compared_separately(apps):
     }  # fmt: skip
     (ios,) = [i for i in version_impact(app, platform="IOS") if i.before_days]
     assert (ios.version, ios.released_on) == ("1.1", date(2026, 1, 15))
-    assert (ios.deltas[0].before, ios.deltas[0].after) == (10, 20)  # 3F and F1 excluded
+    assert (ios.deltas[0].before, ios.deltas[0].after) == (10, 20)  # F3, F7, Mac excluded
+    assert ios.updates == 14 * 50
     (mac,) = version_impact(app, platform="MAC_OS")
     assert mac.before_days == 0
     assert mac.deltas[0].after == 5

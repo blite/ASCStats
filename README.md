@@ -87,7 +87,8 @@ experiment: seasonality, features and marketing land in the same windows, which 
 delta carries a Welch t-score and the dashboard only bolds |t| ≥ 2. Update rows (product type
 `7`/`7F`/`7T`/`F7`) date releases but never count as downloads, and neither do redownloads
 (`3`/`3F`/`3T`/`F3`). Mac and iOS share an app record but not version numbers, so versions are
-dated and compared per platform (Mac product types start with `F`).
+dated and compared per platform, split on the report's `Device` column (`Desktop` is
+a Mac; product types are no guide, since iPhone updates arrive as `F7` too).
 
 ## Quick start (Docker Compose)
 

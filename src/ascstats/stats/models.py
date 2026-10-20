@@ -7,10 +7,12 @@ from django.db.models import Q
 # dating releases); neither updates nor redownloads count as downloads (Apple's "units").
 UPDATE_PRODUCT_TYPES = ["7", "7F", "7T", "F7"]
 REDOWNLOAD_PRODUCT_TYPES = ["3", "3F", "3T", "F3"]
-# Mac product types start with F (F1 app, F7 update, F3 redownload, FI1 in-app purchase).
-# Mac and iOS share one app record but ship their own version numbers.
+# Mac and iOS share one app record but ship their own versions. The Device column says which
+# platform a row belongs to ("Desktop" is a Mac); product types do not: real reports carry
+# F7 updates and F3 redownloads for iPhone and iPad too.
 IOS, MAC_OS = "IOS", "MAC_OS"  # App Store Connect's platform names
-MAC_ROWS = Q(product_type__startswith="F")
+MAC_DEVICE = "Desktop"
+MAC_ROWS = Q(device=MAC_DEVICE)
 
 
 class Report(models.TextChoices):
@@ -69,10 +71,6 @@ IAP_ROWS = ~Q(parent_identifier="")
 
 def platform_rows(platform: str) -> Q:
     return MAC_ROWS if platform == MAC_OS else ~MAC_ROWS
-
-
-def platform_of(product_type: str) -> str:
-    return MAC_OS if product_type.startswith("F") else IOS
 
 
 class AnalyticsRow(models.Model):

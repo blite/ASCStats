@@ -39,9 +39,11 @@ SIGNIFICANT_T = 2.0
 
 
 def build_versions(app: App) -> int:
-    """Upsert AppVersion.first_seen per platform from the loaded sales rows. Idempotent."""
+    """Recompute AppVersion.first_seen per platform from the loaded sales rows. Idempotent:
+    dates are cleared first, so a version no longer found in sales loses its date."""
     written = 0
     with transaction.atomic():
+        AppVersion.objects.filter(app=app).update(first_seen=None)
         for platform in (IOS, MAC_OS):
             first_seen = (
                 SalesRow.objects.filter(
