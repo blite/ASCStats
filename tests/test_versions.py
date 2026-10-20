@@ -116,7 +116,7 @@ def test_versions_endpoint_and_chart_markers(client, apps):
         "downloads/day",
         "downloads/day vs trend",
         "in-app purchases/day",
-        "conversion rate",
+        "install rate",
     ]
     assert client.get("/api/apps/42/versions").status_code == 404
     chart = client.get("/chart/", {"app": SNAKE, "days": 90})

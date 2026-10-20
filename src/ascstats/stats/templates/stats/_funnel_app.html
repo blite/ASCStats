@@ -1,0 +1,42 @@
+{% if empty %}<p class="muted">No App Store Analytics for this app yet.</p>{% else %}
+<h3 style="margin:4px 0 2px;font-size:16px">{{ app.name }}: step rates by week</h3>
+<p class="sub">Line = weekly rate, band = 90% interval, hollow points = too few to judge, gaps = weeks Apple published nothing. The last week is dashed while it is still in progress. Release labels compare the install rate in the 28 days before and after.</p>
+<div class="scroll">
+{% for p in trends.panels %}
+<div style="display:flex;align-items:baseline;gap:8px;margin-top:6px"><strong style="font-size:13px">{{ p.step.label }}</strong>{% if p.step.key == "install" %}<span class="muted" style="font-size:12px">headline</span>{% elif p.step.key == "iap" %}<span class="muted" style="font-size:12px">purchases per 100 downloads</span>{% endif %}</div>
+<svg viewBox="0 0 {{ trends.width }} {{ trends.panel_h }}" style="min-width:640px" role="img" aria-label="{{ p.step.label }} by week">
+  {% for g in p.grid %}<line class="{% if forloop.first %}axis{% else %}hair{% endif %}" x1="{{ trends.pad_l }}" y1="{{ g.y }}" x2="{{ trends.plot_r }}" y2="{{ g.y }}"/>
+  <text class="tick" x="{{ trends.pad_l|add:'-6' }}" y="{{ g.y }}" dy="4" text-anchor="end">{{ g.label }}</text>{% endfor %}
+  {% for m in trends.markers %}<line x1="{{ m.x }}" y1="4" x2="{{ m.x }}" y2="{{ p.base }}" stroke="var(--axis)"/>{% if forloop.parentloop.first %}<text class="tick" x="{{ m.x|add:'4' }}" y="12" style="fill:var(--ink-2)">{{ m.label }}</text>{% endif %}{% endfor %}
+  {% for b in p.bands %}<path d="{{ b }}" fill="var(--series-1)" opacity=".16"/>{% endfor %}
+  {% for l in p.lines %}<polyline points="{{ l }}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>{% endfor %}
+  {% for l in p.dashed %}<polyline points="{{ l }}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-dasharray="4 3"/>{% endfor %}
+  {% for d in p.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="{% if d.thin %}3.5{% else %}3{% endif %}" {% if d.thin or d.partial %}fill="var(--surface)" stroke="var(--series-1)" stroke-width="1.5"{% else %}fill="var(--series-1)"{% endif %} data-tip="{{ d.tip }}"/>{% endfor %}
+  {% if forloop.last %}{% for m in trends.months %}<text class="tick" x="{{ m.x }}" y="{{ trends.panel_h|add:'-2' }}" text-anchor="middle">{{ m.label }}</text>{% endfor %}{% endif %}
+</svg>
+{% endfor %}
+</div>
+
+<h3 style="margin:18px 0 2px;font-size:16px">Where impressions come from, and how each source converts</h3>
+<p class="sub">Left: each source's share of unique impressions by week. Right: each source's install rate. If the blended rate drops while no source got worse, the mix shifted (browse usually converts below search).{% if mix.folded %} Folded into Other for having fewer than 5 downloads: {{ mix.folded|join:", " }}.{% endif %}</p>
+<div class="split" aria-label="Legend" style="margin-bottom:6px">{% for s in mix.lines %}<span class="key"><span class="sw {{ s.cls }}"></span>{{ s.src }} · <strong>{{ s.latest }}</strong>{% if s.latest_thin %} <span class="muted">(thin)</span>{% endif %}</span>{% endfor %}<span class="muted">install rate, last 4 weeks</span></div>
+<div class="two" style="grid-template-columns:1fr 1fr">
+  <svg viewBox="0 0 {{ mix.w }} {{ mix.h }}" role="img" aria-label="Share of unique impressions by source">
+    {% for s in mix.stacks %}<path class="{{ s.cls }}" d="{{ s.path }}" stroke="var(--surface)" stroke-width="1" data-tip="{{ s.src }}&#10;{{ s.share|floatformat:0 }}% of impressions, last 4 weeks"/>{% endfor %}
+    <text class="tick" x="0" y="14">100%</text><text class="tick" x="0" y="{{ mix.h|add:'-20' }}">0%</text>
+    {% for m in mix.months %}<text class="tick" x="{{ m.x }}" y="{{ mix.h|add:'-2' }}" text-anchor="middle">{{ m.label }}</text>{% endfor %}
+  </svg>
+  <svg viewBox="0 0 {{ mix.w }} {{ mix.h }}" role="img" aria-label="Install rate by source">
+    {% for g in mix.grid %}<line class="{% if forloop.first %}axis{% else %}hair{% endif %}" x1="36" y1="{{ g.y }}" x2="{{ mix.w }}" y2="{{ g.y }}"/><text class="tick" x="30" y="{{ g.y }}" dy="4" text-anchor="end">{{ g.label }}</text>{% endfor %}
+    {% for s in mix.lines %}
+      {% if s.points %}<polyline points="{{ s.points }}" fill="none" style="stroke: var(--{% if s.cls == 'other' %}other{% else %}{{ s.cls }}{% endif %})" stroke-width="2" stroke-linejoin="round"/>{% endif %}
+      {% for t in s.thin %}<circle cx="{{ t.x }}" cy="{{ t.y }}" r="3" fill="var(--surface)" style="stroke: var(--{% if s.cls == 'other' %}other{% else %}{{ s.cls }}{% endif %})" stroke-width="1.5"/>{% endfor %}
+    {% endfor %}
+    {% for m in mix.months %}<text class="tick" x="{{ m.x }}" y="{{ mix.h|add:'-2' }}" text-anchor="middle">{{ m.label }}</text>{% endfor %}
+  </svg>
+</div>
+<details>
+  <summary>Table view: weekly rates</summary>
+  <table>{% for p in trends.panels %}{% for d in p.dots %}<tr><td>{{ p.step.label }}</td><td>{{ d.tip|linebreaksbr }}</td></tr>{% endfor %}{% endfor %}</table>
+</details>
+{% endif %}

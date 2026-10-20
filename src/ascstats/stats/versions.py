@@ -228,10 +228,11 @@ def _trend_delta(
 
 
 def _conversion(app: App, start: date, end: date) -> float | None:
+    """Install rate over the window: summed downloads / summed unique impressions."""
     agg = ConversionMetric.objects.filter(app=app, date__range=(start, end)).aggregate(
-        pv=Sum("page_views"), ft=Sum("first_time_downloads")
+        imp=Sum("unique_impressions"), ft=Sum("first_time_downloads")
     )
-    return agg["ft"] / agg["pv"] if agg["pv"] else None
+    return agg["ft"] / agg["imp"] if agg["imp"] else None
 
 
 def version_impact(app: App, window: int = 14, platform: str | None = None) -> list[VersionImpact]:
@@ -309,7 +310,7 @@ def version_impact(app: App, window: int = 14, platform: str | None = None) -> l
                 conv_a = _conversion(app, released, a_end)
             impact.deltas.append(
                 Delta(
-                    "conversion rate",
+                    "install rate",
                     None if conv_b is None else round(conv_b, 4),
                     None if conv_a is None else round(conv_a, 4),
                     _pct(conv_b, conv_a),

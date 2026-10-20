@@ -102,17 +102,24 @@ class AnalyticsRow(models.Model):
 
 
 class ConversionMetric(models.Model):
-    """Derived daily funnel: product-page views from Analytics against units from Sales."""
+    """Derived daily funnel per app: impressions -> product-page views -> first-time downloads
+    (App Store Analytics) -> in-app purchases (Sales).
+
+    Rates are not stored: they are ratios of sums, so they must be computed over a window
+    (sum numerators and denominators, then divide), never averaged from daily ratios. Many
+    downloads come straight from search results without a page view, so the headline rate is
+    downloads / unique impressions; downloads / page views can exceed 100%.
+    """
 
     app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="conversion_metrics")
     date = models.DateField()
-    impressions = models.BigIntegerField(default=0)
-    page_views = models.BigIntegerField(default=0)
-    first_time_downloads = models.BigIntegerField(default=0)
-    units = models.BigIntegerField(default=0)
-    conversion_rate = models.FloatField(
-        null=True, help_text="first-time downloads / page views; null without page views"
-    )
+    impressions = models.BigIntegerField(default=0, help_text="total, repeats included")
+    unique_impressions = models.BigIntegerField(default=0, help_text="unique devices")
+    page_views = models.BigIntegerField(default=0, help_text="total, repeats included")
+    unique_page_views = models.BigIntegerField(default=0, help_text="unique devices")
+    first_time_downloads = models.BigIntegerField(default=0, help_text="App Store Analytics")
+    units = models.BigIntegerField(default=0, help_text="downloads in the sales report")
+    iap_units = models.BigIntegerField(default=0, help_text="in-app purchases, net of refunds")
     computed_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -121,6 +128,26 @@ class ConversionMetric(models.Model):
 
     def __str__(self) -> str:
         return f"{self.app_id} {self.date}"
+
+    @property
+    def install_rate(self) -> float | None:
+        """First-time downloads / unique impressions: the funnel's headline rate."""
+        if not self.unique_impressions:
+            return None
+        return self.first_time_downloads / self.unique_impressions
+
+    @property
+    def tap_through_rate(self) -> float | None:
+        if not self.unique_impressions:
+            return None
+        return self.unique_page_views / self.unique_impressions
+
+    @property
+    def page_view_conversion(self) -> float | None:
+        """Downloads / unique page views. Can exceed 1: search downloads skip the page."""
+        if not self.unique_page_views:
+            return None
+        return self.first_time_downloads / self.unique_page_views
 
 
 class AppVersion(models.Model):

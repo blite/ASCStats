@@ -31,10 +31,15 @@ class DailySales(Schema):
 class Conversion(Schema):
     date: date
     impressions: int
+    unique_impressions: int
     page_views: int
+    unique_page_views: int
     first_time_downloads: int
     units: int
-    conversion_rate: float | None
+    iap_units: int
+    install_rate: float | None  # first-time downloads / unique impressions (headline)
+    tap_through_rate: float | None  # unique page views / unique impressions
+    page_view_conversion: float | None  # downloads / unique page views; can exceed 1
 
 
 class DeltaOut(Schema):

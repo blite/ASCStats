@@ -97,6 +97,9 @@ COUNTRIES = {  # country -> (weight, currency, proceeds multiplier vs USD price)
 }
 DEVICES = {"iPhone": 0.8, "iPad": 0.2}
 SOURCES = {"App Store search": 0.55, "App Store browse": 0.3, "Web referrer": 0.15}
+# (downloads per page view, impressions per page view) by source
+SOURCE_FUNNEL = {"App Store search": (0.45, 5), "App Store browse": (0.2, 12),
+                 "Web referrer": (0.3, 3)}  # fmt: skip
 
 SALES_HEADER = [
     "Provider", "Provider Country", "SKU", "Developer", "Title", "Version",
@@ -253,8 +256,10 @@ def analytics_report(app: SyntheticApp, report_name: str, day: date) -> bytes:
         for source, sweight in SOURCES.items():
             share = first_time * sweight
             if report_name == DISCOVERY_REPORT:
-                page_views = max(1, round(share / rng.uniform(0.25, 0.4)))
-                impressions = round(page_views * rng.uniform(6, 10))
+                # search intent converts best, browse worst: the mix matters
+                view_to_dl, imp_per_view = SOURCE_FUNNEL[source]
+                page_views = max(1, round(share / (view_to_dl * rng.uniform(0.9, 1.1))))
+                impressions = round(page_views * imp_per_view * rng.uniform(0.9, 1.1))
                 for event, counts in (("Impression", impressions), ("Page view", page_views)):
                     rows.append([
                         day.isoformat(), app.name, str(app.apple_id), event, "Product page",

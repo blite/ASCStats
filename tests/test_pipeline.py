@@ -121,8 +121,9 @@ def test_analytics_and_conversion_metrics(apps):
     pipeline.run("analytics", DAY)
     assert build_conversion_metrics(DAY, DAY) == 3
     metric = ConversionMetric.objects.get(app__sku="SYN-SUDOKU")
-    assert metric.page_views > metric.first_time_downloads > 0
-    assert 0 < metric.conversion_rate < 1
+    assert metric.unique_impressions > metric.unique_page_views > 0
+    assert metric.first_time_downloads > 0
+    assert 0 < metric.install_rate < metric.tap_through_rate < 1
     build_conversion_metrics(DAY, DAY)
     assert ConversionMetric.objects.count() == 3
 

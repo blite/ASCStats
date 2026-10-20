@@ -36,8 +36,8 @@ class AnalyticsRowAdmin(admin.ModelAdmin):
 @admin.register(ConversionMetric)
 class ConversionMetricAdmin(admin.ModelAdmin):
     list_display = [
-        "date", "app", "impressions", "page_views", "first_time_downloads", "units",
-        "conversion_rate",
+        "date", "app", "unique_impressions", "unique_page_views", "first_time_downloads",
+        "units", "iap_units", "install_rate",
     ]  # fmt: skip
     list_filter = ["app"]
     date_hierarchy = "date"

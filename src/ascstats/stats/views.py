@@ -3,6 +3,7 @@
 from django.shortcuts import render
 
 from . import dashboard as d
+from . import funnel as f
 from . import revenue as r
 from .models import App, IngestionRun
 
@@ -50,3 +51,20 @@ def revenue(request):
     if end is None:
         return render(request, "stats/revenue.html", {"empty": True, "page": "revenue"})
     return render(request, "stats/revenue.html", {"page": "revenue", **r.revenue(end)})
+
+
+def funnel(request):
+    end = f.last_day()
+    if end is None:
+        return render(request, "stats/funnel.html", {"empty": True, "page": "funnel"})
+    context = {"page": "funnel", "end": end, "strip": f.leak_strip(end)}
+    return render(request, "stats/funnel.html", context)
+
+
+def funnel_app(request):
+    app = App.objects.filter(apple_id=request.GET.get("app"), is_active=True).first()
+    end = f.last_day()
+    if app is None or end is None:
+        return render(request, "stats/_funnel_app.html", {"empty": True})
+    context = {"app": app, "trends": f.step_trends(app, end), "mix": f.source_mix(app, end)}
+    return render(request, "stats/_funnel_app.html", context)

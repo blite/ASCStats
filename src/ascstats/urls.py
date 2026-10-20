@@ -8,6 +8,8 @@ urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     path("chart/", views.chart, name="chart"),
     path("revenue/", views.revenue, name="revenue"),
+    path("funnel/", views.funnel, name="funnel"),
+    path("funnel/app/", views.funnel_app, name="funnel_app"),
     path("admin/", admin.site.urls),
     path("api/", api.urls),
 ]

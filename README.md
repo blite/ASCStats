@@ -13,6 +13,12 @@ iOS apps into Postgres and serves them through Django.
 - **Revenue**: developer proceeds from every storefront, converted to USD at daily European
   Central Bank reference rates (`import_fx`), on a `/revenue` page: weekly proceeds by app,
   apps at a glance, top sellers and storefronts.
+- **Funnel**: impressions -> page views -> downloads -> in-app purchases on a `/funnel` page:
+  a "where's the leak" strip ranking apps by downloads lost against their own usual rate, weekly
+  step rates with releases, and source mix next to each source's rate. The headline is
+  downloads / unique impressions (search downloads skip the product page, so downloads / page
+  views can pass 100%); every rate is a ratio of sums with a 90% interval, shrunk toward the
+  portfolio for ranking, and gaps stay gaps.
 - **Serve**: Django admin, a JSON API (Django Ninja, OpenAPI at `/api/docs`) and one
   server-rendered htmx page with a chart.
 - **Run**: Docker Compose for development, Kustomize manifests for Kubernetes (a CronJob per
@@ -65,7 +71,7 @@ own, and any day can be reloaded from raw without asking Apple again.
 | `App`              | Apple ID, name, SKU, bundle ID, `is_active` (included in imports).                         |
 | `SalesRow`         | One line of the SALES/SUMMARY/DAILY report. IAPs attributed via `Parent Identifier`.       |
 | `AnalyticsRow`     | One line of an Analytics Reports segment; common columns typed, the rest in `dimensions`. |
-| `ConversionMetric` | Derived daily funnel: impressions, page views, first-time downloads, units.               |
+| `ConversionMetric` | Derived daily funnel: unique impressions, unique page views, first-time downloads, sales downloads, in-app purchases. Rates are computed over windows, never stored. |
 | `AppVersion`       | Version dated by first appearance in sales; ASC state and creation time when on real data. |
 | `FxRate`           | Daily ECB reference rate, USD per unit of currency (Frankfurter API); as-of lookup on weekends. |
 | `IngestionRun`     | The run log: report, day, app, step, source, status, row counts, error.                   |

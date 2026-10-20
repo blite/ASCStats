@@ -154,6 +154,7 @@
     {% if not empty %}<span class="pill"><span class="pulse"></span>App Store Connect · data through {{ end|date:"M j, Y" }}</span>{% endif %}
     <nav class="tabs" aria-label="Pages">
       <a href="{% url 'dashboard' %}"{% if page == "overview" %} aria-current="page"{% endif %}>Overview</a>
+      <a href="{% url 'funnel' %}"{% if page == "funnel" %} aria-current="page"{% endif %}>Funnel</a>
       <a href="{% url 'revenue' %}"{% if page == "revenue" %} aria-current="page"{% endif %}>Revenue</a>
     </nav>
     <nav><a href="/api/docs">API</a><a href="/admin/">Admin</a></nav>
