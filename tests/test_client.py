@@ -109,3 +109,31 @@ def test_client_only_ever_sends_get():
         client.download_segment(s)
     assert {r.method for r in fake.requests} == {"GET"}
     assert not any(hasattr(client, verb) for verb in ("post", "patch", "delete", "put"))
+
+
+def test_report_requester_creates_only_where_none_runs():
+    import json
+
+    from ascstats.asc.report_requests import ReportRequester
+
+    fake = FakeASC()
+    stopped = {"data": [{"type": "analyticsReportRequests", "id": "old",
+                         "attributes": {"accessType": "ONGOING", "stoppedDueToInactivity": True}}],
+               "links": {}}  # fmt: skip
+    fake.queue("/v1/apps/42/analyticsReportRequests", httpx.Response(200, json=stopped))
+    fake.queue(
+        "/v1/analyticsReportRequests",
+        httpx.Response(201, json={"data": {"type": "analyticsReportRequests", "id": "new"}}),
+    )
+    requester = ReportRequester(fake.client())
+    created = requester.ensure_ongoing(42)
+    assert (created.created, created.request_id) == (True, "new")
+    post = fake.requests[-1]
+    assert (post.method, post.url.path) == ("POST", "/v1/analyticsReportRequests")
+    body = json.loads(post.content)
+    assert body["data"]["attributes"] == {"accessType": "ONGOING"}
+    assert body["data"]["relationships"]["app"]["data"]["id"] == "42"
+    # the recorded fixture has a running request for every other app: no POST at all
+    before = len(fake.requests)
+    assert requester.ensure_ongoing(1000000002).created is False
+    assert {r.method for r in fake.requests[before:]} == {"GET"}
