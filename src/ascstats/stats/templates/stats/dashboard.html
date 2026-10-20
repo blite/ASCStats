@@ -1,4 +1,4 @@
-<!doctype html>
+{% load humanize %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -6,46 +6,294 @@
   <title>ASCStats</title>
   <script src="https://unpkg.com/htmx.org@2.0.4" crossorigin="anonymous"></script>
   <style>
-    :root { --fg:#1d1d1f; --muted:#6e6e73; --bar:#0a84ff; --line:#ff9f0a; --bg:#fff; --card:#f5f5f7; }
-    @media (prefers-color-scheme: dark) {
-      :root { --fg:#f5f5f7; --muted:#a1a1a6; --bg:#111; --card:#1c1c1e; }
+    :root {
+      color-scheme: light;
+      --page: #f9f9f7; --surface: #fcfcfb; --raised: #ffffff;
+      --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+      --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,.10);
+      --series-1: #2a78d6; --series-1-strong: #1c5cab;
+      --up: #2a78d6; --down: #e34948; --neutral: #898781;
+      --good-text: #006300; --bad-text: #d03b3b;
+      --st-good: #0ca30c; --st-empty: #e1e0d9; --st-failed: #d03b3b; --st-none: transparent;
+      --lane-fill: rgba(82,81,78,.10); --lane-line: #52514e;
+      --hero-glow: radial-gradient(1200px 380px at 12% -10%, rgba(42,120,214,.16), transparent 60%),
+                   radial-gradient(900px 320px at 95% 0%, rgba(227,73,72,.08), transparent 60%);
     }
-    body { font: 15px/1.5 -apple-system, system-ui, sans-serif; color: var(--fg); background: var(--bg);
-           max-width: 800px; margin: 2rem auto; padding: 0 16px; }
-    .card { background: var(--card); border-radius: 12px; padding: 16px; margin: 16px 0; }
-    select { font: inherit; padding: 4px 8px; }
-    svg { width: 100%; height: auto; }
-    .muted { color: var(--muted); }
+    @media (prefers-color-scheme: dark) {
+      :root:where(:not([data-theme="light"])) {
+        color-scheme: dark;
+        --page: #0d0d0d; --surface: #1a1a19; --raised: #222221;
+        --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+        --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,.10);
+        --series-1: #3987e5; --series-1-strong: #6da7ec;
+        --up: #3987e5; --down: #e66767; --neutral: #898781;
+        --good-text: #0ca30c; --bad-text: #e66767;
+        --st-empty: #2c2c2a;
+        --lane-fill: rgba(195,194,183,.10); --lane-line: #c3c2b7;
+        --hero-glow: radial-gradient(1200px 380px at 12% -10%, rgba(57,135,229,.22), transparent 60%),
+                     radial-gradient(900px 320px at 95% 0%, rgba(230,103,103,.10), transparent 60%);
+      }
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --raised: #222221;
+      --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,.10);
+      --series-1: #3987e5; --series-1-strong: #6da7ec;
+      --up: #3987e5; --down: #e66767; --neutral: #898781;
+      --good-text: #0ca30c; --bad-text: #e66767;
+      --st-empty: #2c2c2a;
+      --lane-fill: rgba(195,194,183,.10); --lane-line: #c3c2b7;
+      --hero-glow: radial-gradient(1200px 380px at 12% -10%, rgba(57,135,229,.22), transparent 60%),
+                   radial-gradient(900px 320px at 95% 0%, rgba(230,103,103,.10), transparent 60%);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+           color: var(--ink); background: var(--hero-glow), var(--page); background-repeat: no-repeat; }
+    a { color: inherit; }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
+    header { display: flex; align-items: center; gap: 12px; padding: 20px 0 8px; flex-wrap: wrap; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -.01em; }
+    .brand svg { width: 26px; height: 26px; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2);
+            border: 1px solid var(--ring); border-radius: 999px; padding: 3px 10px; background: var(--surface); }
+    .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--st-good); box-shadow: 0 0 0 0 rgba(12,163,12,.5);
+             animation: pulse 2.4s infinite; }
+    header nav { margin-left: auto; display: flex; gap: 14px; font-size: 13px; color: var(--ink-2); }
+    header nav a { text-decoration: none; } header nav a:hover { color: var(--ink); }
+    .hero { padding: 36px 0 18px; }
+    .eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 8px; }
+    .hero h1 { font-size: clamp(30px, 5vw, 52px); line-height: 1.05; letter-spacing: -.03em; margin: 0; font-weight: 700; max-width: 18ch; }
+    .hero h1 .num { color: var(--series-1); }
+    .hero p { color: var(--ink-2); font-size: 17px; max-width: 62ch; margin: 14px 0 0; }
+    .chip { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; font-size: 13px; white-space: nowrap; }
+    .chip.up { color: var(--good-text); } .chip.down { color: var(--bad-text); } .chip.flat { color: var(--muted); }
+    .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 22px 0; }
+    .card { background: var(--surface); border: 1px solid var(--ring); border-radius: 16px; padding: 18px 20px; }
+    .tile .label { font-size: 13px; color: var(--ink-2); }
+    .tile .value { font-size: 34px; font-weight: 650; letter-spacing: -.02em; line-height: 1.1; margin: 4px 0 2px; }
+    .tile .row { display: flex; align-items: end; justify-content: space-between; gap: 8px; }
+    .tile svg { width: 120px; height: 32px; flex: none; }
+    .tile .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .split { display: flex; gap: 14px; margin-top: 6px; font-size: 13px; color: var(--ink-2); flex-wrap: wrap; }
+    .key { display: inline-flex; align-items: center; gap: 6px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .dot.up { background: var(--up); } .dot.down { background: var(--down); } .dot.neutral { background: var(--neutral); }
+    .dot.unknown { border: 2px solid var(--neutral); }
+    section.card { margin: 14px 0; }
+    .card h2 { font-size: 19px; letter-spacing: -.01em; margin: 0; }
+    .card .sub { color: var(--ink-2); font-size: 13px; margin: 4px 0 12px; max-width: 80ch; }
+    .card-head { display: flex; gap: 16px; align-items: start; justify-content: space-between; flex-wrap: wrap; }
+    .scroll { overflow-x: auto; }
+    svg text { font-family: inherit; }
+    .lane-name { font-size: 12.5px; fill: var(--ink); }
+    .lane-total { font-size: 11px; fill: var(--muted); }
+    .lane-area { fill: var(--lane-fill); }
+    .lane-line { fill: none; stroke: var(--lane-line); stroke-width: 1.5; stroke-linejoin: round; }
+    .rel { stroke: var(--surface); stroke-width: 2; cursor: pointer; }
+    .rel.up { fill: var(--up); } .rel.down { fill: var(--down); } .rel.neutral { fill: var(--neutral); }
+    .rel.unknown { fill: var(--surface); stroke: var(--neutral); }
+    .rel:hover, .rel:focus { r: 7; outline: none; }
+    .tick { font-size: 11px; fill: var(--muted); }
+    .hair { stroke: var(--grid); stroke-width: 1; }
+    .axis { stroke: var(--axis); stroke-width: 1; }
+    .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    select { font: inherit; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--ring); background: var(--raised); color: var(--ink); }
+    .seg { display: inline-flex; border: 1px solid var(--ring); border-radius: 10px; overflow: hidden; background: var(--raised); }
+    .seg input { position: absolute; opacity: 0; pointer-events: none; }
+    .seg label { padding: 6px 12px; font-size: 13px; cursor: pointer; color: var(--ink-2); }
+    .seg input:checked + label { background: var(--ink); color: var(--surface); }
+    .seg input:focus-visible + label { outline: 2px solid var(--series-1); outline-offset: -2px; }
+    .two { display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px; }
+    .cal rect { rx: 2.5; }
+    .cal .loaded { fill: var(--st-good); } .cal .empty { fill: var(--st-empty); }
+    .cal .failed { fill: var(--st-failed); } .cal .none { fill: none; stroke: var(--grid); }
+    .sw { width: 11px; height: 11px; border-radius: 2.5px; display: inline-block; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #8883; }
+    th { text-align: left; font-weight: 600; color: var(--ink-2); padding: 6px 8px; border-bottom: 1px solid var(--axis); }
+    td { padding: 7px 8px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+    td.num, th.num { text-align: right; }
+    .muted { color: var(--muted); }
+    details summary { cursor: pointer; color: var(--ink-2); font-size: 13px; margin-top: 10px; }
+    #tip { position: fixed; z-index: 10; pointer-events: none; background: var(--raised); color: var(--ink);
+           border: 1px solid var(--ring); border-radius: 10px; padding: 8px 10px; font-size: 12.5px; line-height: 1.45;
+           box-shadow: 0 8px 28px rgba(0,0,0,.18); max-width: 300px; }
+    #tip .t { font-weight: 650; }
+    footer { color: var(--muted); font-size: 12px; margin-top: 28px; }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(12,163,12,.45); } 70% { box-shadow: 0 0 0 7px rgba(12,163,12,0); } 100% { box-shadow: 0 0 0 0 rgba(12,163,12,0); } }
+    @keyframes reveal { from { clip-path: inset(0 100% 0 0); } }
+    @keyframes rise { from { transform: scaleY(0); } }
+    @keyframes fade { from { opacity: 0; transform: translateY(6px); } }
+    .reveal { animation: reveal 1.6s cubic-bezier(.3,.7,.2,1) backwards; }
+    .rise { transform-box: fill-box; transform-origin: bottom; animation: rise .7s cubic-bezier(.3,.7,.2,1) both; }
+    .fade { animation: fade .6s ease both; }
+    @media (prefers-reduced-motion: reduce) {
+      .reveal, .rise, .fade, .pulse { animation: none; }
+    }
+    @media (max-width: 860px) { .grid4 { grid-template-columns: repeat(2, 1fr); } .two { grid-template-columns: 1fr; } }
+    @media (max-width: 480px) { .grid4 { grid-template-columns: 1fr; } .tile .value { font-size: 30px; } }
   </style>
 </head>
 <body>
-  <h1>ASCStats</h1>
-  <p class="muted">Daily downloads (bars), product-page conversion (line) and releases (dashed). <a href="/admin/">Admin</a> · <a href="/api/docs">API</a></p>
-  <form class="card" hx-get="{% url 'chart' %}" hx-target="#chart" hx-trigger="load, change">
-    <label>App
-      <select name="app">
-        {% for app in apps %}<option value="{{ app.apple_id }}">{{ app.name }}</option>{% endfor %}
-      </select>
-    </label>
-    <label>Window
-      <select name="days">
-        <option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option>
-      </select>
-    </label>
-  </form>
-  <div id="chart" class="card"><p class="muted">Loading…</p></div>
-  <div class="card">
-    <h2>Recent ingestion runs</h2>
-    <table>
-      <tr><th>Started</th><th>Report</th><th>Date</th><th>Step</th><th>Status</th><th>Rows</th></tr>
-      {% for run in runs %}
-      <tr><td>{{ run.started_at|date:"m-d H:i" }}</td><td>{{ run.report }}</td><td>{{ run.report_date }}</td>
-          <td>{{ run.step }}</td><td>{{ run.status }}</td><td>{{ run.rows_loaded|default_if_none:"" }}</td></tr>
-      {% empty %}<tr><td colspan="6" class="muted">No runs yet. Try <code>manage.py seed_synthetic</code>.</td></tr>
-      {% endfor %}
-    </table>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" fill="var(--ink)"/>
+        <path d="M6 18l4.5-5 3.5 3 6-8" fill="none" stroke="var(--surface)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ASCStats
+    </div>
+    {% if not empty %}<span class="pill"><span class="pulse"></span>App Store Connect · data through {{ end|date:"M j, Y" }}</span>{% endif %}
+    <nav><a href="/api/docs">API</a><a href="/admin/">Admin</a></nav>
+  </header>
+
+  {% if empty %}
+  <section class="hero"><h1>No data yet.</h1><p>Run <code>manage.py seed_synthetic</code> or import a day with <code>manage.py import_asc</code>.</p></section>
+  {% else %}
+  {% with dl=tiles.0 %}
+  <section class="hero fade">
+    <p class="eyebrow">Last 30 days · {{ app_count }} apps</p>
+    <h1><span class="num">{{ dl.value|intcomma }}</span> downloads{% if dl.change_pct is not None %}, {% if dl.direction == "up" %}up{% elif dl.direction == "down" %}down{% else %}flat{% endif %} {% if dl.direction != "flat" %}{{ dl.change_pct|floatformat:0|cut:"-" }}%{% endif %}{% endif %}.</h1>
+    {% if best %}<p>Best release of the year: <strong>{{ best.app }} {{ best.impact.version }}</strong>, shipped {{ best.impact.released_on|date:"M j" }}, ran <strong>{{ best.impact.deltas.1.change_pct|floatformat:0 }}% above</strong> the downloads its pre-release trend predicted.</p>{% endif %}
+  </section>
+  {% endwith %}
+
+  <div class="grid4">
+    {% for t in tiles %}
+    <div class="card tile fade" style="animation-delay: {{ forloop.counter0 }}00ms">
+      <div class="label">{{ t.label }}</div>
+      <div class="row">
+        <div>
+          <div class="value">{{ t.value|intcomma }}</div>
+          <span class="chip {{ t.direction }}">{% if t.direction == "up" %}▲{% elif t.direction == "down" %}▼{% else %}●{% endif %}
+            {% if t.change_pct is None %}new{% else %}{{ t.change_pct|floatformat:0 }}%{% endif %}</span>
+        </div>
+        <svg viewBox="0 0 120 32" role="img" aria-label="{{ t.label }}, last 90 days, 7-day average"><polyline class="reveal" points="{{ t.spark }}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+      </div>
+      <div class="note">{{ t.note }}</div>
+    </div>
+    {% endfor %}
+    <div class="card tile fade" style="animation-delay: 300ms">
+      <div class="label">iOS releases this year</div>
+      <div class="value">{{ board.releases|length }}</div>
+      <div class="split">
+        <span class="key"><span class="dot up"></span>{{ board.counts.up }} lifted</span>
+        <span class="key"><span class="dot down"></span>{{ board.counts.down }} hurt</span>
+        <span class="key"><span class="dot neutral"></span>{{ board.counts.neutral }} noise</span>
+      </div>
+      <div class="note">downloads vs each app's own pre-release trend</div>
+    </div>
   </div>
+
+  <section class="card fade">
+    <div class="card-head">
+      <div>
+        <h2>Every release, every app</h2>
+        <p class="sub">Each lane is one app's daily downloads over the past year (7-day average, scaled to its own peak). Each dot is an iOS release, colored by whether downloads beat the trend the app was already on.</p>
+      </div>
+      <div class="split" aria-label="Legend">
+        <span class="key"><span class="dot up"></span>Lifted downloads</span>
+        <span class="key"><span class="dot down"></span>Hurt downloads</span>
+        <span class="key"><span class="dot neutral"></span>Within noise</span>
+        <span class="key"><span class="dot unknown"></span>Too early to tell</span>
+      </div>
+    </div>
+    <div class="scroll">
+      <svg viewBox="0 0 1040 {{ board.height }}" style="min-width: 760px" role="img" aria-label="Daily downloads per app over the past year with release markers">
+        {% for t in board.ticks %}<line class="hair" x1="{{ t.x }}" y1="18" x2="{{ t.x }}" y2="{{ board.height|add:'-20' }}"/>
+        <text class="tick" x="{{ t.x }}" y="{{ board.height|add:'-4' }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
+        {% for lane in board.lanes %}
+        <g>
+          <text class="lane-name" x="0" y="{{ lane.y|add:22 }}">{{ lane.app.name|truncatechars:26 }}</text>
+          <text class="lane-total" x="0" y="{{ lane.y|add:37 }}">{{ lane.total|intcomma }} downloads</text>
+          <g class="reveal" style="animation-delay: {{ forloop.counter0 }}00ms">
+            <path class="lane-area" d="{{ lane.area }}"/>
+            <polyline class="lane-line" points="{{ lane.line }}"/>
+          </g>
+          {% for dot in lane.dots %}<circle class="rel {{ dot.kind }}" cx="{{ dot.x }}" cy="{{ dot.y }}" r="5" tabindex="0" data-tip="{{ dot.tip }}" aria-label="{{ dot.tip }}"/>{% endfor %}
+        </g>
+        {% endfor %}
+      </svg>
+    </div>
+    <details>
+      <summary>Table view: all {{ board.releases|length }} releases</summary>
+      <table>
+        <tr><th>App</th><th>Version</th><th>Released</th><th>Effect</th></tr>
+        {% for r in board.releases %}<tr><td>{{ r.app }}</td><td>{{ r.impact.version }}</td><td>{{ r.impact.released_on|date:"M j, Y" }}</td><td>{{ r.verdict }}</td></tr>{% endfor %}
+      </table>
+    </details>
+  </section>
+
+  <section class="card">
+    <form class="card-head" hx-get="{% url 'chart' %}" hx-target="#chart" hx-trigger="load, change" hx-swap="innerHTML">
+      <div>
+        <h2>App deep-dive</h2>
+        <p class="sub">Daily downloads, every release, and the trend each release was measured against.</p>
+      </div>
+      <div class="filters">
+        <select name="app" aria-label="App">{% for app in apps %}<option value="{{ app.apple_id }}">{{ app.name }}</option>{% endfor %}</select>
+        <div class="seg" role="radiogroup" aria-label="Window">
+          {% for w in windows %}<input type="radio" name="days" id="w{{ w }}" value="{{ w }}"{% if w == 90 %} checked{% endif %}><label for="w{{ w }}">{% if w == 365 %}1y{% else %}{{ w }}d{% endif %}</label>{% endfor %}
+        </div>
+      </div>
+    </form>
+    <div id="chart"><p class="muted">Loading…</p></div>
+  </section>
+
+  <div class="two">
+    <section class="card">
+      <h2>Pipeline health</h2>
+      <p class="sub">One square per day: did the daily sales import land?</p>
+      <div class="scroll">
+        <svg class="cal" viewBox="0 0 {{ calendar.width }} 112" style="min-width: 560px" role="img" aria-label="Daily import status for the past year">
+          {% for m in calendar.months %}<text class="tick" x="{{ m.x }}" y="11">{{ m.label }}</text>{% endfor %}
+          <text class="tick" x="0" y="{{ 18|add:22 }}">Mon</text><text class="tick" x="0" y="{{ 18|add:48 }}">Wed</text><text class="tick" x="0" y="{{ 18|add:74 }}">Fri</text>
+          {% for c in calendar.cells %}<rect class="{{ c.kind }}" x="{{ c.x }}" y="{{ c.y }}" width="11" height="11" data-tip="{{ c.tip }}"/>{% endfor %}
+        </svg>
+      </div>
+      <div class="split">
+        <span class="key"><span class="sw" style="background: var(--st-good)"></span>✓ Loaded · {{ calendar.counts.loaded }}</span>
+        <span class="key"><span class="sw" style="background: var(--st-empty)"></span>No sales · {{ calendar.counts.empty }}</span>
+        <span class="key"><span class="sw" style="background: var(--st-failed)"></span>✕ Failed · {{ calendar.counts.failed }}</span>
+        <span class="key"><span class="sw" style="border: 1px solid var(--grid)"></span>Not imported · {{ calendar.counts.none }}</span>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Latest runs</h2>
+      <p class="sub">Every import attempt is logged.</p>
+      <table>
+        <tr><th>Report</th><th>Day</th><th>Status</th><th class="num">Rows</th></tr>
+        {% for run in runs %}<tr><td>{{ run.report }}</td><td>{{ run.report_date|date:"M j" }}</td>
+          <td>{% if run.status == "succeeded" %}<span class="chip up">✓ loaded</span>{% elif run.status == "failed" %}<span class="chip down">✕ failed</span>{% else %}<span class="chip flat">● {{ run.get_status_display }}</span>{% endif %}</td>
+          <td class="num">{{ run.rows_loaded|default_if_none:"–" }}</td></tr>{% endfor %}
+      </table>
+    </section>
+  </div>
+  {% endif %}
+
+  <footer>ASCStats · read-only App Store Connect pipeline · Django, Postgres, Kubernetes, Airflow</footer>
+</div>
+<div id="tip" hidden></div>
+<script>
+  // One tooltip for every chart; works for content htmx swaps in later (event delegation).
+  const tip = document.getElementById("tip");
+  function show(el, x, y) {
+    tip.replaceChildren(...el.dataset.tip.split("\n").map((line, i) => {
+      const d = document.createElement("div"); d.textContent = line; if (i === 0) d.className = "t"; return d;
+    }));
+    tip.hidden = false;
+    const r = tip.getBoundingClientRect();
+    tip.style.left = Math.min(x + 14, innerWidth - r.width - 8) + "px";
+    tip.style.top = (y - r.height - 12 < 8 ? y + 18 : y - r.height - 12) + "px";
+  }
+  document.addEventListener("pointermove", e => {
+    const el = e.target.closest?.("[data-tip]");
+    if (el) show(el, e.clientX, e.clientY); else tip.hidden = true;
+  });
+  document.addEventListener("focusin", e => {
+    const el = e.target.closest?.("[data-tip]");
+    if (el) { const b = el.getBoundingClientRect(); show(el, b.right, b.top); }
+  });
+  document.addEventListener("focusout", () => { tip.hidden = true; });
+</script>
 </body>
 </html>

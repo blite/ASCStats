@@ -1,24 +1,59 @@
-{% if empty %}<p class="muted">No apps yet. Run <code>manage.py seed_synthetic</code>.</p>{% else %}
-<h2>{{ app.name }}</h2>
-<p class="muted">{{ start }} – {{ end }} · {{ total }} units · peak {{ peak }}/day</p>
-<svg viewBox="0 0 {{ width }} {{ height }}" role="img" aria-label="Daily units and conversion for {{ app.name }}">
-  <line x1="{{ pad }}" y1="{{ baseline }}" x2="{{ width }}" y2="{{ baseline }}" stroke="currentColor" stroke-opacity=".3"/>
-  <text x="2" y="{{ pad }}" font-size="11" fill="currentColor" opacity=".6">{{ peak }}</text>
-  {% for b in bars %}<rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" fill="var(--bar)" rx="1"><title>{{ b.label }}</title></rect>{% endfor %}
-  {% if line %}<polyline points="{{ line }}" fill="none" stroke="var(--line)" stroke-width="2"/>{% endif %}
-  {% for r in releases %}<line x1="{{ r.x }}" y1="{{ pad }}" x2="{{ r.x }}" y2="{{ baseline }}" stroke="currentColor" stroke-opacity=".5" stroke-dasharray="3 3"/>
-  <text x="{{ r.x }}" y="{{ pad|add:'-6' }}" font-size="11" fill="currentColor" text-anchor="middle">{{ r.label }}</text>{% endfor %}
+{% load humanize %}{% if empty %}<p class="muted">No data for this app yet.</p>{% else %}
+<div class="split" style="margin: 0 0 8px">
+  <span><strong>{{ total|intcomma }}</strong> downloads, {{ start|date:"M j" }} – {{ end|date:"M j, Y" }}</span>
+  {% if best_day %}<span class="muted">best day {{ best_day.1|date:"M j" }}: {{ best_day.0 }}</span>{% endif %}
+  <span class="key" style="margin-left:auto"><span class="sw" style="background: var(--series-1)"></span>Daily downloads</span>
+  <span class="key"><svg width="18" height="10" aria-hidden="true"><line x1="0" y1="5" x2="18" y2="5" stroke="var(--ink)" stroke-width="2"/></svg>7-day average</span>
+  {% if projections %}<span class="key"><svg width="18" height="10" aria-hidden="true"><line x1="0" y1="5" x2="18" y2="5" stroke="var(--ink-2)" stroke-width="2" stroke-dasharray="4 3"/></svg>Trend projection after a release</span>{% endif %}
+</div>
+<div class="scroll">
+<svg viewBox="0 0 {{ width }} {{ height }}" style="min-width: 640px" role="img" aria-label="Daily downloads for {{ app.name }}">
+  {% for g in grid %}<line class="{% if forloop.first %}axis{% else %}hair{% endif %}" x1="{{ pad_l }}" y1="{{ g.y }}" x2="{{ plot_r }}" y2="{{ g.y }}"/>
+  <text class="tick" x="{{ pad_l|add:'-8' }}" y="{{ g.y }}" dy="4" text-anchor="end">{{ g.label }}</text>{% endfor %}
+  {% for t in xticks %}<text class="tick" x="{{ t.x }}" y="{{ height|add:'-8' }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
+  {% for m in markers %}<g data-tip="{{ m.tip }}" tabindex="0" aria-label="{{ m.tip }}">
+    <line x1="{{ m.x }}" y1="{{ pad_t|add:'-6' }}" x2="{{ m.x }}" y2="{{ base }}" stroke="var(--axis)" stroke-width="1"/>
+    <circle class="rel {{ m.kind }}{% if m.kind == 'mac' %} neutral{% endif %}" cx="{{ m.x }}" cy="{{ pad_t|add:'-12' }}" r="5"/>
+    <text class="tick" x="{{ m.x }}" y="{{ pad_t|add:'-22' }}" text-anchor="middle" style="fill: var(--ink-2)">{{ m.label }}</text>
+  </g>{% endfor %}
+  {% for b in bars %}<g class="day" data-tip="{{ b.tip }}">
+    <rect class="bar rise" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="{% if b.w > 6 %}2{% else %}0.5{% endif %}" fill="var(--series-1)" style="animation-delay: {{ forloop.counter0 }}ms"/>
+    <rect x="{{ b.hit_x }}" y="{{ pad_t }}" width="{{ b.hit_w }}" height="{{ plot_h }}" fill="transparent"/>
+  </g>{% endfor %}
+  <polyline class="reveal" points="{{ avg_line }}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round" style="pointer-events: none"/>
+  {% for p in projections %}<polyline points="{{ p }}" fill="none" stroke="var(--ink-2)" stroke-width="2" stroke-dasharray="4 3" style="pointer-events: none"/>{% endfor %}
 </svg>
-{% if impacts %}
-<h3>What each release did</h3>
-<p class="muted">First 14 days live vs the 14 days before (shorter when releases are closer). <em>vs trend</em> compares downloads with what the previous 28 days' trend projected, so growth the app had anyway does not count. <b>Bold</b> = |t| ≥ 2, unlikely to be day-to-day noise.</p>
-<table>
-  <tr><th>Version</th><th>Released</th><th>Downloads/day</th><th>vs trend</th><th>IAP/day</th><th>Conversion</th><th>Updates</th></tr>
-  {% for i in impacts %}
-  <tr><td>{{ i.version }}{% if i.platform == "MAC_OS" %} <span class="muted">Mac</span>{% endif %}</td><td>{{ i.released_on }}</td>
-    {% for d in i.deltas %}<td>{% if d.change_pct is not None %}{% if d.significant %}<b>{% endif %}{% if d.change_pct > 0 %}+{% endif %}{{ d.change_pct }}%{% if d.significant %}</b>{% endif %}{% else %}<span class="muted">–</span>{% endif %}</td>{% endfor %}
-    <td>{{ i.updates }}</td></tr>
+</div>
+<style>.day:hover .bar { fill: var(--series-1-strong); }</style>
+
+{% if table %}
+<h3 style="margin: 18px 0 4px; font-size: 16px">What each release did</h3>
+<p class="sub">Each version's first 14 days live (shorter when the next release came sooner). <em>Before → after</em> is the naive change; <em>vs trend</em> compares downloads with what the previous 28 days' trend projected, so growth the app was already on is not credited to the release. Bold means |t| ≥ 2, unlikely to be day-to-day noise.</p>
+<div class="scroll">
+<table style="min-width: 640px">
+  <tr><th>Version</th><th>Released</th><th class="num">Downloads/day before → after</th><th>vs trend</th><th class="num">IAP/day</th><th class="num">Updates</th></tr>
+  {% for r in table %}
+  <tr>
+    <td>{{ r.impact.version }}{% if r.impact.platform == "MAC_OS" %} <span class="muted">Mac</span>{% endif %}</td>
+    <td>{{ r.impact.released_on|date:"M j, Y" }}</td>
+    <td class="num">{{ r.naive.before|default_if_none:"–" }} → {{ r.naive.after|default_if_none:"–" }}
+      <span class="muted">({% if r.naive.change_pct is not None %}{% if r.naive.change_pct > 0 %}+{% endif %}{{ r.naive.change_pct|floatformat:0 }}%{% else %}–{% endif %})</span></td>
+    <td>{% if r.trend.change_pct is not None %}
+      <span style="display:inline-flex; align-items:center; gap:8px">
+        <svg width="120" height="14" role="img" aria-label="{{ r.trend.change_pct }} percent vs trend"><line x1="60" y1="0" x2="60" y2="14" stroke="var(--axis)"/>
+          <rect class="rel {% if r.trend.significant %}{{ r.kind }}{% else %}neutral{% endif %}" style="stroke: none" x="{{ r.bar_x }}" y="3" width="{{ r.bar_w }}" height="8" rx="2"/></svg>
+        {% if r.trend.significant %}<strong>{% endif %}{% if r.trend.change_pct > 0 %}+{% endif %}{{ r.trend.change_pct|floatformat:0 }}%{% if r.trend.significant %}</strong>{% endif %}
+        <span class="muted">t {{ r.trend.t_score }}</span></span>
+      {% else %}<span class="muted">not enough history</span>{% endif %}</td>
+    <td class="num">{% if r.iap.change_pct is not None %}{% if r.iap.change_pct > 0 %}+{% endif %}{{ r.iap.change_pct|floatformat:0 }}%{% else %}<span class="muted">–</span>{% endif %}</td>
+    <td class="num">{{ r.impact.updates|intcomma }}</td>
+  </tr>
   {% endfor %}
 </table>
+</div>
 {% endif %}
+<details>
+  <summary>Table view: daily downloads</summary>
+  <table>{% for b in bars %}<tr><td>{{ b.tip|linebreaksbr }}</td></tr>{% endfor %}</table>
+</details>
 {% endif %}

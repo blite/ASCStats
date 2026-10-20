@@ -120,7 +120,7 @@ def test_versions_endpoint_and_chart_markers(client, apps):
     ]
     assert client.get("/api/apps/42/versions").status_code == 404
     chart = client.get("/chart/", {"app": SNAKE, "days": 90})
-    assert b"v2.3" in chart.content
+    assert b">2.3<" in chart.content
     assert b"What each release did" in chart.content
 
 
@@ -253,3 +253,25 @@ def test_launch_ramp_is_not_used_as_a_trend(apps):
     (impact,) = [i for i in version_impact(app, platform="IOS") if i.version == "1.1"]
     assert impact.deltas[0].change_pct is not None  # naive still compares
     assert impact.deltas[1].change_pct is None  # only 4 post-launch days: no trend estimate
+
+
+def test_previous_release_jump_is_a_step_not_growth():
+    """Flat app; release A on day 40 doubles downloads, release B on day 50 does nothing.
+    Without a level-shift term the A jump inside B's baseline reads as steep growth and B
+    looks like a big regression."""
+    rng = random.Random(3)
+    start = date(2026, 1, 1)
+    values = {
+        start + timedelta(days=n): round(
+            20 * (2.0 if n >= 40 else 1.0) * rng.lognormvariate(0, 0.08)
+        )
+        for n in range(70)
+    }
+    a, b = start + timedelta(days=40), start + timedelta(days=50)
+    window = ((b - timedelta(days=28), b - timedelta(days=1)), (b, b + timedelta(days=13)))
+    naive_trend = _trend_delta("x", values, *window)
+    stepped = _trend_delta("x", values, *window, steps=[a])
+    assert naive_trend.change_pct < -20  # the artefact this guards against
+    assert naive_trend.significant
+    assert abs(stepped.change_pct) < 10
+    assert not stepped.significant

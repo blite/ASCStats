@@ -9,7 +9,9 @@ Impact compares the days a version was live with the days just before it, two wa
   ``BASELINE_DAYS`` before the release and projected over the days the version was live. The
   change is actual against that projection, so an app that was growing anyway does not
   credit its releases with the growth. The t-score uses the fit's residual noise plus the
-  uncertainty of the projection itself. The first ``LAUNCH_DAYS`` of a platform's sales are
+  uncertainty of the projection itself. Earlier releases inside the baseline get their own
+  level-shift term (an interrupted time series), so a previous release's jump is read as a
+  step, not as growth to extrapolate. The first ``LAUNCH_DAYS`` of a platform's sales are
   never used as a baseline.
 
 Neither is an experiment: a feature, a promotion or a previous release's bump inside the
@@ -126,6 +128,7 @@ class VersionImpact:
     after_days: int
     updates: int  # update units while the version was live in the window
     deltas: list[Delta] = field(default_factory=list)
+    projection: list[float] = field(default_factory=list)  # trend's expected downloads/day
 
 
 def _welch_t(before: list[float], after: list[float]) -> float | None:
@@ -170,31 +173,44 @@ def _mean_delta(metric: str, before: list[float], after: list[float]) -> Delta:
     )
 
 
-def _design(days: list[date], origin: date) -> np.ndarray:
-    """Intercept, days since ``origin`` and Monday..Saturday dummies (Sunday is the base)."""
-    x = np.zeros((len(days), 8))
+def _design(days: list[date], origin: date, steps: list[date] = ()) -> np.ndarray:
+    """Intercept, days since ``origin``, Monday..Saturday dummies (Sunday is the base) and one
+    level-shift column per earlier release in ``steps`` (1 from that day on)."""
+    x = np.zeros((len(days), 8 + len(steps)))
     for i, day in enumerate(days):
         x[i, 0] = 1.0
         x[i, 1] = (day - origin).days
         if day.weekday() < 6:
             x[i, 2 + day.weekday()] = 1.0
+        for j, step in enumerate(steps):
+            x[i, 8 + j] = float(day >= step)
     return x
 
 
 def _trend_delta(
-    metric: str, values: dict[date, int], baseline: tuple[date, date], live: tuple[date, date]
+    metric: str,
+    values: dict[date, int],
+    baseline: tuple[date, date],
+    live: tuple[date, date],
+    projection: list[float] | None = None,
+    steps: list[date] = (),
 ) -> Delta:
-    """Actual per-day mean while live against the baseline trend projected over those days."""
+    """Actual per-day mean while live against the baseline trend projected over those days.
+    The projected value for each live day is appended to ``projection`` when given."""
     b_days = [baseline[0] + timedelta(days=i) for i in range((baseline[1] - baseline[0]).days + 1)]
     a_days = [live[0] + timedelta(days=i) for i in range((live[1] - live[0]).days + 1)]
     if len(b_days) < MIN_BASELINE_DAYS or not a_days:
         return Delta(metric, None, None, None)
-    xb, xa = _design(b_days, live[0]), _design(a_days, live[0])
+    steps = [s for s in steps if baseline[0] < s <= baseline[1]]
+    xb, xa = _design(b_days, live[0], steps), _design(a_days, live[0], steps)
     yb = np.log1p([values.get(d, 0) for d in b_days])
     actual = np.array([values.get(d, 0) for d in a_days], dtype=float)
     beta, *_ = np.linalg.lstsq(xb, yb, rcond=None)
     predicted = xa @ beta
-    expected = float(np.expm1(predicted).clip(min=0).mean())
+    expected_days = np.expm1(predicted).clip(min=0)
+    if projection is not None:
+        projection.extend(round(float(v), 2) for v in expected_days)
+    expected = float(expected_days.mean())
     observed = float(actual.mean())
     residuals = yb - xb @ beta
     s2 = float(residuals @ residuals) / (len(b_days) - xb.shape[1])
@@ -275,6 +291,8 @@ def version_impact(app: App, window: int = 14, platform: str | None = None) -> l
                     downloads,
                     (trend_start, released - timedelta(days=1)),
                     (released, a_end),
+                    impact.projection,
+                    steps=[p.first_seen for p in versions[:i]],
                 )
             )
             impact.deltas.append(
