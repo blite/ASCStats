@@ -85,7 +85,9 @@ the days just before it:
 releases, so each side contains one version only. It is a before/after comparison, not an
 experiment: seasonality, features and marketing land in the same windows, which is why every
 delta carries a Welch t-score and the dashboard only bolds |t| ≥ 2. Update rows (product type
-`7`/`7F`/`7T`/`F7`) date releases but never count as downloads.
+`7`/`7F`/`7T`/`F7`) date releases but never count as downloads, and neither do redownloads
+(`3`/`3F`/`3T`/`F3`). Mac and iOS share an app record but not version numbers, so versions are
+dated and compared per platform (Mac product types start with `F`).
 
 ## Quick start (Docker Compose)
 

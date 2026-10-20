@@ -6,7 +6,15 @@ from django.db.models import Sum
 from django.shortcuts import render
 from django.utils import timezone
 
-from .models import DOWNLOAD_ROWS, App, AppVersion, ConversionMetric, IngestionRun, SalesRow
+from .models import (
+    DOWNLOAD_ROWS,
+    MAC_OS,
+    App,
+    AppVersion,
+    ConversionMetric,
+    IngestionRun,
+    SalesRow,
+)
 from .versions import version_impact
 
 WIDTH, HEIGHT, PAD = 720, 260, 36
@@ -51,10 +59,17 @@ def chart(request):
             y = HEIGHT - PAD - (HEIGHT - 2 * PAD) * min(rate, 1)
             line.append(f"{x + step / 2:.1f},{y:.1f}")
     releases = [
-        {"x": round(PAD + (v.first_seen - start).days * step, 1), "label": v.version}
+        {
+            "x": round(PAD + (v.first_seen - start).days * step, 1),
+            "label": ("Mac " if v.platform == MAC_OS else "v") + v.version,
+        }
         for v in AppVersion.objects.filter(app=app, first_seen__range=(start + timedelta(1), end))
     ]
-    impacts = [i for i in version_impact(app) if i.before_days][-6:][::-1]
+    impacts = sorted(
+        (i for i in version_impact(app) if i.before_days),
+        key=lambda i: i.released_on,
+        reverse=True,
+    )[:8]
     context = {
         "releases": releases,
         "impacts": impacts,

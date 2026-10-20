@@ -45,6 +45,7 @@ class DeltaOut(Schema):
 
 
 class VersionImpactOut(Schema):
+    platform: str  # IOS or MAC_OS: each platform has its own versions and rows
     version: str
     released_on: date  # first day the version appears in sales data
     before_days: int
@@ -113,10 +114,11 @@ def conversion(request, apple_id: int, start: date | None = None, end: date | No
 
 
 @api.get("/apps/{apple_id}/versions", response=list[VersionImpactOut], tags=["versions"])
-def versions(request, apple_id: int, window: int = 14):
-    """Each version's first ``window`` days live against the ``window`` days before it."""
+def versions(request, apple_id: int, window: int = 14, platform: str | None = None):
+    """Each version's first ``window`` days live against the ``window`` days before it, per
+    platform (``IOS`` or ``MAC_OS``; both by default)."""
     app = get_object_or_404(App, apple_id=apple_id)
-    return version_impact(app, window=max(3, min(window, 90)))
+    return version_impact(app, window=max(3, min(window, 90)), platform=platform)
 
 
 @api.get("/runs", response=list[RunOut], tags=["ops"])

@@ -3,9 +3,14 @@
 from django.db import models
 from django.db.models import Q
 
-# Product Type Identifiers for app updates. They carry the new version in the Version column
-# (useful for dating releases) but are not downloads.
+# Product Type Identifiers. Updates carry the new version in the Version column (useful for
+# dating releases); neither updates nor redownloads count as downloads (Apple's "units").
 UPDATE_PRODUCT_TYPES = ["7", "7F", "7T", "F7"]
+REDOWNLOAD_PRODUCT_TYPES = ["3", "3F", "3T", "F3"]
+# Mac product types start with F (F1 app, F7 update, F3 redownload, FI1 in-app purchase).
+# Mac and iOS share one app record but ship their own version numbers.
+IOS, MAC_OS = "IOS", "MAC_OS"  # App Store Connect's platform names
+MAC_ROWS = Q(product_type__startswith="F")
 
 
 class Report(models.TextChoices):
@@ -53,9 +58,21 @@ class SalesRow(models.Model):
         return f"{self.report_date} {self.sku} {self.country_code} x{self.units}"
 
 
-# Sales rows that count as downloads: the app itself, not its in-app purchases or updates.
-DOWNLOAD_ROWS = Q(parent_identifier="") & ~Q(product_type__in=UPDATE_PRODUCT_TYPES)
+# Sales rows that count as downloads: the app itself, not its in-app purchases, updates or
+# redownloads.
+DOWNLOAD_ROWS = Q(parent_identifier="") & ~Q(
+    product_type__in=UPDATE_PRODUCT_TYPES + REDOWNLOAD_PRODUCT_TYPES
+)
 UPDATE_ROWS = Q(parent_identifier="", product_type__in=UPDATE_PRODUCT_TYPES)
+IAP_ROWS = ~Q(parent_identifier="")
+
+
+def platform_rows(platform: str) -> Q:
+    return MAC_ROWS if platform == MAC_OS else ~MAC_ROWS
+
+
+def platform_of(product_type: str) -> str:
+    return MAC_OS if product_type.startswith("F") else IOS
 
 
 class AnalyticsRow(models.Model):
@@ -106,23 +123,25 @@ class ConversionMetric(models.Model):
 
 
 class AppVersion(models.Model):
-    """A shipped version, dated by the first day it shows up in the sales report (downloads
-    and updates carry the version the customer received). App Store Connect's own version
-    list adds state and creation time when the pipeline runs against the real API."""
+    """A shipped version of one platform, dated by the first day it shows up in the sales
+    report (downloads and updates carry the version the customer received). App Store
+    Connect's own version list adds state and creation time when running on real data."""
 
     app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="versions")
     version = models.CharField(max_length=50)
     first_seen = models.DateField(null=True, blank=True, help_text="First day in sales data")
-    platform = models.CharField(max_length=20, blank=True)
+    platform = models.CharField(max_length=20, default=IOS, help_text="IOS or MAC_OS")
     asc_state = models.CharField(max_length=40, blank=True)
     asc_created = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["app", "version"], name="uniq_version")]
-        ordering = ["app", "first_seen"]
+        constraints = [
+            models.UniqueConstraint(fields=["app", "platform", "version"], name="uniq_version")
+        ]
+        ordering = ["app", "platform", "first_seen"]
 
     def __str__(self) -> str:
-        return f"{self.app_id} {self.version}"
+        return f"{self.app_id} {self.platform} {self.version}"
 
 
 class IngestionRun(models.Model):

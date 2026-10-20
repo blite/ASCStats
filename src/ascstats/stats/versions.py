@@ -19,26 +19,43 @@ from django.db.models import Max, Min, Q, Sum
 
 from ascstats.asc.client import ASCClient
 
-from .models import DOWNLOAD_ROWS, UPDATE_ROWS, App, AppVersion, ConversionMetric, SalesRow
+from .models import (
+    DOWNLOAD_ROWS,
+    IAP_ROWS,
+    IOS,
+    MAC_OS,
+    UPDATE_ROWS,
+    App,
+    AppVersion,
+    ConversionMetric,
+    SalesRow,
+    platform_rows,
+)
 
 SIGNIFICANT_T = 2.0
 
 
 def build_versions(app: App) -> int:
-    """Upsert AppVersion.first_seen from the loaded sales rows. Idempotent."""
-    first_seen = (
-        SalesRow.objects.filter(DOWNLOAD_ROWS | UPDATE_ROWS, app=app)
-        .exclude(version="")
-        .values("version")
-        .annotate(first=Min("report_date"))
-    )
+    """Upsert AppVersion.first_seen per platform from the loaded sales rows. Idempotent."""
     written = 0
     with transaction.atomic():
-        for row in first_seen:
-            AppVersion.objects.update_or_create(
-                app=app, version=row["version"], defaults={"first_seen": row["first"]}
+        for platform in (IOS, MAC_OS):
+            first_seen = (
+                SalesRow.objects.filter(
+                    (DOWNLOAD_ROWS | UPDATE_ROWS) & platform_rows(platform), app=app
+                )
+                .exclude(version="")
+                .values("version")
+                .annotate(first=Min("report_date"))
             )
-            written += 1
+            for row in first_seen:
+                AppVersion.objects.update_or_create(
+                    app=app,
+                    platform=platform,
+                    version=row["version"],
+                    defaults={"first_seen": row["first"]},
+                )
+                written += 1
     return written
 
 
@@ -50,9 +67,9 @@ def sync_asc_versions(client: ASCClient, app: App) -> int:
         created = attrs.get("createdDate")
         AppVersion.objects.update_or_create(
             app=app,
+            platform=attrs.get("platform") or IOS,
             version=attrs["versionString"],
             defaults={
-                "platform": attrs.get("platform") or "",
                 "asc_state": attrs.get("appVersionState") or attrs.get("appStoreState") or "",
                 "asc_created": datetime.fromisoformat(created) if created else None,
             },
@@ -76,6 +93,7 @@ class Delta:
 
 @dataclass
 class VersionImpact:
+    platform: str
     version: str
     released_on: date
     before_days: int
@@ -133,57 +151,66 @@ def _conversion(app: App, start: date, end: date) -> float | None:
     return agg["ft"] / agg["pv"] if agg["pv"] else None
 
 
-def version_impact(app: App, window: int = 14) -> list[VersionImpact]:
-    """For every dated version: up to ``window`` days live vs up to ``window`` days before.
-    Windows stop at the neighbouring releases and at the edges of the loaded data, so each
-    side only ever contains one version."""
+def version_impact(app: App, window: int = 14, platform: str | None = None) -> list[VersionImpact]:
+    """For every dated version: up to ``window`` days live vs up to ``window`` days before,
+    counting only that platform's rows. Windows stop at the neighbouring releases of the same
+    platform and at the edges of the loaded data, so each side only ever contains one version.
+    Conversion comes from App Store analytics, which is iOS-only here."""
     span = SalesRow.objects.filter(app=app).aggregate(
         first=Min("report_date"), last=Max("report_date")
     )
     if span["first"] is None:
         return []
     data_start, data_end = span["first"], span["last"]
-    versions = list(
-        AppVersion.objects.filter(app=app, first_seen__isnull=False).order_by("first_seen")
-    )
-    downloads = _daily(app, DOWNLOAD_ROWS, data_start, data_end)
-    iap = _daily(app, ~Q(parent_identifier=""), data_start, data_end)
-    updates = _daily(app, UPDATE_ROWS, data_start, data_end)
-
     out = []
-    for i, v in enumerate(versions):
-        released = v.first_seen
-        prev_release = versions[i - 1].first_seen if i else data_start
-        next_release = versions[i + 1].first_seen if i + 1 < len(versions) else None
-        b_start = max(released - timedelta(days=window), prev_release, data_start)
-        b_end = released - timedelta(days=1)
-        a_end = min(released + timedelta(days=window - 1), data_end)
-        if next_release:
-            a_end = min(a_end, next_release - timedelta(days=1))
-        if b_end < b_start:  # nothing loaded before this version: no baseline
-            b_end = b_start - timedelta(days=1)
-        impact = VersionImpact(
-            version=v.version,
-            released_on=released,
-            before_days=(b_end - b_start).days + 1,
-            after_days=(a_end - released).days + 1,
-            updates=int(sum(_series(updates, released, a_end))),
+    for plat in [platform] if platform else [IOS, MAC_OS]:
+        versions = list(
+            AppVersion.objects.filter(app=app, platform=plat, first_seen__isnull=False).order_by(
+                "first_seen"
+            )
         )
-        for metric, values in (("downloads/day", downloads), ("in-app purchases/day", iap)):
+        if not versions:
+            continue
+        rows = platform_rows(plat)
+        downloads = _daily(app, DOWNLOAD_ROWS & rows, data_start, data_end)
+        iap = _daily(app, IAP_ROWS & rows, data_start, data_end)
+        updates = _daily(app, UPDATE_ROWS & rows, data_start, data_end)
+        for i, v in enumerate(versions):
+            released = v.first_seen
+            prev_release = versions[i - 1].first_seen if i else data_start
+            next_release = versions[i + 1].first_seen if i + 1 < len(versions) else None
+            b_start = max(released - timedelta(days=window), prev_release, data_start)
+            b_end = released - timedelta(days=1)
+            a_end = min(released + timedelta(days=window - 1), data_end)
+            if next_release:
+                a_end = min(a_end, next_release - timedelta(days=1))
+            if b_end < b_start:  # nothing loaded before this version: no baseline
+                b_end = b_start - timedelta(days=1)
+            impact = VersionImpact(
+                platform=plat,
+                version=v.version,
+                released_on=released,
+                before_days=(b_end - b_start).days + 1,
+                after_days=(a_end - released).days + 1,
+                updates=int(sum(_series(updates, released, a_end))),
+            )
+            for metric, values in (("downloads/day", downloads), ("in-app purchases/day", iap)):
+                impact.deltas.append(
+                    _mean_delta(
+                        metric, _series(values, b_start, b_end), _series(values, released, a_end)
+                    )
+                )
+            conv_b = conv_a = None
+            if plat == IOS:
+                conv_b = _conversion(app, b_start, b_end) if impact.before_days else None
+                conv_a = _conversion(app, released, a_end)
             impact.deltas.append(
-                _mean_delta(
-                    metric, _series(values, b_start, b_end), _series(values, released, a_end)
+                Delta(
+                    "conversion rate",
+                    None if conv_b is None else round(conv_b, 4),
+                    None if conv_a is None else round(conv_a, 4),
+                    _pct(conv_b, conv_a),
                 )
             )
-        conv_b = _conversion(app, b_start, b_end) if impact.before_days else None
-        conv_a = _conversion(app, released, a_end)
-        impact.deltas.append(
-            Delta(
-                "conversion rate",
-                None if conv_b is None else round(conv_b, 4),
-                None if conv_a is None else round(conv_a, 4),
-                _pct(conv_b, conv_a),
-            )
-        )
-        out.append(impact)
+            out.append(impact)
     return out
