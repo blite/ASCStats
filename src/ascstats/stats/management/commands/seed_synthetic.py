@@ -33,11 +33,11 @@ class Command(BaseCommand):
             for report in Report.values:
                 pipeline.run(report, day)
             snapshot(day, source="synthetic")
-            for app in App.objects.filter(is_active=True):
+            for app in App.objects.active():
                 import_reviews(app, None, day)
             day += timedelta(days=1)
         metrics = build_conversion_metrics(start, end)
-        for app in App.objects.filter(is_active=True):
+        for app in App.objects.active():
             build_versions(app)
             import_summaries(app, None)
         self.stdout.write(

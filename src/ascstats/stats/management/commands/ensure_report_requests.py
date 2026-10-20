@@ -29,7 +29,7 @@ class Command(BaseCommand):
 
         requester = ReportRequester(client_from_env())
         errors = []
-        for app in App.objects.filter(is_active=True):
+        for app in App.objects.active():
             if check_only:
                 running = requester.running_request(app.apple_id)
                 if running is None:

@@ -87,8 +87,9 @@ def test_source_mix_shares_add_up_and_thin_sources_fold(apps):
                                      event="First-time download", counts=dl, **common))  # fmt: skip
     AnalyticsRow.objects.bulk_create(rows)
     mix = funnel.source_mix(app, END)
-    assert "Web referrer" not in mix["sources"]
-    assert "Other" in mix["sources"]
+    sources = [line["src"] for line in mix["lines"]]
+    assert "Web referrer" not in sources
+    assert "Other" in sources
     assert mix["folded"] == ["Web referrer"]
     rates = {line["src"]: line["latest"] for line in mix["lines"]}
     assert rates["App Store search"] == "5.0%"

@@ -20,7 +20,7 @@ class Command(BaseCommand):
         parser.add_argument("--date", type=date.fromisoformat, help="synthetic mode: the day")
 
     def handle(self, *, app, date, **_):
-        apps = App.objects.filter(apple_id=app) if app else App.objects.filter(is_active=True)
+        apps = App.objects.filter(apple_id=app) if app else App.objects.active()
         client = None
         if settings.ASC_SOURCE == "asc":
             from ascstats.asc.credentials import client_from_env

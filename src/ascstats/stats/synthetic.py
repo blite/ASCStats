@@ -19,6 +19,7 @@ import math
 import random
 from dataclasses import dataclass
 from datetime import date, timedelta
+from typing import NamedTuple
 
 from .parsing import CRASHES_REPORT, DISCOVERY_REPORT, DOWNLOADS_REPORT, SESSIONS_REPORT
 
@@ -68,7 +69,15 @@ EPOCH = date(2025, 1, 1)
 # Release history per app: (version, release day, demand multiplier from that day on). The
 # multipliers are the "true" effect of each version, so the version-impact analysis has a
 # known answer to find. 2.1 and 1.7 are regressions.
-RELEASES = {
+
+
+class Release(NamedTuple):
+    version: str
+    day: date
+    effect: float  # demand multiplier from that day on
+
+
+_RELEASE_TABLE = {
     1000000001: [
         ("1.0", EPOCH, 1.0), ("1.1", date(2025, 4, 14), 1.0), ("1.2", date(2025, 8, 4), 1.1),
         ("2.0", date(2026, 1, 12), 1.3), ("2.0.1", date(2026, 1, 20), 1.0),
@@ -84,6 +93,7 @@ RELEASES = {
         ("1.7", date(2026, 9, 28), 0.8),
     ],
 }  # fmt: skip
+RELEASES = {app_id: [Release(*r) for r in rows] for app_id, rows in _RELEASE_TABLE.items()}
 UPDATE_DAYS = 21  # how long a release keeps producing update rows
 COUNTRIES = {  # country -> (weight, currency, proceeds multiplier vs USD price)
     "US": (0.45, "USD", 1.0),
@@ -142,14 +152,16 @@ def _rng(*parts: object) -> random.Random:
     return random.Random(int.from_bytes(seed[:8], "big"))
 
 
+def release_on(apple_id: int, day: date) -> Release:
+    """The release live on ``day``."""
+    return next(r for r in reversed(RELEASES[apple_id]) if r.day <= day)
+
+
 def version_on(app: SyntheticApp, day: date) -> tuple[str, date, float]:
     """(current version, its release day, cumulative demand effect of every release so far)."""
-    current, effect = RELEASES[app.apple_id][0], 1.0
-    for release in RELEASES[app.apple_id]:
-        if release[1] > day:
-            break
-        current, effect = release, effect * release[2]
-    return current[0], current[1], effect
+    live = release_on(app.apple_id, day)
+    effect = math.prod(r.effect for r in RELEASES[app.apple_id] if r.day <= day)
+    return live.version, live.day, effect
 
 
 def _demand(app: SyntheticApp, day: date) -> float:
@@ -230,8 +242,7 @@ def analytics_report(app: SyntheticApp, report_name: str, day: date) -> bytes:
     rng = _rng("analytics", report_name, app.apple_id, day)
     rows = []
     if report_name in (CRASHES_REPORT, SESSIONS_REPORT):
-        version, _, _ = version_on(app, day)
-        effect = next(r[2] for r in RELEASES[app.apple_id] if r[0] == version)
+        version, _, effect = release_on(app.apple_id, day)
         for device in DEVICES:
             total = sum(n for (_, d), n in downloads(app, day).items() if d == device)
             sessions = round(total * SESSIONS_PER_DOWNLOAD * rng.uniform(0.9, 1.1))
@@ -300,9 +311,14 @@ def version_stars(effect: float) -> float:
     return max(1.5, min(4.9, 4.4 + 2.5 * (effect - 1.0)))
 
 
+def _rating_history(apple_id: int, day: date) -> dict[date, tuple[int, int]]:
+    """Cumulative (count, star_sum) per day since EPOCH, all storefronts together. Computed
+    once per app up to tomorrow (or ``day`` if later) and cached, so seeding N days is O(N)."""
+    return _history_until(apple_id, max(day, date.today() + timedelta(days=1)))
+
+
 @functools.cache
-def _rating_history(apple_id: int, until: date) -> dict[date, tuple[int, int]]:
-    """Cumulative (count, star_sum) per day since EPOCH, all storefronts together."""
+def _history_until(apple_id: int, until: date) -> dict[date, tuple[int, int]]:
     app = app_by_apple_id(apple_id)
     count = stars = 0
     out, day = {}, EPOCH
@@ -310,8 +326,7 @@ def _rating_history(apple_id: int, until: date) -> dict[date, tuple[int, int]]:
         rng = _rng("ratings", apple_id, day)
         new = sum(downloads(app, day).values()) * RATING_RATE
         n = int(new) + (1 if rng.random() < new % 1 else 0)
-        release = next(r for r in reversed(RELEASES[apple_id]) if r[1] <= day)
-        mean = version_stars(release[2])
+        mean = version_stars(release_on(apple_id, day).effect)
         for _ in range(n):
             stars += max(1, min(5, round(rng.gauss(mean, 0.9))))
         count += n
@@ -343,8 +358,7 @@ def reviews(app: SyntheticApp, day: date) -> list[dict]:
     rng = _rng("reviews", app.apple_id, day)
     history = _rating_history(app.apple_id, day)
     new = history[day][0] - history.get(day - timedelta(days=1), (0, 0))[0]
-    version, _released, _ = version_on(app, day)
-    effect = next(r[2] for r in RELEASES[app.apple_id] if r[0] == version)
+    version, _released, effect = release_on(app.apple_id, day)
     out = []
     for k in range(sum(rng.random() < 0.1 for _ in range(new))):
         rating = max(1, min(5, round(rng.gauss(version_stars(effect), 1.0))))

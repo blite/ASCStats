@@ -16,7 +16,7 @@ def dashboard(request):
         return render(request, "stats/dashboard.html", {"empty": True, "page": "overview"})
     tiles = d.tiles(end)
     board = d.scoreboard(end)
-    apps = [lane.app for lane in board.lanes] or list(App.objects.filter(is_active=True))
+    apps = [lane.app for lane in board.lanes] or list(App.objects.active())
     context = {
         "page": "overview",
         "end": end,
@@ -25,7 +25,7 @@ def dashboard(request):
         "calendar": d.pipeline_calendar(end),
         "apps": apps,
         "windows": WINDOWS,
-        "app_count": App.objects.filter(is_active=True).count(),
+        "app_count": App.objects.active().count(),
         "best": max(
             (r for r in board.releases if r["kind"] == "up"),
             key=lambda r: r["impact"].deltas[1].change_pct,
@@ -37,7 +37,7 @@ def dashboard(request):
 
 
 def chart(request):
-    app = App.objects.filter(apple_id=request.GET.get("app"), is_active=True).first()
+    app = App.objects.active().filter(apple_id=request.GET.get("app")).first()
     end = d.last_day()
     if app is None or end is None:
         return render(request, "stats/_chart.html", {"empty": True})
@@ -50,7 +50,7 @@ def revenue(request):
     end = d.last_day()
     if end is None:
         return render(request, "stats/revenue.html", {"empty": True, "page": "revenue"})
-    return render(request, "stats/revenue.html", {"page": "revenue", **r.revenue(end)})
+    return render(request, "stats/revenue.html", {"page": "revenue", "end": end, **r.revenue(end)})
 
 
 def funnel(request):
@@ -62,7 +62,7 @@ def funnel(request):
 
 
 def funnel_app(request):
-    app = App.objects.filter(apple_id=request.GET.get("app"), is_active=True).first()
+    app = App.objects.active().filter(apple_id=request.GET.get("app")).first()
     end = f.last_day()
     if app is None or end is None:
         return render(request, "stats/_funnel_app.html", {"empty": True})

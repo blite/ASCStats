@@ -14,10 +14,9 @@ from dataclasses import dataclass
 from django.db.models import Sum
 from django.db.models.fields.json import KeyTextTransform
 
-from .models import AnalyticsRow, App
+from .models import MAC_ROWS, AnalyticsRow, App
 from .parsing import CRASHES_REPORT, SESSIONS_REPORT
 
-MAC_DEVICES = {"Desktop", "Mac"}
 MIN_SESSIONS = 200  # below this a crash rate is mostly noise
 
 
@@ -37,8 +36,7 @@ class VersionCrashes:
 
 def _by_version(app: App, report: str) -> dict[str, tuple[int, int]]:
     rows = (
-        AnalyticsRow.objects.filter(app=app, report_name=report)
-        .exclude(device__in=MAC_DEVICES)
+        AnalyticsRow.objects.filter(~MAC_ROWS, app=app, report_name=report)
         .annotate(version=KeyTextTransform("App Version", "dimensions"))
         .values("version")
         .annotate(n=Sum("counts"), devices=Sum("unique_counts"))

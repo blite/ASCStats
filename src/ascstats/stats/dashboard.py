@@ -8,20 +8,22 @@ from datetime import date, timedelta
 
 from django.db.models import Max, Q, Sum
 
+from .charts import days as _days
+from .charts import fmt_day as _fmt_day
+from .charts import nice_axis, smooth, spark
 from .crashes import version_crashes
 from .models import (
     ACTIVE_ROWS,
     DOWNLOAD_ROWS,
     IAP_ROWS,
     IOS,
-    MAC_OS,
     UPDATE_ROWS,
     App,
     IngestionRun,
     Report,
     SalesRow,
 )
-from .ratings import current, version_ratings
+from .ratings import current, daily_new_ratings, version_ratings
 from .versions import VersionImpact, version_impact
 
 
@@ -37,27 +39,9 @@ def _daily(q: Q, start: date, end: date, **filters) -> dict[date, int]:
     )
 
 
-def _days(start: date, end: date) -> list[date]:
-    return [start + timedelta(days=i) for i in range((end - start).days + 1)]
-
-
-def _smooth(values: list[float], width: int = 7) -> list[float]:
-    out, total = [], 0.0
-    for i, v in enumerate(values):
-        total += v
-        if i >= width:
-            total -= values[i - width]
-        out.append(total / min(i + 1, width))
-    return out
-
-
-def _fmt_day(day: date) -> str:
-    return f"{day:%b} {day.day}, {day.year}"
-
-
 def _effect(impact: VersionImpact) -> tuple[str, str]:
     """(css class, one-line verdict) for a release, from its trend-adjusted delta."""
-    trend = impact.deltas[1]
+    trend = impact.trend
     if trend.change_pct is None:
         return "unknown", "not enough history for a trend"
     verdict = f"{trend.change_pct:+.0f}% vs trend (t {trend.t_score})"
@@ -88,14 +72,6 @@ class Tile:
         return "up" if self.change_pct > 0 else "down"
 
 
-def _spark(values: list[float], width: int = 120, height: int = 32) -> str:
-    peak = max(values) or 1
-    step = width / max(len(values) - 1, 1)
-    return " ".join(
-        f"{i * step:.1f},{height - 2 - (height - 4) * v / peak:.1f}" for i, v in enumerate(values)
-    )
-
-
 def tiles(end: date) -> list[Tile]:
     start, prev_start = end - timedelta(days=29), end - timedelta(days=59)
     spark_days = _days(end - timedelta(days=89), end)
@@ -108,8 +84,10 @@ def tiles(end: date) -> list[Tile]:
         daily = _daily(q, spark_days[0], end)
         current = sum(v for d, v in daily.items() if d >= start)
         previous = sum(_daily(q, prev_start, start - timedelta(days=1)).values())
-        series = _smooth([daily.get(d, 0) for d in spark_days])
-        out.append(Tile(label, current, previous, _spark(series), "last 30 days vs the 30 before"))
+        series = smooth([daily.get(d, 0) for d in spark_days])
+        out.append(
+            Tile(label, current, previous, spark(series, 120, 32), "last 30 days vs the 30 before")
+        )
     return out
 
 
@@ -151,7 +129,7 @@ def scoreboard(end: date, days: int = 365) -> Scoreboard:
         .annotate(Sum("units"))
     )
     apps = sorted(
-        (a for a in App.objects.filter(is_active=True) if totals.get(a.pk, 0) > 0),
+        (a for a in App.objects.active() if totals.get(a.pk, 0) > 0),
         key=lambda a: -totals[a.pk],
     )
     lanes, releases = [], []
@@ -160,18 +138,18 @@ def scoreboard(end: date, days: int = 365) -> Scoreboard:
         top = LANE_TOP + n * LANE_H
         base, height = top + LANE_H - 10, LANE_H - 18
         daily = _daily(DOWNLOAD_ROWS, start, end, app=app)
-        series = _smooth([daily.get(d, 0) for d in span])
+        series = smooth([daily.get(d, 0) for d in span])
         peak = max(series) or 1
         pts = [(LANE_X0 + i * step, base - height * v / peak) for i, v in enumerate(series)]
         line = " ".join(f"{px:.1f},{py:.1f}" for px, py in pts)
         area = f"M{LANE_X0},{base} L" + line.replace(" ", " L") + f" L{LANE_X1},{base} Z"
         lane = Lane(app, top, area, line, totals[app.pk])
-        for impact in version_impact(app, platform=IOS):
-            if impact.released_on < start or not impact.before_days:
+        for impact in version_impact(app, platform=IOS, since=start):
+            if not impact.before_days:
                 continue
             kind, verdict = _effect(impact)
             counts[kind] += 1
-            naive = impact.deltas[0].change_pct
+            naive = impact.naive.change_pct
             tip = (
                 f"{app.name} {impact.version}\n{_fmt_day(impact.released_on)}\n"
                 f"{verdict}\nnaive before/after: " + ("n/a" if naive is None else f"{naive:+.0f}%")
@@ -254,7 +232,7 @@ def app_detail(app: App, end: date, days: int) -> dict:
     span = _days(start, end)
     daily = _daily(DOWNLOAD_ROWS, start, end, app=app)
     values = [daily.get(d, 0) for d in span]
-    avg = _smooth(values)
+    avg = smooth(values)
     impacts = version_impact(app)
     projections = []
     for imp in impacts:
@@ -262,8 +240,7 @@ def app_detail(app: App, end: date, days: int) -> dict:
             days_live = _days(imp.released_on, imp.released_on + timedelta(len(imp.projection) - 1))
             projections.append(list(zip(days_live, imp.projection, strict=True)))
     peak = max([*values, *(v for p in projections for _, v in p), 1])
-    tick = _nice_step(peak)
-    nice = tick * -(-peak // tick)  # ceiling to a whole number of ticks
+    nice, tick_values = nice_axis(peak)
     plot_w, plot_h = W - PAD_L - PAD_R, H - PAD_T - PAD_B
     step = plot_w / len(span)
     base = PAD_T + plot_h
@@ -307,7 +284,7 @@ def app_detail(app: App, end: date, days: int) -> dict:
                     "tip": f"iOS {imp.version} · {_fmt_day(imp.released_on)}\n{verdict}",
                 }
             )
-    grid = [{"y": y(v), "label": f"{v:g}"} for v in range(0, int(nice) + 1, int(tick))]
+    grid = [{"y": y(v), "label": f"{v:g}"} for v in tick_values]
     xticks = [
         {"x": xc(d), "label": f"{d:%b} {d.day}"}
         for d in span
@@ -318,20 +295,21 @@ def app_detail(app: App, end: date, days: int) -> dict:
         key=lambda i: i.released_on,
         reverse=True,
     )
-    rated = {v.version: v for v in version_ratings(app)}
+    new_ratings = daily_new_ratings(app)  # one pass over the snapshots for both uses
+    rated = {v.version: v for v in version_ratings(app, new_ratings)}
     crashed = version_crashes(app)
     table = []
     for imp in rows:
         kind, verdict = _effect(imp)
-        trend = imp.deltas[1]
+        trend = imp.trend
         pct = max(-100.0, min(100.0, trend.change_pct or 0))
         table.append(
             {
                 "impact": imp,
                 "kind": kind if imp.platform == IOS or trend.change_pct is not None else "unknown",
-                "naive": imp.deltas[0],
+                "naive": imp.naive,
                 "trend": trend,
-                "iap": imp.deltas[2],
+                "iap": imp.iap,
                 "ratings": rated.get(imp.version) if imp.platform == IOS else None,
                 "crashes": crashed.get(imp.version) if imp.platform == IOS else None,
                 "bar_x": 60 if pct >= 0 else round(60 + 0.58 * pct, 1),
@@ -359,16 +337,5 @@ def app_detail(app: App, end: date, days: int) -> dict:
         "pad_t": PAD_T,
         "base": base,
         "plot_h": plot_h,
-        "has_mac": any(i.platform == MAC_OS for i in impacts),
-        "rating": current(app),
+        "rating": current(app, new_ratings),
     }
-
-
-def _nice_step(peak: float, max_ticks: int = 5) -> int:
-    """The smallest 1-2-5 step that covers ``peak`` in at most ``max_ticks`` intervals."""
-    magnitude = 1
-    while True:
-        for unit in (1, 2, 5):
-            if peak / (unit * magnitude) <= max_ticks:
-                return unit * magnitude
-        magnitude *= 10

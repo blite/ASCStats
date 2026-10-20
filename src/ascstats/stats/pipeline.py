@@ -126,7 +126,7 @@ class Pipeline:
             run.save()
 
     def _apps(self, app: App | None) -> list[App]:
-        return [app] if app else list(App.objects.filter(is_active=True))
+        return [app] if app else list(App.objects.active())
 
     # --- check ---------------------------------------------------------------------------
 

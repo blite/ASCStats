@@ -14,9 +14,7 @@ class Command(BaseCommand):
         parser.add_argument("--xcom", action="store_true", help="write /airflow/xcom/return.json")
 
     def handle(self, *, xcom, **_):
-        ids = [
-            str(i) for i in App.objects.filter(is_active=True).values_list("apple_id", flat=True)
-        ]
+        ids = [str(i) for i in App.objects.active().values_list("apple_id", flat=True)]
         payload = json.dumps(ids)
         if xcom:
             Path("/airflow/xcom/return.json").write_text(payload)

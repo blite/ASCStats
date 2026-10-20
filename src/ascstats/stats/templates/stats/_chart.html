@@ -1,4 +1,4 @@
-{% load humanize %}{% if empty %}<p class="muted">No data for this app yet.</p>{% else %}
+{% load humanize stats_extras %}{% if empty %}<p class="muted">No data for this app yet.</p>{% else %}
 <div class="split" style="margin: 0 0 8px">
   <span><strong>{{ total|intcomma }}</strong> downloads, {{ start|date:"M j" }} – {{ end|date:"M j, Y" }}</span>
   {% if best_day %}<span class="muted">best day {{ best_day.1|date:"M j" }}: {{ best_day.0 }}</span>{% endif %}
@@ -13,7 +13,7 @@
   {% for t in xticks %}<text class="tick" x="{{ t.x }}" y="{{ height|add:'-8' }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
   {% for m in markers %}<g data-tip="{{ m.tip }}" tabindex="0" aria-label="{{ m.tip }}">
     <line x1="{{ m.x }}" y1="{{ pad_t|add:'-6' }}" x2="{{ m.x }}" y2="{{ base }}" stroke="var(--axis)" stroke-width="1"/>
-    <circle class="rel {{ m.kind }}{% if m.kind == 'mac' %} neutral{% endif %}" cx="{{ m.x }}" cy="{{ pad_t|add:'-12' }}" r="5"/>
+    <circle class="rel {{ m.kind }}" cx="{{ m.x }}" cy="{{ pad_t|add:'-12' }}" r="5"/>
     <text class="tick" x="{{ m.x }}" y="{{ pad_t|add:'-22' }}" text-anchor="middle" style="fill: var(--ink-2)">{{ m.label }}</text>
   </g>{% endfor %}
   {% for b in bars %}<g class="day" data-tip="{{ b.tip }}">
@@ -37,15 +37,15 @@
     <td>{{ r.impact.version }}{% if r.impact.platform == "MAC_OS" %} <span class="muted">Mac</span>{% endif %}</td>
     <td>{{ r.impact.released_on|date:"M j, Y" }}</td>
     <td class="num">{{ r.naive.before|default_if_none:"–" }} → {{ r.naive.after|default_if_none:"–" }}
-      <span class="muted">({% if r.naive.change_pct is not None %}{% if r.naive.change_pct > 0 %}+{% endif %}{{ r.naive.change_pct|floatformat:0 }}%{% else %}–{% endif %})</span></td>
+      <span class="muted">({{ r.naive.change_pct|signed_pct }})</span></td>
     <td>{% if r.trend.change_pct is not None %}
       <span style="display:inline-flex; align-items:center; gap:8px">
         <svg width="120" height="14" role="img" aria-label="{{ r.trend.change_pct }} percent vs trend"><line x1="60" y1="0" x2="60" y2="14" stroke="var(--axis)"/>
           <rect class="rel {% if r.trend.significant %}{{ r.kind }}{% else %}neutral{% endif %}" style="stroke: none" x="{{ r.bar_x }}" y="3" width="{{ r.bar_w }}" height="8" rx="2"/></svg>
-        {% if r.trend.significant %}<strong>{% endif %}{% if r.trend.change_pct > 0 %}+{% endif %}{{ r.trend.change_pct|floatformat:0 }}%{% if r.trend.significant %}</strong>{% endif %}
+        {% if r.trend.significant %}<strong>{% endif %}{{ r.trend.change_pct|signed_pct }}{% if r.trend.significant %}</strong>{% endif %}
         <span class="muted">t {{ r.trend.t_score }}</span></span>
       {% else %}<span class="muted">not enough history</span>{% endif %}</td>
-    <td class="num">{% if r.iap.change_pct is not None %}{% if r.iap.change_pct > 0 %}+{% endif %}{{ r.iap.change_pct|floatformat:0 }}%{% else %}<span class="muted">–</span>{% endif %}</td>
+    <td class="num">{% if r.iap.change_pct is not None %}{{ r.iap.change_pct|signed_pct }}{% else %}<span class="muted">–</span>{% endif %}</td>
     <td class="num">{{ r.impact.updates|intcomma }}</td>
     <td class="num">{% if r.ratings.ratings_per_day is not None %}{{ r.ratings.ratings_per_day }}/day{% if r.ratings.new_average %} · {{ r.ratings.new_average }}★{% endif %}{% else %}<span class="muted">–</span>{% endif %}</td>
     <td class="num">{% if r.ratings.reviews %}{{ r.ratings.reviews }} · {{ r.ratings.review_average }}★{% else %}<span class="muted">–</span>{% endif %}</td>

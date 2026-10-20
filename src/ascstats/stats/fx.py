@@ -50,10 +50,16 @@ def load(start: date, end: date, transport: httpx.BaseTransport | None = None) -
 class Converter:
     """As-of lookup over the stored rates: the latest rate on or before the day."""
 
-    def __init__(self):
+    def __init__(self, since: date | None = None, currencies: set[str] | None = None):
+        """Load only the rates a caller needs: from ``since`` on, for ``currencies``."""
         self._dates: dict[str, list[date]] = defaultdict(list)
         self._rates: dict[str, list[Decimal]] = defaultdict(list)
-        for day, cur, rate in FxRate.objects.order_by("currency", "date").values_list(
+        rates = FxRate.objects.all()
+        if since is not None:
+            rates = rates.filter(date__gte=since)
+        if currencies is not None:
+            rates = rates.filter(currency__in=currencies)
+        for day, cur, rate in rates.order_by("currency", "date").values_list(
             "date", "currency", "usd_per_unit"
         ):
             self._dates[cur].append(day)

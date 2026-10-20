@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 import math
 import statistics
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
@@ -33,6 +34,7 @@ from django.db.models import Max, Min, Q, Sum
 
 from ascstats.asc.client import ASCClient, ReportNotReady
 
+from .charts import days, pct_change
 from .models import (
     DOWNLOAD_ROWS,
     IAP_ROWS,
@@ -128,8 +130,24 @@ class VersionImpact:
     before_days: int
     after_days: int
     updates: int  # update units while the version was live in the window
-    deltas: list[Delta] = field(default_factory=list)
+    deltas: list[Delta] = field(default_factory=list)  # naive, trend, iap, install (API order)
     projection: list[float] = field(default_factory=list)  # trend's expected downloads/day
+
+    @property
+    def naive(self) -> Delta:
+        return self.deltas[0]
+
+    @property
+    def trend(self) -> Delta:
+        return self.deltas[1]
+
+    @property
+    def iap(self) -> Delta:
+        return self.deltas[2]
+
+    @property
+    def install(self) -> Delta:
+        return self.deltas[3]
 
 
 def _welch_t(before: list[float], after: list[float]) -> float | None:
@@ -144,9 +162,8 @@ def _welch_t(before: list[float], after: list[float]) -> float | None:
 
 
 def _pct(before: float | None, after: float | None) -> float | None:
-    if before is None or after is None or before == 0:
-        return None
-    return round(100 * (after - before) / before, 1)
+    change = pct_change(before, after)
+    return None if change is None else round(change, 1)
 
 
 def _daily(app: App, q: Q, start: date, end: date) -> dict[date, int]:
@@ -158,8 +175,7 @@ def _daily(app: App, q: Q, start: date, end: date) -> dict[date, int]:
 
 
 def _series(values: dict[date, int], start: date, end: date) -> list[float]:
-    days = (end - start).days + 1
-    return [float(values.get(start + timedelta(days=i), 0)) for i in range(max(days, 0))]
+    return [float(values.get(d, 0)) for d in days(start, end)]
 
 
 def _mean_delta(metric: str, before: list[float], after: list[float]) -> Delta:
@@ -193,15 +209,13 @@ def _trend_delta(
     values: dict[date, int],
     baseline: tuple[date, date],
     live: tuple[date, date],
-    projection: list[float] | None = None,
     steps: list[date] = (),
-) -> Delta:
-    """Actual per-day mean while live against the baseline trend projected over those days.
-    The projected value for each live day is appended to ``projection`` when given."""
-    b_days = [baseline[0] + timedelta(days=i) for i in range((baseline[1] - baseline[0]).days + 1)]
-    a_days = [live[0] + timedelta(days=i) for i in range((live[1] - live[0]).days + 1)]
+) -> tuple[Delta, list[float]]:
+    """Actual per-day mean while live against the baseline trend projected over those days,
+    plus the projected value for each live day."""
+    b_days, a_days = days(*baseline), days(*live)
     if len(b_days) < MIN_BASELINE_DAYS or not a_days:
-        return Delta(metric, None, None, None)
+        return Delta(metric, None, None, None), []
     steps = [s for s in steps if baseline[0] < s <= baseline[1]]
     xb, xa = _design(b_days, live[0], steps), _design(a_days, live[0], steps)
     yb = np.log1p([values.get(d, 0) for d in b_days])
@@ -209,8 +223,6 @@ def _trend_delta(
     beta, *_ = np.linalg.lstsq(xb, yb, rcond=None)
     predicted = xa @ beta
     expected_days = np.expm1(predicted).clip(min=0)
-    if projection is not None:
-        projection.extend(round(float(v), 2) for v in expected_days)
     expected = float(expected_days.mean())
     observed = float(actual.mean())
     residuals = yb - xb @ beta
@@ -218,28 +230,44 @@ def _trend_delta(
     xbar = xa.mean(axis=0)
     se = math.sqrt(s2 / len(a_days) + s2 * float(xbar @ np.linalg.pinv(xb.T @ xb) @ xbar))
     t = float((np.log1p(actual) - predicted).mean()) / se if se > 0 else None
-    return Delta(
+    delta = Delta(
         metric,
         round(expected, 2),
         round(observed, 2),
         _pct(expected, observed),
         None if t is None else round(t, 2),
     )
+    return delta, [round(float(v), 2) for v in expected_days]
 
 
-def _conversion(app: App, start: date, end: date) -> float | None:
-    """Install rate over the window: summed downloads / summed unique impressions."""
-    agg = ConversionMetric.objects.filter(app=app, date__range=(start, end)).aggregate(
-        imp=Sum("unique_impressions"), ft=Sum("first_time_downloads")
-    )
-    return agg["ft"] / agg["imp"] if agg["imp"] else None
+def _install_rates(app: App) -> Callable[[date, date], float | None]:
+    """Install rate over any window (summed downloads / summed unique impressions), from the
+    app's funnel rows loaded once instead of an aggregate query per window."""
+    daily = {
+        d: (dl, imp)
+        for d, dl, imp in ConversionMetric.objects.filter(app=app).values_list(
+            "date", "first_time_downloads", "unique_impressions"
+        )
+    }
+
+    def rate(start: date, end: date) -> float | None:
+        dl = imp = 0
+        for d in days(start, end):
+            if d in daily:
+                dl, imp = dl + daily[d][0], imp + daily[d][1]
+        return dl / imp if imp else None
+
+    return rate
 
 
-def version_impact(app: App, window: int = 14, platform: str | None = None) -> list[VersionImpact]:
+def version_impact(
+    app: App, window: int = 14, platform: str | None = None, since: date | None = None
+) -> list[VersionImpact]:
     """For every dated version: up to ``window`` days live vs up to ``window`` days before,
     counting only that platform's rows. Windows stop at the neighbouring releases of the same
     platform and at the edges of the loaded data, so each side only ever contains one version.
-    Conversion comes from App Store analytics, which is iOS-only here."""
+    Conversion comes from App Store analytics, which is iOS-only here. ``since`` skips
+    versions released before that day (their windows still use earlier data)."""
     span = SalesRow.objects.filter(app=app).aggregate(
         first=Min("report_date"), last=Max("report_date")
     )
@@ -248,6 +276,7 @@ def version_impact(app: App, window: int = 14, platform: str | None = None) -> l
     data_start, data_end = span["first"], span["last"]
     # An app whose first sale is the first day loaded for any app may be older than the data.
     dataset_start = SalesRow.objects.aggregate(first=Min("report_date"))["first"]
+    install_rate = _install_rates(app)
     out = []
     for plat in [platform] if platform else [IOS, MAC_OS]:
         versions = list(
@@ -263,6 +292,8 @@ def version_impact(app: App, window: int = 14, platform: str | None = None) -> l
         iap = _daily(app, IAP_ROWS & rows, data_start, data_end)
         updates = _daily(app, UPDATE_ROWS & rows, data_start, data_end)
         for i, v in enumerate(versions):
+            if since and v.first_seen < since:
+                continue
             released = v.first_seen
             prev_release = versions[i - 1].first_seen if i else data_start
             next_release = versions[i + 1].first_seen if i + 1 < len(versions) else None
@@ -287,16 +318,14 @@ def version_impact(app: App, window: int = 14, platform: str | None = None) -> l
             trend_start = max(released - timedelta(days=BASELINE_DAYS), data_start)
             if launched and launched > dataset_start:  # launched inside the loaded history
                 trend_start = max(trend_start, launched + timedelta(days=LAUNCH_DAYS))
-            impact.deltas.append(
-                _trend_delta(
-                    "downloads/day vs trend",
-                    downloads,
-                    (trend_start, released - timedelta(days=1)),
-                    (released, a_end),
-                    impact.projection,
-                    steps=[p.first_seen for p in versions[:i]],
-                )
+            trend, impact.projection = _trend_delta(
+                "downloads/day vs trend",
+                downloads,
+                (trend_start, released - timedelta(days=1)),
+                (released, a_end),
+                steps=[p.first_seen for p in versions[:i]],
             )
+            impact.deltas.append(trend)
             impact.deltas.append(
                 _mean_delta(
                     "in-app purchases/day",
@@ -306,8 +335,8 @@ def version_impact(app: App, window: int = 14, platform: str | None = None) -> l
             )
             conv_b = conv_a = None
             if plat == IOS:
-                conv_b = _conversion(app, b_start, b_end) if impact.before_days else None
-                conv_a = _conversion(app, released, a_end)
+                conv_b = install_rate(b_start, b_end) if impact.before_days else None
+                conv_a = install_rate(released, a_end)
             impact.deltas.append(
                 Delta(
                     "install rate",

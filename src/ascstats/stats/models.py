@@ -11,13 +11,19 @@ REDOWNLOAD_PRODUCT_TYPES = ["3", "3F", "3T", "F3"]
 # platform a row belongs to ("Desktop" is a Mac); product types do not: real reports carry
 # F7 updates and F3 redownloads for iPhone and iPad too.
 IOS, MAC_OS = "IOS", "MAC_OS"  # App Store Connect's platform names
-MAC_DEVICE = "Desktop"
-MAC_ROWS = Q(device=MAC_DEVICE)
+MAC_DEVICES = {"Desktop", "Mac"}  # Sales says Desktop; analytics reports may say Mac
+MAC_ROWS = Q(device__in=MAC_DEVICES)
 
 
 class Report(models.TextChoices):
     SALES = "sales", "Sales & Trends (daily summary)"
     ANALYTICS = "analytics", "Analytics Reports (daily)"
+
+
+class AppQuerySet(models.QuerySet):
+    def active(self):
+        """The apps every stat covers."""
+        return self.filter(is_active=True)
 
 
 class App(models.Model):
@@ -27,6 +33,8 @@ class App(models.Model):
     bundle_id = models.CharField(max_length=255, blank=True)
     is_active = models.BooleanField(default=True, help_text="Include in daily imports")
     created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = AppQuerySet.as_manager()
 
     class Meta:
         ordering = ["name"]

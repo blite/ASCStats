@@ -29,8 +29,8 @@
   <svg viewBox="0 0 {{ mix.w }} {{ mix.h }}" role="img" aria-label="Install rate by source">
     {% for g in mix.grid %}<line class="{% if forloop.first %}axis{% else %}hair{% endif %}" x1="36" y1="{{ g.y }}" x2="{{ mix.w }}" y2="{{ g.y }}"/><text class="tick" x="30" y="{{ g.y }}" dy="4" text-anchor="end">{{ g.label }}</text>{% endfor %}
     {% for s in mix.lines %}
-      {% if s.points %}<polyline points="{{ s.points }}" fill="none" style="stroke: var(--{% if s.cls == 'other' %}other{% else %}{{ s.cls }}{% endif %})" stroke-width="2" stroke-linejoin="round"/>{% endif %}
-      {% for t in s.thin %}<circle cx="{{ t.x }}" cy="{{ t.y }}" r="3" fill="var(--surface)" style="stroke: var(--{% if s.cls == 'other' %}other{% else %}{{ s.cls }}{% endif %})" stroke-width="1.5"/>{% endfor %}
+      {% if s.points %}<polyline points="{{ s.points }}" fill="none" style="stroke: var(--{{ s.cls }})" stroke-width="2" stroke-linejoin="round"/>{% endif %}
+      {% for t in s.thin %}<circle cx="{{ t.x }}" cy="{{ t.y }}" r="3" fill="var(--surface)" style="stroke: var(--{{ s.cls }})" stroke-width="1.5"/>{% endfor %}
     {% endfor %}
     {% for m in mix.months %}<text class="tick" x="{{ m.x }}" y="{{ mix.h|add:'-2' }}" text-anchor="middle">{{ m.label }}</text>{% endfor %}
   </svg>

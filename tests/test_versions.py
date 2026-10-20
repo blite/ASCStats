@@ -196,7 +196,7 @@ def _trend(seed: int, effect: float) -> Delta:
         values,
         (release - timedelta(days=28), release - timedelta(days=1)),
         (release, release + timedelta(days=13)),
-    )
+    )[0]
 
 
 def test_trend_adjustment_does_not_credit_releases_with_growth():
@@ -269,8 +269,8 @@ def test_previous_release_jump_is_a_step_not_growth():
     }
     a, b = start + timedelta(days=40), start + timedelta(days=50)
     window = ((b - timedelta(days=28), b - timedelta(days=1)), (b, b + timedelta(days=13)))
-    naive_trend = _trend_delta("x", values, *window)
-    stepped = _trend_delta("x", values, *window, steps=[a])
+    naive_trend, _ = _trend_delta("x", values, *window)
+    stepped, _ = _trend_delta("x", values, *window, steps=[a])
     assert naive_trend.change_pct < -20  # the artefact this guards against
     assert naive_trend.significant
     assert abs(stepped.change_pct) < 10

@@ -13,4 +13,6 @@ def money(value):
 @register.filter
 def signed_pct(value):
     """+12% / -8%, or an en dash for None."""
-    return "\u2013" if value is None else f"{value:+.0f}%"
+    if value is None:
+        return "\u2013"
+    return "0%" if round(value) == 0 else f"{value:+.0f}%"

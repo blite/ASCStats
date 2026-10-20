@@ -24,7 +24,8 @@ from datetime import date, timedelta
 
 from django.db.models import Max, Sum
 
-from .models import IOS, AnalyticsRow, App, AppVersion, ConversionMetric
+from .charts import days, month_ticks, nice_axis
+from .models import ACTIVE_ROWS, IOS, AnalyticsRow, App, AppVersion, ConversionMetric
 from .parsing import DISCOVERY_REPORT, DOWNLOADS_REPORT
 
 Z90 = 1.645
@@ -52,6 +53,7 @@ STEPS = [
     Step("iap", "Download → purchase", "iap_units", "units", 100, 30, poisson=True),
 ]
 HEADLINE = "install"
+HEADLINE_STEP = next(s for s in STEPS if s.key == HEADLINE)
 
 
 def wilson(k: float, n: float, z: float = Z90) -> tuple[float, float]:
@@ -118,7 +120,7 @@ def _sums(apps, start: date, end: date) -> dict[int, dict[str, int]]:
 
 def last_day() -> date | None:
     """Latest day with App Store Analytics data for an active app."""
-    return ConversionMetric.objects.filter(app__is_active=True, unique_impressions__gt=0).aggregate(
+    return ConversionMetric.objects.filter(ACTIVE_ROWS, unique_impressions__gt=0).aggregate(
         d=Max("date")
     )["d"]
 
@@ -130,23 +132,24 @@ CELL_W = 220
 
 @dataclass
 class Cell:
+    step: Step
     rate: Rate
     reference: float | None
     reference_label: str
-    verdict: str  # "below" | "above" | "usual" | "thin"
-    x: dict = field(default_factory=dict)  # SVG positions, filled in by leak_strip
+    verdict: str  # "below" | "above" | "usual" | "thin" | "none" (no purchases at all)
+    view: dict = field(default_factory=dict)  # positions and labels, filled in by leak_strip
 
 
 @dataclass
 class LeakRow:
     app: App
-    cells: dict[str, Cell]
+    cells: dict[str, Cell]  # in STEPS order
     lost: float  # downloads/month lost vs the app's usual install rate (0 if none)
     worst: str | None  # step key to highlight
 
 
 def leak_strip(end: date) -> dict:
-    apps = list(App.objects.filter(is_active=True))
+    apps = list(App.objects.active())
     start = end - timedelta(days=WINDOW - 1)
     ref_end = start - timedelta(days=1)
     now, before = (
@@ -174,7 +177,9 @@ def leak_strip(end: date) -> dict:
             else:
                 reference, ref_label = portfolio[s.key], "all your apps, same 28 days"
             lo, hi = rate.interval
-            if rate.low_volume:
+            if s.poisson and rate.k == 0:
+                verdict = "none"
+            elif rate.low_volume:
                 verdict = "thin"
             elif hi < reference:
                 verdict = "below"
@@ -182,7 +187,7 @@ def leak_strip(end: date) -> dict:
                 verdict = "above"
             else:
                 verdict = "usual"
-            cells[s.key] = Cell(rate, reference, ref_label, verdict)
+            cells[s.key] = Cell(s, rate, reference, ref_label, verdict)
             if verdict == "below" and reference:
                 gap = (reference - (rate.shrunk or 0)) / reference
                 if gap > worst_gap:
@@ -214,9 +219,7 @@ def leak_strip(end: date) -> dict:
         for r in rows:
             c = r.cells[s.key]
             lo, hi = c.rate.interval
-            if s.poisson and c.rate.k == 0:
-                c.verdict = "none"
-            c.x = {
+            c.view = {
                 "lo": px(lo),
                 "hi": px(hi),
                 "dot": px(c.rate.shrunk or 0),
@@ -224,7 +227,6 @@ def leak_strip(end: date) -> dict:
                 "value": c.rate.fmt(c.rate.shrunk),
                 "usual": c.rate.fmt(c.reference),
                 "count": f"{int(c.rate.k)} of {int(c.rate.n)}",
-                "scale": f"{c.rate.fmt(low)} to {c.rate.fmt(high)}",
                 "tip": (
                     f"{r.app.name}: {s.label}\n"
                     f"{c.rate.fmt(c.rate.raw)} raw ({int(c.rate.k)} of {int(c.rate.n)}), "
@@ -239,7 +241,6 @@ def leak_strip(end: date) -> dict:
         "start": start,
         "end": end,
         "cell_w": CELL_W,
-        "total_lost": sum(r.lost for r in rows),
     }
 
 
@@ -258,61 +259,58 @@ def _weeks(end: date) -> list[tuple[date, date]]:
     return [(ws, ws + timedelta(days=6)) for ws in starts]
 
 
-def _month_ticks(weeks: list[tuple[date, date]], x, min_gap: float = 30) -> list[dict]:
-    """A label at each month's first week, skipping any that would collide with the last."""
-    ticks: list[dict] = []
-    for i, (ws, _) in enumerate(weeks):
-        if (i == 0 or ws.month != weeks[i - 1][0].month) and (
-            not ticks or x(i) - ticks[-1]["x"] >= min_gap
-        ):
-            ticks.append({"x": x(i), "label": f"{ws:%b}"})
-    return ticks
+def _axis_top(peak: float) -> float:
+    return nice_axis(peak, 4, 0.001)[0]
 
 
-def _nice(top: float) -> float:
-    for step in (0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.25, 0.5, 1, 2, 5):
-        if top <= step * 4:
-            return step * 4
-    return top
+def _band(top: list[tuple[float, float]], bottom: list[tuple[float, float]]) -> str:
+    """Closed SVG path between two polylines (bottom drawn back right-to-left)."""
+    return (
+        "M"
+        + " L".join(f"{x:.1f},{y:.1f}" for x, y in top)
+        + " L"
+        + " L".join(f"{x:.1f},{y:.1f}" for x, y in reversed(bottom))
+        + " Z"
+    )
 
 
 def step_trends(app: App, end: date) -> dict:
     weeks = _weeks(end)
+    first = weeks[0][0]
+    fields = [f for s in STEPS for f in (s.numerator, s.denominator)]
+    # 28 extra days so release markers can compare the four weeks before the first week
     daily = {
-        m.date: m for m in ConversionMetric.objects.filter(app=app, date__range=(weeks[0][0], end))
+        row[0]: dict(zip(fields, row[1:], strict=True))
+        for row in ConversionMetric.objects.filter(
+            app=app, date__range=(first - timedelta(days=28), end)
+        ).values_list("date", *fields)
     }
+    weekly = defaultdict(lambda: defaultdict(int))  # week index -> field -> sum
+    for d, values in daily.items():
+        if d >= first:
+            for f, v in values.items():
+                weekly[(d - first).days // 7][f] += v
     plot_w = PANEL_W - PAD_L - PAD_R
     slot = plot_w / len(weeks)
 
     def xc(i: int) -> float:
         return round(PAD_L + (i + 0.5) * slot, 1)
 
-    releases = list(
-        AppVersion.objects.filter(
-            app=app, platform=IOS, first_seen__range=(weeks[0][0], end)
-        ).order_by("first_seen")
-    )
     panels = []
     for s in STEPS:
         points = []
         for i, (ws, we) in enumerate(weeks):
-            days = [daily[d] for d in daily if ws <= d <= min(we, end)]
-            k = sum(getattr(m, s.numerator) for m in days)
-            n = sum(getattr(m, s.denominator) for m in days)
+            n = weekly[i][s.denominator] if i in weekly else 0
             if n == 0:
                 points.append(None)  # Apple published nothing: a gap, not a zero
                 continue
-            rate = Rate(k, n, s)
+            rate = Rate(weekly[i][s.numerator], n, s)
             points.append({"i": i, "rate": rate, "partial": we > end, "week": ws})
         present = [p for p in points if p]
         if s.poisson and not any(p["rate"].k for p in present):
             continue  # an app without in-app purchases has no purchase step to draw
-        top = _nice(
-            max(
-                [min(p["rate"].interval[1], 1.0 if not s.poisson else 99) for p in present]
-                or [0.01]
-            )
-        )
+        cap = 99 if s.poisson else 1.0
+        top = _axis_top(max([min(p["rate"].interval[1], cap) for p in present] or [0.01]))
         base = PAD_T + PANEL_H
 
         def y(v, top=top, base=base):
@@ -324,23 +322,21 @@ def step_trends(app: App, end: date) -> dict:
                 if current:
                     segments.append(current)
                 current = []
-                continue
-            current.append(p)
+            else:
+                current.append(p)
         if current:
             segments.append(current)
-        lines, bands, dots = [], [], []
+        lines, dashed, bands, dots = [], [], [], []
         for seg in segments:
             solid = [p for p in seg if not p["partial"]]
             if len(solid) > 1:
                 lines.append(" ".join(f"{xc(p['i'])},{y(p['rate'].raw)}" for p in solid))
-            lo_hi = [(xc(p["i"]), y(p["rate"].interval[0]), y(p["rate"].interval[1])) for p in seg]
-            if len(lo_hi) > 1:
+            if len(seg) > 1:
                 bands.append(
-                    "M"
-                    + " L".join(f"{x},{hi}" for x, _, hi in lo_hi)
-                    + " L"
-                    + " L".join(f"{x},{lo}" for x, lo, _ in reversed(lo_hi))
-                    + " Z"
+                    _band(
+                        [(xc(p["i"]), y(p["rate"].interval[1])) for p in seg],
+                        [(xc(p["i"]), y(p["rate"].interval[0])) for p in seg],
+                    )
                 )
             for p in seg:
                 lo, hi = p["rate"].interval
@@ -361,49 +357,49 @@ def step_trends(app: App, end: date) -> dict:
                 )
             if seg[-1]["partial"] and len(seg) > 1:
                 a, b = seg[-2], seg[-1]
-                lines.append(
-                    {"dashed": f"{xc(a['i'])},{y(a['rate'].raw)} {xc(b['i'])},{y(b['rate'].raw)}"}
-                )
+                dashed.append(f"{xc(a['i'])},{y(a['rate'].raw)} {xc(b['i'])},{y(b['rate'].raw)}")
         grid = [{"y": y(v), "label": Rate(0, 1, s).fmt(v)} for v in (0, top / 2, top)]
         panels.append(
             {
                 "step": s,
-                "lines": [ln for ln in lines if isinstance(ln, str)],
-                "dashed": [ln["dashed"] for ln in lines if isinstance(ln, dict)],
+                "lines": lines,
+                "dashed": dashed,
                 "bands": bands,
                 "dots": dots,
                 "grid": grid,
                 "base": base,
             }
         )
+
+    def window(start: date, stop: date) -> Rate | None:
+        k = n = 0
+        for d in days(start, stop):
+            if d in daily:
+                k += daily[d][HEADLINE_STEP.numerator]
+                n += daily[d][HEADLINE_STEP.denominator]
+        return Rate(k, n, HEADLINE_STEP) if n else None
+
     markers = []
-    for v in releases:
-        i = (_week_start(v.first_seen) - weeks[0][0]).days // 7
+    for v in AppVersion.objects.filter(
+        app=app, platform=IOS, first_seen__range=(first, end)
+    ).order_by("first_seen"):
+        i = (_week_start(v.first_seen) - first).days // 7
         x = round(PAD_L + i * slot + slot * v.first_seen.weekday() / 7, 1)
-        b = _window_rate(app, v.first_seen - timedelta(days=28), v.first_seen - timedelta(days=1))
-        a = _window_rate(app, v.first_seen, min(v.first_seen + timedelta(days=27), end))
+        b = window(v.first_seen - timedelta(days=28), v.first_seen - timedelta(days=1))
+        a = window(v.first_seen, min(v.first_seen + timedelta(days=27), end))
         label = f"v{v.version}"
         if a and b and not (a.low_volume or b.low_volume):
             label += f": {b.fmt(b.raw)} → {a.fmt(a.raw)}"
         markers.append({"x": x, "label": label})
-    months = _month_ticks(weeks, xc)
     return {
         "panels": panels,
         "markers": markers,
-        "months": months,
+        "months": month_ticks([ws for ws, _ in weeks], xc),
         "width": PANEL_W,
         "panel_h": PANEL_H + PAD_T + PAD_B,
         "pad_l": PAD_L,
         "plot_r": PANEL_W - PAD_R,
     }
-
-
-def _window_rate(app: App, start: date, end: date) -> Rate | None:
-    step = next(s for s in STEPS if s.key == HEADLINE)
-    agg = ConversionMetric.objects.filter(app=app, date__range=(start, end)).aggregate(
-        k=Sum(step.numerator), n=Sum(step.denominator)
-    )
-    return Rate(agg["k"] or 0, agg["n"] or 0, step) if agg["n"] else None
 
 
 # --- 3. source mix vs rate ---------------------------------------------------------------------
@@ -458,43 +454,37 @@ def source_mix(app: App, end: date) -> dict:
         return round(36 + (i + 0.5) * slot, 1)
 
     # left: 100% stacked area of impression share
+    recent = range(len(weeks) - 4, len(weeks))
+    recent_all = sum(imp.get((i, s), 0) for s in shown for i in recent)
     stacks, below = [], [0.0] * len(weeks)
     for src in shown:
         shares = []
         for i in range(len(weeks)):
             total = sum(imp.get((i, s), 0) for s in shown)
             shares.append(imp.get((i, src), 0) / total if total else 0)
-        top_pts = [(xc(i), 8 + MIX_H * (1 - below[i] - shares[i])) for i in range(len(weeks))]
-        bot_pts = [(xc(i), 8 + MIX_H * (1 - below[i])) for i in range(len(weeks))]
-        path = (
-            "M"
-            + " L".join(f"{x:.1f},{y:.1f}" for x, y in top_pts)
-            + " L"
-            + " L".join(f"{x:.1f},{y:.1f}" for x, y in reversed(bot_pts))
-            + " Z"
+        path = _band(
+            [(xc(i), 8 + MIX_H * (1 - below[i] - shares[i])) for i in range(len(weeks))],
+            [(xc(i), 8 + MIX_H * (1 - below[i])) for i in range(len(weeks))],
         )
-        recent = sum(imp.get((i, src), 0) for i in range(len(weeks) - 4, len(weeks)))
-        recent_all = sum(
-            imp.get((i, s), 0) for s in shown for i in range(len(weeks) - 4, len(weeks))
-        )
+        share = sum(imp.get((i, src), 0) for i in recent)
         stacks.append(
             {
                 "src": src,
                 "cls": SOURCE_CLASS[src],
                 "path": path,
-                "share": 100 * recent / recent_all if recent_all else 0,
+                "share": 100 * share / recent_all if recent_all else 0,
             }
         )
         below = [below[i] + shares[i] for i in range(len(weeks))]
     # right: install rate per source, weekly, with intervals
-    step = next(s for s in STEPS if s.key == HEADLINE)
+    step = HEADLINE_STEP
     rates = {}
     for src in shown:
         for i in range(len(weeks)):
             n = imp.get((i, src), 0)
             if n:
                 rates[(src, i)] = Rate(dl.get((i, src), 0), n, step)
-    top = _nice(max([min(r.interval[1], 1.0) for r in rates.values()] or [0.01]))
+    top = _axis_top(max([min(r.interval[1], 1.0) for r in rates.values()] or [0.01]))
 
     def y(v):
         return round(8 + MIX_H * (1 - min(v, top) / top), 1)
@@ -516,7 +506,7 @@ def source_mix(app: App, end: date) -> dict:
             }
         )
     grid = [{"y": y(v), "label": Rate(0, 1, step).fmt(v)} for v in (0, top / 2, top)]
-    months = _month_ticks(weeks, xc, min_gap=38)
+    months = month_ticks([ws for ws, _ in weeks], xc, min_gap=38)
     return {
         "stacks": stacks,
         "lines": lines,
@@ -524,6 +514,5 @@ def source_mix(app: App, end: date) -> dict:
         "months": months,
         "w": MIX_W,
         "h": MIX_H + 26,
-        "sources": shown,
         "folded": sorted(folded),
     }

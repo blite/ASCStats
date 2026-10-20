@@ -120,7 +120,7 @@ def health(request):
 @api.get("/apps", response=list[AppOut], tags=["apps"])
 def list_apps(request, include_inactive: bool = False):
     """Active apps (the ones every stat covers); ``include_inactive`` lists the rest too."""
-    return App.objects.all() if include_inactive else App.objects.filter(is_active=True)
+    return App.objects.all() if include_inactive else App.objects.active()
 
 
 def _range(start: date | None, end: date | None) -> tuple[date, date]:
@@ -131,7 +131,7 @@ def _range(start: date | None, end: date | None) -> tuple[date, date]:
 @api.get("/apps/{apple_id}/sales/daily", response=list[DailySales], tags=["sales"])
 def daily_sales(request, apple_id: int, start: date | None = None, end: date | None = None):
     """Units and proceeds per day. Report proceeds are per unit: total = units x proceeds."""
-    app = get_object_or_404(App, apple_id=apple_id, is_active=True)
+    app = get_object_or_404(App.objects.active(), apple_id=apple_id)
     start, end = _range(start, end)
     rows = (
         SalesRow.objects.filter(app=app, report_date__range=(start, end))
@@ -157,7 +157,7 @@ def daily_sales(request, apple_id: int, start: date | None = None, end: date | N
 
 @api.get("/apps/{apple_id}/conversion", response=list[Conversion], tags=["analytics"])
 def conversion(request, apple_id: int, start: date | None = None, end: date | None = None):
-    app = get_object_or_404(App, apple_id=apple_id, is_active=True)
+    app = get_object_or_404(App.objects.active(), apple_id=apple_id)
     start, end = _range(start, end)
     return ConversionMetric.objects.filter(app=app, date__range=(start, end)).order_by("date")
 
@@ -166,7 +166,7 @@ def conversion(request, apple_id: int, start: date | None = None, end: date | No
 def versions(request, apple_id: int, window: int = 14, platform: str | None = None):
     """Each version's first ``window`` days live against the ``window`` days before it, per
     platform (``IOS`` or ``MAC_OS``; both by default)."""
-    app = get_object_or_404(App, apple_id=apple_id, is_active=True)
+    app = get_object_or_404(App.objects.active(), apple_id=apple_id)
     return version_impact(app, window=max(3, min(window, 90)), platform=platform)
 
 
@@ -174,7 +174,7 @@ def versions(request, apple_id: int, window: int = 14, platform: str | None = No
 def ratings(request, apple_id: int):
     """Star ratings (daily public snapshots), written reviews and Apple's summary, per iOS
     version. Rating velocity exists only from the first snapshot on."""
-    app = get_object_or_404(App, apple_id=apple_id, is_active=True)
+    app = get_object_or_404(App.objects.active(), apple_id=apple_id)
     now = current(app) or {}
     return {
         "snapshot_date": now.get("date"),
@@ -193,7 +193,7 @@ def ratings(request, apple_id: int):
 def crashes(request, apple_id: int):
     """iOS crashes and sessions per app version (Apple's App Crashes and App Sessions reports,
     from users who share analytics; days under five such users are omitted by Apple)."""
-    app = get_object_or_404(App, apple_id=apple_id, is_active=True)
+    app = get_object_or_404(App.objects.active(), apple_id=apple_id)
     return sorted(version_crashes(app).values(), key=lambda v: v.version)
 
 

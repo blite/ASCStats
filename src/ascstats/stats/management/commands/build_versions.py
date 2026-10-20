@@ -15,7 +15,7 @@ class Command(BaseCommand):
         parser.add_argument("--app", type=int, help="Apple ID; default: every active app")
 
     def handle(self, *, app, **_):
-        apps = App.objects.filter(apple_id=app) if app else App.objects.filter(is_active=True)
+        apps = App.objects.filter(apple_id=app) if app else App.objects.active()
         client = None
         if settings.ASC_SOURCE == "asc":
             from ascstats.asc.credentials import client_from_env

@@ -34,6 +34,7 @@ from .models import (
     ACTIVE_ROWS,
     DOWNLOAD_ROWS,
     IOS,
+    MAC_OS,
     UPDATE_ROWS,
     App,
     AppVersion,
@@ -83,7 +84,7 @@ def snapshot(
     """Record today's public rating totals for every active app. Idempotent per day."""
     day = day or timezone.localdate()
     source = source or settings.ASC_SOURCE
-    apps = {a.apple_id: a for a in App.objects.filter(is_active=True)}
+    apps = {a.apple_id: a for a in App.objects.active()}
     rows = []
     if source == "synthetic":
         for apple_id, app in apps.items():
@@ -176,7 +177,7 @@ def import_summaries(app: App, client: ASCClient | None) -> int:
         )  # fmt: skip
         return 1
     written = 0
-    for platform in ("IOS", "MAC_OS"):
+    for platform in (IOS, MAC_OS):
         try:
             found = client.review_summaries(app.apple_id, platform)
         except ReportNotReady:
@@ -232,10 +233,13 @@ class VersionRatings:
     review_average: float | None
 
 
-def version_ratings(app: App) -> list[VersionRatings]:
+def version_ratings(
+    app: App, daily: dict[date, tuple[int, int]] | None = None
+) -> list[VersionRatings]:
     """Rating velocity and quality per iOS version. Snapshots only start when ``snapshot``
-    first runs, so older versions have written reviews but no rating velocity."""
-    daily = daily_new_ratings(app)
+    first runs, so older versions have written reviews but no rating velocity. Pass ``daily``
+    (from ``daily_new_ratings``) to reuse it."""
+    daily = daily_new_ratings(app) if daily is None else daily
     versions = list(
         AppVersion.objects.filter(app=app, platform=IOS, first_seen__isnull=False).order_by(
             "first_seen"
@@ -253,7 +257,7 @@ def version_ratings(app: App) -> list[VersionRatings]:
     reviews = {
         r["version"]: r
         for r in CustomerReview.objects.filter(app=app)
-        .exclude(platform="MAC_OS")
+        .exclude(platform=MAC_OS)
         .values("version")
         .annotate(n=Count("id"), avg=Avg("rating"))
     }
@@ -281,7 +285,7 @@ def version_ratings(app: App) -> list[VersionRatings]:
     return out
 
 
-def current(app: App) -> dict | None:
+def current(app: App, daily: dict[date, tuple[int, int]] | None = None) -> dict | None:
     """Latest totals across storefronts, the last 7 days of new ratings, recent reviews and
     the best available summary (US first)."""
     latest = RatingSnapshot.objects.filter(app=app).aggregate(d=Max("date"))["d"]
@@ -297,7 +301,7 @@ def current(app: App) -> dict | None:
         snaps = RatingSnapshot.objects.filter(app=app, date=latest)
         agg = snaps.aggregate(count=Sum("count"), stars=Sum("star_sum"))
         us = snaps.filter(storefront="us").first()
-        daily = daily_new_ratings(app)
+        daily = daily_new_ratings(app) if daily is None else daily
         week = [daily[d] for d in daily if d > latest - timedelta(days=7)]
         out |= {
             "count": agg["count"] or 0,
