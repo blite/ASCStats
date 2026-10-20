@@ -22,7 +22,7 @@
 </head>
 <body>
   <h1>ASCStats</h1>
-  <p class="muted">Daily units (bars) and product-page conversion (line). <a href="/admin/">Admin</a> · <a href="/api/docs">API</a></p>
+  <p class="muted">Daily downloads (bars), product-page conversion (line) and releases (dashed). <a href="/admin/">Admin</a> · <a href="/api/docs">API</a></p>
   <form class="card" hx-get="{% url 'chart' %}" hx-target="#chart" hx-trigger="load, change">
     <label>App
       <select name="app">

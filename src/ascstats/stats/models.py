@@ -1,6 +1,11 @@
 """Every table the pipeline touches is defined here and created by Django migrations."""
 
 from django.db import models
+from django.db.models import Q
+
+# Product Type Identifiers for app updates. They carry the new version in the Version column
+# (useful for dating releases) but are not downloads.
+UPDATE_PRODUCT_TYPES = ["7", "7F", "7T", "F7"]
 
 
 class Report(models.TextChoices):
@@ -48,6 +53,11 @@ class SalesRow(models.Model):
         return f"{self.report_date} {self.sku} {self.country_code} x{self.units}"
 
 
+# Sales rows that count as downloads: the app itself, not its in-app purchases or updates.
+DOWNLOAD_ROWS = Q(parent_identifier="") & ~Q(product_type__in=UPDATE_PRODUCT_TYPES)
+UPDATE_ROWS = Q(parent_identifier="", product_type__in=UPDATE_PRODUCT_TYPES)
+
+
 class AnalyticsRow(models.Model):
     """One line of an Analytics Reports segment.
 
@@ -93,6 +103,26 @@ class ConversionMetric(models.Model):
 
     def __str__(self) -> str:
         return f"{self.app_id} {self.date}"
+
+
+class AppVersion(models.Model):
+    """A shipped version, dated by the first day it shows up in the sales report (downloads
+    and updates carry the version the customer received). App Store Connect's own version
+    list adds state and creation time when the pipeline runs against the real API."""
+
+    app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="versions")
+    version = models.CharField(max_length=50)
+    first_seen = models.DateField(null=True, blank=True, help_text="First day in sales data")
+    platform = models.CharField(max_length=20, blank=True)
+    asc_state = models.CharField(max_length=40, blank=True)
+    asc_created = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["app", "version"], name="uniq_version")]
+        ordering = ["app", "first_seen"]
+
+    def __str__(self) -> str:
+        return f"{self.app_id} {self.version}"
 
 
 class IngestionRun(models.Model):

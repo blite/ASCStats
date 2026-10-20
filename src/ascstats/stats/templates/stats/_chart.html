@@ -6,5 +6,19 @@
   <text x="2" y="{{ pad }}" font-size="11" fill="currentColor" opacity=".6">{{ peak }}</text>
   {% for b in bars %}<rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" fill="var(--bar)" rx="1"><title>{{ b.label }}</title></rect>{% endfor %}
   {% if line %}<polyline points="{{ line }}" fill="none" stroke="var(--line)" stroke-width="2"/>{% endif %}
+  {% for r in releases %}<line x1="{{ r.x }}" y1="{{ pad }}" x2="{{ r.x }}" y2="{{ baseline }}" stroke="currentColor" stroke-opacity=".5" stroke-dasharray="3 3"/>
+  <text x="{{ r.x }}" y="{{ pad|add:'-6' }}" font-size="11" fill="currentColor" text-anchor="middle">v{{ r.label }}</text>{% endfor %}
 </svg>
+{% if impacts %}
+<h3>What each release did</h3>
+<p class="muted">First 14 days live vs the 14 days before (shorter when releases are closer). <b>Bold</b> = |t| ≥ 2, unlikely to be day-to-day noise.</p>
+<table>
+  <tr><th>Version</th><th>Released</th><th>Downloads/day</th><th>IAP/day</th><th>Conversion</th><th>Updates</th></tr>
+  {% for i in impacts %}
+  <tr><td>{{ i.version }}</td><td>{{ i.released_on }}</td>
+    {% for d in i.deltas %}<td>{% if d.change_pct is not None %}{% if d.significant %}<b>{% endif %}{% if d.change_pct > 0 %}+{% endif %}{{ d.change_pct }}%{% if d.significant %}</b>{% endif %}{% else %}<span class="muted">–</span>{% endif %}</td>{% endfor %}
+    <td>{{ i.updates }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
 {% endif %}

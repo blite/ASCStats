@@ -6,7 +6,8 @@ from django.db.models import Sum
 from django.shortcuts import render
 from django.utils import timezone
 
-from .models import App, ConversionMetric, IngestionRun, SalesRow
+from .models import DOWNLOAD_ROWS, App, AppVersion, ConversionMetric, IngestionRun, SalesRow
+from .versions import version_impact
 
 WIDTH, HEIGHT, PAD = 720, 260, 36
 
@@ -25,7 +26,7 @@ def chart(request):
     end = timezone.now().date() - timedelta(days=1)
     start = end - timedelta(days=days - 1)
     units = dict(
-        SalesRow.objects.filter(app=app, report_date__range=(start, end), parent_identifier="")
+        SalesRow.objects.filter(DOWNLOAD_ROWS, app=app, report_date__range=(start, end))
         .values_list("report_date")
         .annotate(Sum("units"))
     )
@@ -49,7 +50,14 @@ def chart(request):
         if rate is not None:
             y = HEIGHT - PAD - (HEIGHT - 2 * PAD) * min(rate, 1)
             line.append(f"{x + step / 2:.1f},{y:.1f}")
+    releases = [
+        {"x": round(PAD + (v.first_seen - start).days * step, 1), "label": v.version}
+        for v in AppVersion.objects.filter(app=app, first_seen__range=(start + timedelta(1), end))
+    ]
+    impacts = [i for i in version_impact(app) if i.before_days][-6:][::-1]
     context = {
+        "releases": releases,
+        "impacts": impacts,
         "app": app,
         "bars": bars,
         "line": " ".join(line),

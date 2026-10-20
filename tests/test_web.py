@@ -45,5 +45,12 @@ def test_dashboard_and_chart(client, seeded):
 def test_admin_lists_synthetic_rows(client, seeded):
     User.objects.create_superuser("admin", "admin@example.com", "pw")
     client.login(username="admin", password="pw")
-    for model in ("app", "salesrow", "analyticsrow", "conversionmetric", "ingestionrun"):
+    for model in (
+        "app",
+        "salesrow",
+        "analyticsrow",
+        "conversionmetric",
+        "appversion",
+        "ingestionrun",
+    ):
         assert client.get(f"/admin/stats/{model}/").status_code == 200

@@ -9,6 +9,7 @@ from ascstats.stats import synthetic
 from ascstats.stats.metrics import build_conversion_metrics
 from ascstats.stats.models import App, Report
 from ascstats.stats.pipeline import Pipeline
+from ascstats.stats.versions import build_versions
 
 
 class Command(BaseCommand):
@@ -32,6 +33,8 @@ class Command(BaseCommand):
                 pipeline.run(report, day)
             day += timedelta(days=1)
         metrics = build_conversion_metrics(start, end)
+        for app in App.objects.filter(is_active=True):
+            build_versions(app)
         self.stdout.write(
             f"seeded {len(synthetic.APPS)} apps, {start}..{end}, {metrics} conversion rows"
         )

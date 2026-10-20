@@ -64,6 +64,26 @@ APPS = [
     ),
 ]
 EPOCH = date(2025, 1, 1)
+# Release history per app: (version, release day, demand multiplier from that day on). The
+# multipliers are the "true" effect of each version, so the version-impact analysis has a
+# known answer to find. 2.1 and 1.7 are regressions.
+RELEASES = {
+    1000000001: [
+        ("1.0", EPOCH, 1.0), ("1.1", date(2025, 4, 14), 1.0), ("1.2", date(2025, 8, 4), 1.1),
+        ("2.0", date(2026, 1, 12), 1.3), ("2.0.1", date(2026, 1, 20), 1.0),
+        ("2.1", date(2026, 5, 18), 0.8), ("2.2", date(2026, 7, 27), 1.2),
+        ("2.3", date(2026, 10, 5), 1.2),
+    ],
+    1000000002: [
+        ("1.0", EPOCH, 1.0), ("1.1", date(2025, 6, 9), 1.05), ("1.2", date(2026, 3, 2), 0.9),
+        ("1.3", date(2026, 9, 21), 1.15),
+    ],
+    1000000003: [
+        ("1.0", EPOCH, 1.0), ("1.5", date(2025, 10, 13), 1.2), ("1.6", date(2026, 6, 15), 1.0),
+        ("1.7", date(2026, 9, 28), 0.8),
+    ],
+}  # fmt: skip
+UPDATE_DAYS = 21  # how long a release keeps producing update rows
 COUNTRIES = {  # country -> (weight, currency, proceeds multiplier vs USD price)
     "US": (0.45, "USD", 1.0),
     "GB": (0.12, "GBP", 0.8),
@@ -101,14 +121,25 @@ def _rng(*parts: object) -> random.Random:
     return random.Random(int.from_bytes(seed[:8], "big"))
 
 
+def version_on(app: SyntheticApp, day: date) -> tuple[str, date, float]:
+    """(current version, its release day, cumulative demand effect of every release so far)."""
+    current, effect = RELEASES[app.apple_id][0], 1.0
+    for release in RELEASES[app.apple_id]:
+        if release[1] > day:
+            break
+        current, effect = release, effect * release[2]
+    return current[0], current[1], effect
+
+
 def _demand(app: SyntheticApp, day: date) -> float:
-    """Expected first-time downloads: slow growth, weekend bump, a launch spike, noise."""
+    """Expected first-time downloads: slow growth, weekend bump, a launch spike, the current
+    version's effect, noise."""
     age = (day - EPOCH).days
     growth = 1 + 0.004 * max(age, 0)
     weekend = 1.25 if day.weekday() >= 5 else 1.0
     feature = 1 + 2.5 * math.exp(-(((age - 200) / 6) ** 2))  # a one-off App Store feature
     noise = _rng("demand", app.apple_id, day).lognormvariate(0, 0.15)
-    return app.base_units * growth * weekend * feature * noise
+    return app.base_units * growth * weekend * feature * version_on(app, day)[2] * noise
 
 
 def downloads(app: SyntheticApp, day: date) -> dict[tuple[str, str], int]:
@@ -143,24 +174,34 @@ def sales_report(day: date) -> bytes:
     stamp = day.strftime("%m/%d/%Y")
     rows = []
 
-    def row(sku, title, ptype, units, price, country, device, apple_id, parent=""):
+    def row(sku, title, ptype, units, price, country, device, apple_id, parent="", version=""):
         _, currency, mult = COUNTRIES[country]
         rows.append([
-            "APPLE", "US", sku, "Synthetic Studio", title, "1.0", ptype, str(units),
+            "APPLE", "US", sku, "Synthetic Studio", title, version, ptype, str(units),
             _money(price, mult, 0.7), stamp, stamp, currency, country, currency, str(apple_id),
             _money(price, mult), "", parent, "", "", "Games", "", device, "iOS", "", "", "", "",
         ])  # fmt: skip
 
     for app in APPS:
         rng = _rng("sales", app.apple_id, day)
+        version, released, _ = version_on(app, day)
         for (country, device), units in sorted(downloads(app, day).items()):
-            row(app.sku, app.name, "1F", units, app.price, country, device, app.apple_id)
+            row(app.sku, app.name, "1F", units, app.price, country, device, app.apple_id,
+                version=version)  # fmt: skip
             if app.iap and (iap_units := sum(rng.random() < 0.04 for _ in range(units))):
                 iap_id, iap_sku, iap_title, iap_price = app.iap
                 row(iap_sku, iap_title, "IA1", iap_units, iap_price, country, device, iap_id,
                     parent=app.sku)  # fmt: skip
         if app.price != "0" and rng.random() < 0.15:  # the occasional refund
-            row(app.sku, app.name, "1F", -1, app.price, "US", "iPhone", app.apple_id)
+            row(app.sku, app.name, "1F", -1, app.price, "US", "iPhone", app.apple_id,
+                version=version)  # fmt: skip
+        since = (day - released).days
+        if released > EPOCH and since < UPDATE_DAYS:  # existing users updating, decaying
+            installed = app.base_units * 30 * (1 + 0.004 * (day - EPOCH).days)
+            for country, (weight, _, _) in COUNTRIES.items():
+                if units := round(installed * 0.12 * math.exp(-since / 4) * weight):
+                    row(app.sku, app.name, "7F", units, "0", country, "iPhone", app.apple_id,
+                        version=version)  # fmt: skip
     return _gzip_tsv(SALES_HEADER, rows)
 
 
@@ -182,10 +223,11 @@ def analytics_report(app: SyntheticApp, report_name: str, day: date) -> bytes:
             elif report_name == DOWNLOADS_REPORT:
                 kinds = (("First-time download", round(share)),
                          ("Redownload", round(share * rng.uniform(0.1, 0.3))))  # fmt: skip
+                version = version_on(app, day)[0]
                 for kind, counts in kinds:
                     if counts:
                         rows.append([
-                            day.isoformat(), app.name, str(app.apple_id), kind, "1.0", device,
+                            day.isoformat(), app.name, str(app.apple_id), kind, version, device,
                             "iOS 26", source, "", "", "Product page", "", "No", country,
                             str(counts),
                         ])  # fmt: skip

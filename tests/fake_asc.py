@@ -39,6 +39,8 @@ class FakeASC:
             if fixture.exists():
                 return httpx.Response(200, content=fixture.read_bytes())
             return _json(404, "error_404_sales.json")
+        if path.endswith("/appStoreVersions"):
+            return _json(200, "appStoreVersions.json")
         if path.endswith("/analyticsReportRequests"):
             return _json(200, "analyticsReportRequests.json")
         if path.endswith("/reports"):

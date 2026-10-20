@@ -6,7 +6,8 @@ from django.db.models import F, Sum
 from django.shortcuts import get_object_or_404
 from ninja import NinjaAPI, Schema
 
-from ascstats.stats.models import App, ConversionMetric, IngestionRun, SalesRow
+from ascstats.stats.models import DOWNLOAD_ROWS, App, ConversionMetric, IngestionRun, SalesRow
+from ascstats.stats.versions import version_impact
 
 api = NinjaAPI(title="ASCStats", version="1", description="App Store Connect stats, read-only.")
 
@@ -32,6 +33,24 @@ class Conversion(Schema):
     first_time_downloads: int
     units: int
     conversion_rate: float | None
+
+
+class DeltaOut(Schema):
+    metric: str
+    before: float | None
+    after: float | None
+    change_pct: float | None
+    t_score: float | None  # Welch t on daily values; |t| >= 2 is unlikely to be noise
+    significant: bool
+
+
+class VersionImpactOut(Schema):
+    version: str
+    released_on: date  # first day the version appears in sales data
+    before_days: int
+    after_days: int
+    updates: int
+    deltas: list[DeltaOut]
 
 
 class RunOut(Schema):
@@ -76,9 +95,9 @@ def daily_sales(request, apple_id: int, start: date | None = None, end: date | N
             r["report_date"], DailySales(date=r["report_date"], units=0, proceeds={})
         )
         day.proceeds[r["currency_of_proceeds"]] = round(float(r["total"]), 2)
-    # units across all product types except in-app purchases (those are not downloads)
+    # downloads only: in-app purchases and updates are not
     for r in (
-        SalesRow.objects.filter(app=app, report_date__range=(start, end), parent_identifier="")
+        SalesRow.objects.filter(DOWNLOAD_ROWS, app=app, report_date__range=(start, end))
         .values("report_date")
         .annotate(units=Sum("units"))
     ):
@@ -91,6 +110,13 @@ def conversion(request, apple_id: int, start: date | None = None, end: date | No
     app = get_object_or_404(App, apple_id=apple_id)
     start, end = _range(start, end)
     return ConversionMetric.objects.filter(app=app, date__range=(start, end)).order_by("date")
+
+
+@api.get("/apps/{apple_id}/versions", response=list[VersionImpactOut], tags=["versions"])
+def versions(request, apple_id: int, window: int = 14):
+    """Each version's first ``window`` days live against the ``window`` days before it."""
+    app = get_object_or_404(App, apple_id=apple_id)
+    return version_impact(app, window=max(3, min(window, 90)))
 
 
 @api.get("/runs", response=list[RunOut], tags=["ops"])

@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from django.db import transaction
 from django.db.models import Q, Sum
 
-from .models import AnalyticsRow, App, ConversionMetric, SalesRow
+from .models import DOWNLOAD_ROWS, AnalyticsRow, App, ConversionMetric, SalesRow
 from .parsing import DISCOVERY_REPORT, DOWNLOADS_REPORT
 
 
@@ -25,9 +25,9 @@ def build_conversion_metrics(start: date, end: date) -> int:
                     page_views=_counts(DISCOVERY_REPORT, "Page view"),
                     first_time=_counts(DOWNLOADS_REPORT, "First-time download"),
                 )
-                units = SalesRow.objects.filter(
-                    app=app, report_date=day, parent_identifier=""
-                ).aggregate(units=Sum("units"))["units"]
+                units = SalesRow.objects.filter(DOWNLOAD_ROWS, app=app, report_date=day).aggregate(
+                    units=Sum("units")
+                )["units"]
                 if any(v is not None for v in analytics.values()) or units is not None:
                     page_views = analytics["page_views"] or 0
                     first_time = analytics["first_time"] or 0

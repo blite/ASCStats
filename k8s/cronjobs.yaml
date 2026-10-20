@@ -68,7 +68,7 @@ spec:
             - name: import
               image: ascstats
               imagePullPolicy: IfNotPresent
-              args: ["sh", "-c", "python manage.py import_asc --report analytics --date yesterday && python manage.py build_conversion_metrics --days 7"]
+              args: ["sh", "-c", "python manage.py import_asc --report analytics --date yesterday && python manage.py build_conversion_metrics --days 7 && python manage.py build_versions"]
               envFrom:
                 - configMapRef: {name: ascstats-config}
                 - secretRef: {name: ascstats-app}

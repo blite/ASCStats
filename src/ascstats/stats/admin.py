@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AnalyticsRow, App, ConversionMetric, IngestionRun, SalesRow
+from .models import AnalyticsRow, App, AppVersion, ConversionMetric, IngestionRun, SalesRow
 
 
 @admin.register(App)
@@ -41,6 +41,13 @@ class ConversionMetricAdmin(admin.ModelAdmin):
     ]  # fmt: skip
     list_filter = ["app"]
     date_hierarchy = "date"
+
+
+@admin.register(AppVersion)
+class AppVersionAdmin(admin.ModelAdmin):
+    list_display = ["app", "version", "first_seen", "platform", "asc_state", "asc_created"]
+    list_filter = ["app", "asc_state"]
+    list_select_related = ["app"]
 
 
 @admin.register(IngestionRun)

@@ -1,0 +1,11 @@
+{
+  "data": [
+    {"type": "appStoreVersions", "id": "ver-3",
+     "attributes": {"versionString": "2.4", "platform": "IOS", "appVersionState": "WAITING_FOR_REVIEW",
+                    "appStoreState": "WAITING_FOR_REVIEW", "createdDate": "2026-10-12T09:30:00-07:00"}},
+    {"type": "appStoreVersions", "id": "ver-2",
+     "attributes": {"versionString": "2.3", "platform": "IOS", "appVersionState": "READY_FOR_DISTRIBUTION",
+                    "appStoreState": "READY_FOR_SALE", "createdDate": "2026-09-30T10:00:00-07:00"}}
+  ],
+  "links": {"self": "https://api.appstoreconnect.apple.com/v1/apps/1000000001/appStoreVersions"}
+}

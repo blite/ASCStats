@@ -140,6 +140,21 @@ class ASCClient:
             raise ASCError(response.status_code, _error_detail(response))
         return response.content
 
+    # --- Versions ------------------------------------------------------------------------
+
+    def app_store_versions(self, app_apple_id: int) -> list[dict[str, Any]]:
+        return list(
+            self.paginate(
+                f"/v1/apps/{app_apple_id}/appStoreVersions",
+                {
+                    "fields[appStoreVersions]": (
+                        "versionString,platform,appVersionState,appStoreState,createdDate"
+                    ),
+                    "limit": 200,
+                },
+            )
+        )
+
     # --- Analytics Reports ---------------------------------------------------------------
 
     def ongoing_report_request_id(self, app_apple_id: int) -> str:
