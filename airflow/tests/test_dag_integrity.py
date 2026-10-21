@@ -82,7 +82,7 @@ def test_conversion_metrics_waits_for_both_assets(dagbag):
     condition = dag.timetable.asset_condition
     assert type(condition).__name__ == "AssetAll"
     uris = {a.uri for a in condition.objects}
-    assert uris == {"ascstats://postgres/stats_salesrow", "ascstats://postgres/stats_analyticsrow"}
+    assert uris == {"ascstats://postgres/stats_salesrow", "ascstats://postgres/analytics_rollups"}
 
 
 def test_trigger_round_trips_through_serialization():

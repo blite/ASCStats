@@ -22,7 +22,8 @@ ASC_CONN_ID = "asc_default"
 ASC_POOL = "asc_api"  # bounds concurrent App Store Connect calls across all DAGs
 
 SALES_ASSET = Asset("ascstats://postgres/stats_salesrow", group="ascstats")
-ANALYTICS_ASSET = Asset("ascstats://postgres/stats_analyticsrow", group="ascstats")
+# Analytics loads two rollup tables (FunnelDay, UsageDay), so its asset names the pair.
+ANALYTICS_ASSET = Asset("ascstats://postgres/analytics_rollups", group="ascstats")
 CONVERSION_ASSET = Asset("ascstats://postgres/stats_conversionmetric", group="ascstats")
 
 DEFAULT_ARGS = {
