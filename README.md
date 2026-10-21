@@ -22,6 +22,11 @@ iOS apps into Postgres and serves them through Django.
   downloads / unique impressions (search downloads skip the product page, so downloads / page
   views can pass 100%); every rate is a ratio of sums with a 90% interval, shrunk toward the
   portfolio for ranking, and gaps stay gaps.
+- **Ratings**: Apple publishes only today's star-rating totals (public iTunes Lookup), so a
+  daily snapshot builds the history, and the difference of two snapshots gives the exact count
+  and average of the ratings in between. Written reviews and Apple's review summaries come from
+  App Store Connect, each filed under the version it was written for; per-version ratings are
+  at `/api/apps/{apple_id}/ratings`.
 - **Serve**: Django admin, a JSON API (Django Ninja, OpenAPI at `/api/docs`) and one
   server-rendered htmx page with a chart.
 - **Run**: Docker Compose for development, Kustomize manifests for Kubernetes (a CronJob per
@@ -78,6 +83,9 @@ own, and any day can be reloaded from raw without asking Apple again.
 | `UsageDay`         | Sessions and crashes per app, day, platform and app version, reduced at load. |
 | `ConversionMetric` | Derived daily funnel: unique impressions, unique page views, first-time downloads, sales downloads, in-app purchases. Rates are computed over windows, never stored. |
 | `AppVersion`       | Version dated by first appearance in sales; ASC state and creation time when on real data. |
+| `RatingSnapshot`   | Public star-rating totals per app, storefront and day (count and exact star sum).          |
+| `CustomerReview`   | A written review from App Store Connect, with the version and platform it was written for. |
+| `ReviewSummary`    | Apple's AI-written summary of an app's reviews, per platform and territory.                |
 | `FxDay`            | One row per day: JSON of currency -> USD per unit (ECB via Frankfurter); as-of lookup on weekends. Apple pays at its own rates, so this is an estimate. |
 | `IngestionRun`     | The run log: report, day, app, step, source, status, row counts, error.                   |
 
@@ -133,7 +141,7 @@ Backfill is the same command over a range: each day is independent, so a failed 
 reported and the rest continue (exit code 1 if any day failed, 3 if any were not yet
 published). Because every load is a delete+insert of exactly one `(app, report, day)`,
 running a day twice gives the same rows: restating the last week is just a re-run. In
-Airflow, backfill is `airflow dags backfill` over data intervals (see below).
+Airflow, backfill is `airflow backfill create` over data intervals (see below).
 
 ## Why no Celery (or Redis)
 
@@ -160,7 +168,7 @@ kubectl -n ascstats create job --from=cronjob/import-sales import-sales-now   # 
 ```
 
 `k8s/` contains: a Postgres StatefulSet, MinIO, the web Deployment (migrations run in an init
-container), the `import-sales` and `import-analytics` CronJobs with `concurrencyPolicy: Forbid`,
+container), the `import-sales`, `import-analytics` and `ratings` CronJobs with `concurrencyPolicy: Forbid`,
 and Secret templates in `k8s/secrets/`. For local convenience Kustomize generates dev-only
 Secrets from `k8s/secrets/dev-*.env`; on a shared cluster delete that generator and create
 the Secrets from the templates (or External Secrets).
@@ -187,7 +195,7 @@ The client cannot write: it has no POST/PATCH/DELETE method at all, and a test a
 every recorded request is a GET. The one-time ONGOING Analytics report request is created by
 hand in App Store Connect, outside the pipeline.
 
-## Airflow (phase 2)
+## Airflow
 
 `airflow/` is a separate uv project and Compose stack (Airflow 3, LocalExecutor, its own
 metadata Postgres). Airflow only orchestrates: every task is a `KubernetesPodOperator` running
@@ -197,7 +205,8 @@ the ascstats image's management command on the cluster above.
 |-------------------------------|----------------------------------|-----------------------------------------------------------------------------------------------|
 | `ascstats_daily_sales`        | daily data intervals, catchup    | `wait_for_report` (deferrable) → `download_raw` → `validate` → `load_day`[apps] → `quality_checks`[apps] |
 | `ascstats_daily_analytics`    | daily data intervals, catchup    | task group mapped over apps: `wait_for_report` → `download_raw` → `validate` → `load_day` → `quality_checks` |
-| `ascstats_conversion_metrics` | assets: sales **and** analytics  | rebuild the last 7 days of `ConversionMetric` → `build_versions`                              |
+| `ascstats_conversion_metrics` | assets: sales **and** analytics  | rebuild the last 7 days of `ConversionMetric` → `build_versions`; `import_fx` alongside       |
+| `ascstats_daily_ratings`      | daily, no catchup                | `snapshot_ratings` (public lookup, extra retries: a missed day is lost); `build_versions` → `import_reviews`; `check_report_requests` |
 | `ascstats_weekly_restatement` | Mondays                          | re-import the previous 7 complete days of both reports, rebuild metrics                     |
 
 - **Deferrable sensor**: `wait_for_report` hands off to the triggerer, which polls Apple with
@@ -260,7 +269,10 @@ src/ascstats/
   stats/parsing.py      report parsing and validation (pure functions)
   stats/synthetic.py    synthetic reports in Apple's file format
   stats/storage.py      raw landing zone (S3 API or local files)
-  stats/management/commands/  import_asc, seed_synthetic, build_conversion_metrics, build_versions, import_fx, list_apps
+  stats/ratings.py      rating snapshots, reviews and per-version ratings
+  stats/management/commands/  import_asc, seed_synthetic, build_conversion_metrics,
+                        build_versions, import_fx, snapshot_ratings, import_reviews,
+                        ensure_report_requests, ensure_raw_bucket, list_apps
   api.py                Django Ninja API
 k8s/                    Kustomize manifests
 airflow/                Airflow 3 DAGs, Compose stack, DAG-integrity tests
