@@ -111,6 +111,9 @@
     .seg label { padding: 6px 12px; font-size: 13px; cursor: pointer; color: var(--ink-2); }
     .seg input:checked + label { background: var(--ink); color: var(--surface); }
     .seg input:focus-visible + label { outline: 2px solid var(--series-1); outline-offset: -2px; }
+    .seg a { padding: 6px 12px; font-size: 13px; color: var(--ink-2); text-decoration: none; }
+    .seg a[aria-current] { background: var(--ink); color: var(--surface); }
+    .period { margin-bottom: 16px; }
     .two { display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px; }
     .cal rect { rx: 2.5; }
     .cal .loaded { fill: var(--st-good); } .cal .empty { fill: var(--st-empty); }
@@ -153,9 +156,9 @@
     </div>
     {% if not empty %}<span class="pill"><span class="pulse"></span>App Store Connect · data through {{ end|date:"M j, Y" }}</span>{% endif %}
     <nav class="tabs" aria-label="Pages">
-      <a href="{% url 'dashboard' %}"{% if page == "overview" %} aria-current="page"{% endif %}>Overview</a>
+      <a href="{% url 'dashboard' %}{% if period %}?period={{ period.days }}{% endif %}"{% if page == "overview" %} aria-current="page"{% endif %}>Overview</a>
       <a href="{% url 'funnel' %}"{% if page == "funnel" %} aria-current="page"{% endif %}>Funnel</a>
-      <a href="{% url 'revenue' %}"{% if page == "revenue" %} aria-current="page"{% endif %}>Revenue</a>
+      <a href="{% url 'revenue' %}{% if period %}?period={{ period.days }}{% endif %}"{% if page == "revenue" %} aria-current="page"{% endif %}>Revenue</a>
     </nav>
     <nav><a href="/api/docs">API</a><a href="/admin/">Admin</a></nav>
   </header>

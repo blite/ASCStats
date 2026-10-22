@@ -15,7 +15,7 @@ from decimal import Decimal
 
 from django.db.models import F, Sum
 
-from .charts import month_ticks, nice_axis, pct_change, spark
+from .charts import Period, month_ticks, nice_axis, pct_change, spark
 from .fx import Converter
 from .models import ACTIVE_ROWS, App, SalesDay, SalesRow
 
@@ -72,9 +72,10 @@ W, H, PAD_L, PAD_R, PAD_T, PAD_B = 1000, 280, 56, 8, 12, 26
 WEEKS = 52
 
 
-def revenue(end: date) -> dict:
+def revenue(end: date, period: Period | None = None) -> dict:
+    period = period or Period(end)  # at most 30 days, so it and the one before fit in the year
     lines = _lines(end - timedelta(days=364), end)
-    d30, d60 = end - timedelta(days=29), end - timedelta(days=59)
+    since, before = period.start, period.prev_start
     apps = {a.pk: a for a in App.objects.all()}
     # A product keeps its SKU when renamed; show the latest name it sold under.
     name_of = {ln.sku: ln.title for ln in sorted(lines, key=lambda ln: ln.day)}
@@ -87,13 +88,13 @@ def revenue(end: date) -> dict:
         defaultdict(float),
     )
     by_app_product = defaultdict(lambda: defaultdict(float))
-    products = defaultdict(lambda: {"usd": 0.0, "units": 0, "last30": 0.0})
+    products = defaultdict(lambda: {"usd": 0.0, "units": 0, "recent": 0.0})
     countries = defaultdict(float)
     unconverted = defaultdict(Decimal)
-    paid_units30 = 0
+    paid_units = 0
     for ln in lines:
-        if ln.day >= d30:
-            paid_units30 += ln.units
+        if ln.day >= since:
+            paid_units += ln.units
         if ln.usd is None:
             unconverted[ln.currency] += ln.local
             continue
@@ -103,16 +104,16 @@ def revenue(end: date) -> dict:
         if week >= 0:  # the year has a day more than 52 whole weeks
             by_week[(week, ln.app_id)] += usd
         year_by_app[ln.app_id] += usd
-        if ln.day >= d30:
+        if ln.day >= since:
             now_by_app[ln.app_id] += usd
-        elif ln.day >= d60:
+        elif ln.day >= before:
             before_by_app[ln.app_id] += usd
         by_app_product[ln.app_id][name] += usd
         p = products[(ln.app_id, ln.sku, name)]
         p["usd"] += usd
         p["units"] += ln.units
-        if ln.day >= d30:
-            p["last30"] += usd
+        if ln.day >= since:
+            p["recent"] += usd
         countries[ln.country] += usd
 
     # --- apps, ranked by the year's proceeds; the top SLOTS keep a color everywhere
@@ -163,8 +164,8 @@ def revenue(end: date) -> dict:
     xticks = month_ticks(week_starts, lambda i: round(PAD_L + (i + 0.5) * slot, 1))
 
     # --- per-app table
-    downloads30 = dict(
-        SalesDay.objects.filter(ACTIVE_ROWS, date__range=(d30, end))
+    downloads = dict(
+        SalesDay.objects.filter(ACTIVE_ROWS, date__range=(since, end))
         .values_list("app_id")
         .annotate(Sum("downloads"))
     )
@@ -173,12 +174,12 @@ def revenue(end: date) -> dict:
     for app_id in ranked:
         now = now_by_app[app_id]
         product = by_app_product[app_id]
-        dl = downloads30.get(app_id, 0)
+        dl = downloads.get(app_id, 0)
         share = 100 * year_by_app[app_id] / year_total if year_total else 0
         weekly = [by_week[(w, app_id)] for w in range(WEEKS - 12, WEEKS)]
         app_rows.append({
             "app": apps[app_id], "cls": color.get(app_id, "other"),
-            "last30": now, "change": pct_change(before_by_app[app_id], now),
+            "recent": now, "change": pct_change(before_by_app[app_id], now),
             "year": year_by_app[app_id], "share": share, "share_w": round(1.2 * share, 1),
             "per_1k": 1000 * now / dl if dl else None,
             "top_product": max(product, key=product.get) if product else "",
@@ -198,14 +199,14 @@ def revenue(end: date) -> dict:
     country_bars = [
         {"code": c, "usd": v, "w": round(100 * max(v, 0) / cmax, 1)} for c, v in country_rows
     ]
-    total30, totalprev = sum(now_by_app.values()), sum(before_by_app.values())
-    dl_total30 = sum(downloads30.values())
+    total, total_before = sum(now_by_app.values()), sum(before_by_app.values())
+    dl_total = sum(downloads.values())
     return {
-        "total30": total30,
-        "change30": pct_change(totalprev, total30),
+        "total": total,
+        "change": pct_change(total_before, total),
         "year": year_total,
-        "paid_units30": paid_units30,
-        "per_1k": 1000 * total30 / dl_total30 if dl_total30 else None,
+        "paid_units": paid_units,
+        "per_1k": 1000 * total / dl_total if dl_total else None,
         "best": app_rows[0] if app_rows else None,
         "series": [{"name": n, "cls": c} for n, c, _ in series],
         "bars": bars,

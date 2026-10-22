@@ -4,6 +4,7 @@ month labels and percent change. One copy each, so every chart rounds and labels
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 
@@ -73,3 +74,45 @@ def pct_change(before: float | None, after: float | None) -> float | None:
 
 def fmt_day(day: date) -> str:
     return f"{day:%b} {day.day}, {day.year}"
+
+
+PERIODS = (1, 7, 30)  # the headline window a page can switch between, in days
+
+
+@dataclass(frozen=True)
+class Period:
+    """The last ``days`` days up to ``end`` (the newest day with data), compared with the
+    same number of days just before. Apple publishes a day only after it ends, so the
+    one-day period is the latest day with data, not today."""
+
+    end: date
+    days: int = 30
+
+    @classmethod
+    def parse(cls, end: date, value: str | None) -> Period:
+        try:
+            n = int(value or 30)
+        except ValueError:
+            n = 30
+        return cls(end, n if n in PERIODS else 30)
+
+    @property
+    def start(self) -> date:
+        return self.end - timedelta(days=self.days - 1)
+
+    @property
+    def prev_start(self) -> date:
+        return self.end - timedelta(days=2 * self.days - 1)
+
+    @property
+    def label(self) -> str:
+        """'last 7 days', or the date itself for one day."""
+        return f"{self.end:%b} {self.end.day}" if self.days == 1 else f"last {self.days} days"
+
+    @property
+    def versus(self) -> str:
+        return "vs the day before" if self.days == 1 else f"vs the {self.days} days before"
+
+    def options(self) -> list[dict]:
+        names = {1: "Latest day", 7: "7 days", 30: "30 days"}
+        return [{"days": n, "name": names[n], "current": n == self.days} for n in PERIODS]

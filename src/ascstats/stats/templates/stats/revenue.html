@@ -5,21 +5,22 @@
 <section class="hero"><h1>No sales yet.</h1></section>
 {% else %}
 <section class="hero fade">
-  <p class="eyebrow">Proceeds · last 30 days · USD</p>
-  <h1><span class="num">{{ total30|money }}</span> earned{% if change30 is not None %}, {% if change30 >= 0 %}up{% else %}down{% endif %} {{ change30|floatformat:0|cut:"-" }}%{% endif %}.</h1>
+  {% include "stats/_period.html" %}
+  <p class="eyebrow">Proceeds · {{ period.label }} · USD</p>
+  <h1><span class="num">{{ total|money }}</span> earned{% if change is not None %}, {% if change >= 0 %}up{% else %}down{% endif %} {{ change|floatformat:0|cut:"-" }}%{% endif %}.</h1>
   <p>{{ year|money }} over the past year across {{ apps|length }} app{{ apps|length|pluralize }}{% if best %}; <strong>{{ best.app.name }}</strong> brought in {{ best.share|floatformat:0 }}% of it{% endif %}.</p>
 </section>
 
 <div class="grid4">
-  <div class="card tile fade"><div class="label">Proceeds, 30 days</div><div class="value">{{ total30|money }}</div>
-    <span class="chip {% if change30 is None %}flat{% elif change30 >= 0 %}up{% else %}down{% endif %}">{% if change30 is None %}● new{% elif change30 >= 0 %}▲ {{ change30|floatformat:0 }}%{% else %}▼ {{ change30|floatformat:0 }}%{% endif %}</span>
-    <div class="note">vs the 30 days before</div></div>
+  <div class="card tile fade"><div class="label">Proceeds, {{ period.label }}</div><div class="value">{{ total|money }}</div>
+    <span class="chip {% if change is None %}flat{% elif change >= 0 %}up{% else %}down{% endif %}">{% if change is None %}● new{% elif change >= 0 %}▲ {{ change|floatformat:0 }}%{% else %}▼ {{ change|floatformat:0 }}%{% endif %}</span>
+    <div class="note">{{ period.versus }}</div></div>
   <div class="card tile fade" style="animation-delay:100ms"><div class="label">Past 12 months</div><div class="value">{{ year|money }}</div>
     <div class="note">{{ apps|length }} earning app{{ apps|length|pluralize }}</div></div>
-  <div class="card tile fade" style="animation-delay:200ms"><div class="label">Paid transactions, 30 days</div><div class="value">{{ paid_units30|intcomma }}</div>
+  <div class="card tile fade" style="animation-delay:200ms"><div class="label">Paid transactions, {{ period.label }}</div><div class="value">{{ paid_units|intcomma }}</div>
     <div class="note">purchases and subscriptions, net of refunds</div></div>
   <div class="card tile fade" style="animation-delay:300ms"><div class="label">Per 1,000 downloads</div><div class="value">{{ per_1k|money }}</div>
-    <div class="note">30-day proceeds ÷ 30-day downloads</div></div>
+    <div class="note">proceeds ÷ downloads, {{ period.label }}</div></div>
 </div>
 
 <section class="card fade">
@@ -49,11 +50,11 @@
   <p class="sub">Ranked by the past year. Share is of the year's total; the sparkline is the last 12 weeks.</p>
   <div class="scroll">
   <table style="min-width: 760px">
-    <tr><th>App</th><th class="num">Last 30 days</th><th class="num">Change</th><th class="num">Past year</th><th>Share of year</th><th class="num">Per 1k downloads</th><th>Top seller</th><th>12 weeks</th></tr>
+    <tr><th>App</th><th class="num">{{ period.label|capfirst }}</th><th class="num">Change</th><th class="num">Past year</th><th>Share of year</th><th class="num">Per 1k downloads</th><th>Top seller</th><th>12 weeks</th></tr>
     {% for a in apps %}
     <tr>
       <td><span class="key"><span class="sw {{ a.cls }}"></span>{{ a.app.name }}</span></td>
-      <td class="num"><strong>{{ a.last30|money }}</strong></td>
+      <td class="num"><strong>{{ a.recent|money }}</strong></td>
       <td class="num">{% if a.change is None %}<span class="muted">–</span>{% else %}<span class="chip {% if a.change >= 0 %}up{% else %}down{% endif %}">{% if a.change >= 0 %}▲{% else %}▼{% endif %} {{ a.change|floatformat:0|cut:"-" }}%</span>{% endif %}</td>
       <td class="num">{{ a.year|money }}</td>
       <td><span style="display:inline-flex;align-items:center;gap:8px"><svg width="120" height="10" aria-hidden="true"><rect x="0" y="1" width="120" height="8" rx="3" fill="var(--grid)"/><rect class="{{ a.cls }}" x="0" y="1" width="{{ a.share_w }}" height="8" rx="3"/></svg>{{ a.share|floatformat:0 }}%</span></td>
@@ -71,10 +72,10 @@
     <h2>Top sellers</h2>
     <p class="sub">In-app purchases, subscriptions and paid apps, past year.</p>
     <table>
-      <tr><th>Product</th><th class="num">Units</th><th class="num">Last 30 days</th><th class="num">Past year</th></tr>
+      <tr><th>Product</th><th class="num">Units</th><th class="num">{{ period.label|capfirst }}</th><th class="num">Past year</th></tr>
       {% for p in products %}<tr>
         <td><span class="key"><span class="sw {{ p.cls }}"></span>{{ p.title|truncatechars:34 }}</span><div class="muted" style="font-size:12px">{{ p.app.name }}</div></td>
-        <td class="num">{{ p.units|intcomma }}</td><td class="num">{{ p.last30|money }}</td><td class="num"><strong>{{ p.usd|money }}</strong></td></tr>{% endfor %}
+        <td class="num">{{ p.units|intcomma }}</td><td class="num">{{ p.recent|money }}</td><td class="num"><strong>{{ p.usd|money }}</strong></td></tr>{% endfor %}
     </table>
   </section>
   <section class="card fade">

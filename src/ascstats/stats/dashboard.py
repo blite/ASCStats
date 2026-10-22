@@ -8,9 +8,9 @@ from datetime import date, timedelta
 
 from django.db.models import Max, Sum
 
+from .charts import Period, nice_axis, smooth, spark
 from .charts import days as _days
 from .charts import fmt_day as _fmt_day
-from .charts import nice_axis, smooth, spark
 from .crashes import version_crashes
 from .models import ACTIVE_ROWS, IOS, App, IngestionRun, Report, SalesDay
 from .ratings import current, daily_new_ratings, version_ratings
@@ -63,8 +63,9 @@ class Tile:
         return "up" if self.change_pct > 0 else "down"
 
 
-def tiles(end: date) -> list[Tile]:
-    start, prev_start = end - timedelta(days=29), end - timedelta(days=59)
+def tiles(end: date, period: Period | None = None) -> list[Tile]:
+    period = period or Period(end)
+    start, prev_start = period.start, period.prev_start
     spark_days = _days(end - timedelta(days=89), end)
     out = []
     for label, measure in (
@@ -76,9 +77,8 @@ def tiles(end: date) -> list[Tile]:
         current = sum(v for d, v in daily.items() if d >= start)
         previous = sum(_daily(measure, prev_start, start - timedelta(days=1)).values())
         series = smooth([daily.get(d, 0) for d in spark_days])
-        out.append(
-            Tile(label, current, previous, spark(series, 120, 32), "last 30 days vs the 30 before")
-        )
+        note = f"{period.label} {period.versus}"
+        out.append(Tile(label, current, previous, spark(series, 120, 32), note))
     return out
 
 

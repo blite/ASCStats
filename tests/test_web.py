@@ -94,3 +94,30 @@ def test_pages_are_cached_until_the_data_changes(client, seeded, django_assert_m
     sudoku.is_active = False  # any data change moves the version: the page is rebuilt
     sudoku.save()
     assert client.get("/").content != first.content
+
+
+def test_period_switch(client, seeded):
+    from datetime import date, timedelta
+
+    from ascstats.stats import dashboard
+    from ascstats.stats.charts import Period
+    from ascstats.stats.revenue import revenue
+
+    end = date.today() - timedelta(days=1)
+    day, week = Period(end, 1), Period(end, 7)
+    assert (day.start, day.prev_start) == (end, end - timedelta(days=1))
+    assert (week.start, week.prev_start) == (end - timedelta(days=6), end - timedelta(days=13))
+    assert Period.parse(end, "7") == week
+    assert Period.parse(end, "90").days == Period.parse(end, "x").days == 30  # 30 by default
+
+    downloads = [dashboard.tiles(end, p)[0] for p in (day, week)]
+    assert 0 < downloads[0].value < downloads[1].value
+    assert downloads[0].note == f"{day.label} vs the day before"
+    assert 0 < revenue(end, day)["total"] < revenue(end, week)["total"]
+
+    for path in ("/", "/revenue/"):
+        page = client.get(path, {"period": 7}).content
+        assert b"last 7 days" in page
+        assert b'<a href="?period=7" aria-current="true">7 days</a>' in page
+        assert b'href="/revenue/?period=7"' in page  # the choice follows you between pages
+        assert day.label.encode() in client.get(path, {"period": 1}).content

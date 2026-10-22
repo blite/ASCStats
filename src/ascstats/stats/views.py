@@ -6,6 +6,7 @@ from . import dashboard as d
 from . import funnel as f
 from . import revenue as r
 from .cache import cached_page
+from .charts import Period
 from .models import App, IngestionRun
 
 WINDOWS = [30, 90, 180, 365]
@@ -16,12 +17,14 @@ def dashboard(request):
     end = d.last_day()
     if end is None:
         return render(request, "stats/dashboard.html", {"empty": True, "page": "overview"})
-    tiles = d.tiles(end)
+    period = Period.parse(end, request.GET.get("period"))
+    tiles = d.tiles(end, period)
     board = d.scoreboard(end)
     apps = [lane.app for lane in board.lanes] or list(App.objects.active())
     context = {
         "page": "overview",
         "end": end,
+        "period": period,
         "tiles": tiles,
         "board": board,
         "calendar": d.pipeline_calendar(end),
@@ -54,7 +57,9 @@ def revenue(request):
     end = d.last_day()
     if end is None:
         return render(request, "stats/revenue.html", {"empty": True, "page": "revenue"})
-    return render(request, "stats/revenue.html", {"page": "revenue", "end": end, **r.revenue(end)})
+    period = Period.parse(end, request.GET.get("period"))
+    context = {"page": "revenue", "end": end, "period": period, **r.revenue(end, period)}
+    return render(request, "stats/revenue.html", context)
 
 
 @cached_page

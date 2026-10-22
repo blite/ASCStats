@@ -5,7 +5,8 @@
   {% else %}
   {% with dl=tiles.0 %}
   <section class="hero fade">
-    <p class="eyebrow">Last 30 days · {{ app_count }} apps</p>
+    {% include "stats/_period.html" %}
+    <p class="eyebrow">{{ period.label }} · {{ app_count }} apps</p>
     <h1><span class="num">{{ dl.value|intcomma }}</span> downloads{% if dl.change_pct is not None %}, {{ dl.direction }}{% if dl.direction != "flat" %} {{ dl.change_pct|floatformat:0|cut:"-" }}%{% endif %}{% endif %}.</h1>
     {% if best %}<p>Best release of the year: <strong>{{ best.app }} {{ best.impact.version }}</strong>, shipped {{ best.impact.released_on|date:"M j" }}, ran <strong>{{ best.impact.deltas.1.change_pct|floatformat:0 }}% above</strong> the downloads its pre-release trend predicted.</p>{% endif %}
   </section>

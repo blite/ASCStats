@@ -53,7 +53,7 @@ def test_revenue_sums_every_storefront_in_usd(apps):
         date=end - timedelta(days=60), rates={c: float(r) for c, r in rates.items()}
     )
     data = revenue(end)
-    assert data["total30"] > 0
+    assert data["total"] > 0
     assert data["unconverted"] == []
     assert data["apps"][0]["share"] >= data["apps"][-1]["share"]
     assert {a["app"].name for a in data["apps"]} == {
