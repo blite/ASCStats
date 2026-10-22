@@ -1,4 +1,4 @@
-{% extends "stats/base.html" %}{% load humanize %}
+{% extends "stats/base.html" %}{% load humanize stats_extras %}
 {% block title %}Funnel · ASCStats{% endblock %}
 {% block content %}
 {% if empty %}
@@ -34,7 +34,7 @@
     <tr><th>App</th>{% for s in strip.steps %}<th>{{ s.label }}{% if s.key == "install" %} <span class="muted">(headline)</span>{% endif %}</th>{% endfor %}<th class="num">Lost / month</th></tr>
     {% for r in strip.rows %}
     <tr>
-      <td><a href="#app" hx-get="{% url 'funnel_app' %}?app={{ r.app.apple_id }}" hx-target="#funnel-app" style="text-decoration:none">{{ r.app.name|truncatechars:28 }}</a></td>
+      <td><a href="#app" hx-get="{% url 'funnel_app' r.app.apple_id %}" hx-target="#funnel-app" style="text-decoration:none">{{ r.app.name|truncatechars:28 }}</a></td>
       {% for c in r.cells.values %}
       <td>
         {% if c.verdict != "none" %}<svg width="{{ strip.cell_w }}" height="22" role="img" aria-label="{{ c.view.tip }}" data-tip="{{ c.view.tip }}" style="display:block">
@@ -53,7 +53,7 @@
 </section>
 
 <section class="card" id="app">
-  <form class="card-head" hx-get="{% url 'funnel_app' %}" hx-target="#funnel-app" hx-trigger="load, change">
+  <form class="card-head" hx-get="{% url_pattern 'funnel_app' 'app' %}" hx-params="none" hx-target="#funnel-app" hx-trigger="load, change">
     <div>
       <h2>App funnel over time</h2>
       <p class="sub">Weekly rates with 90% intervals and releases, then where the traffic comes from.</p>

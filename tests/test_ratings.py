@@ -125,7 +125,7 @@ def test_synthetic_ratings_flow_into_api_and_dashboard(client, apps):
     body = client.get(f"/api/apps/{SNAKE}/ratings").json()
     assert body["summary"]
     assert any(v["ratings_per_day"] for v in body["versions"])
-    chart = client.get("/chart/", {"app": SNAKE, "days": 90})
+    chart = client.get(f"/chart/{SNAKE}/90/")
     assert b"Latest written reviews" in chart.content
     assert (
         b"Apple&#x27;s review summary" in chart.content

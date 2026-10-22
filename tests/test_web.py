@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from django.contrib.auth.models import User
 from django.core.management import call_command
@@ -36,7 +38,7 @@ def test_conversion_endpoint(client, seeded):
 
 def test_dashboard_and_chart(client, seeded):
     assert b"hx-get" in client.get("/").content
-    chart = client.get("/chart/", {"app": 1000000001, "days": 30})
+    chart = client.get("/chart/1000000001/30/")
     assert chart.status_code == 200
     assert b"<rect" in chart.content
     assert b"<polyline" in chart.content
@@ -80,7 +82,7 @@ def test_inactive_apps_are_left_out_of_every_stat(client, seeded):
     ]
     for path in ("sales/daily", "versions", "ratings", "conversion"):
         assert client.get(f"/api/apps/1000000002/{path}").status_code == 404
-    assert b"No data for this app" in client.get("/chart/", {"app": 1000000002}).content
+    assert b"No data for this app" in client.get("/chart/1000000002/90/").content
 
 
 def test_pages_are_cached_until_the_data_changes(client, seeded, django_assert_max_num_queries):
@@ -107,17 +109,25 @@ def test_period_switch(client, seeded):
     day, week = Period(end, 1), Period(end, 7)
     assert (day.start, day.prev_start) == (end, end - timedelta(days=1))
     assert (week.start, week.prev_start) == (end - timedelta(days=6), end - timedelta(days=13))
-    assert Period.parse(end, "7") == week
-    assert Period.parse(end, "90").days == Period.parse(end, "x").days == 30  # 30 by default
 
     downloads = [dashboard.tiles(end, p)[0] for p in (day, week)]
     assert 0 < downloads[0].value < downloads[1].value
     assert downloads[0].note == f"{day.label} vs the day before"
     assert 0 < revenue(end, day)["total"] < revenue(end, week)["total"]
 
-    for path in ("/", "/revenue/"):
-        page = client.get(path, {"period": 7}).content
+    for base in ("/", "/revenue/"):
+        page = client.get(f"{base}7d/").content
         assert b"last 7 days" in page
-        assert b'<a href="?period=7" aria-current="true">7 days</a>' in page
-        assert b'href="/revenue/?period=7"' in page  # the choice follows you between pages
-        assert day.label.encode() in client.get(path, {"period": 1}).content
+        assert f'<a href="{base}7d/" aria-current="true">7 days</a>'.encode() in page
+        assert b'href="/revenue/7d/"' in page  # the choice follows you between pages
+        default = client.get(base).content
+        assert f'<a href="{base}" aria-current="true">30 days</a>'.encode() in default
+        assert day.label.encode() in client.get(f"{base}1d/").content
+        assert client.get(f"{base}90d/").status_code == 404
+        assert not re.search(rb'(href|hx-get)="/[^"]*\?', page)  # no query strings anywhere
+
+
+def test_fragments_are_paths(client, seeded):
+    assert client.get("/chart/1000000001/45/").status_code == 404  # not a window
+    assert client.get("/chart/1000000001/90/").status_code == 200
+    assert b'hx-get="/chart/{app}/{days}/" hx-params="none"' in client.get("/").content

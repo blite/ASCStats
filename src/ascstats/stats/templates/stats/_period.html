@@ -1,1 +1,1 @@
-<nav class="seg period" aria-label="Period">{% for p in period.options %}<a href="?period={{ p.days }}"{% if p.current %} aria-current="true"{% endif %}>{{ p.name }}</a>{% endfor %}</nav>
+{% load stats_extras %}<nav class="seg period" aria-label="Period">{% for p in period.options %}<a href="{% period_url page p.days %}"{% if p.current %} aria-current="true"{% endif %}>{{ p.name }}</a>{% endfor %}</nav>

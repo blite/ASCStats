@@ -130,6 +130,25 @@ curl localhost:8000/api/apps/1000000002/sales/daily
 MinIO's console is on http://localhost:9001 (`ascstats` / `ascstats-dev-secret`), where the
 raw files are visible under `ascstats-raw/`.
 
+## Static demo (GitHub Pages)
+
+`export_site` renders the synthetic demo as plain files: every page, every period
+(`/7d/`, `/revenue/1d/`) and every htmx fragment (`/chart/<app>/<days>/`), each at its own
+path with no query strings, under a base path such as `/ASCStats/`. The demo is frozen on
+**June 29, 2026** (the iPhone went on sale on June 29, 2007), so it never goes stale.
+
+```bash
+ASC_SOURCE=synthetic DATABASE_URL=sqlite:////tmp/demo.sqlite3 \
+  uv run python manage.py export_site --out /tmp/site --base-path /ASCStats/
+```
+
+It only runs on a fresh synthetic database (it refuses `ASC_SOURCE=asc` or a database with
+any apps in it), so real sales can never reach the published files, and it fails if any link
+it wrote points at a page it did not write. Exchange rates are the real ECB rates for those
+dates. In the demo the header links to the source instead of the API and admin, which need
+a server. `.github/workflows/pages.yml` builds and deploys it on every push to `main` once
+Pages is set to deploy from GitHub Actions (Settings → Pages → Source).
+
 ## Backfill and restatement
 
 ```bash

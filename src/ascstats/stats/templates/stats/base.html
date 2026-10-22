@@ -1,4 +1,4 @@
-<!doctype html>
+{% load stats_extras %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -69,6 +69,8 @@
     header nav { display: flex; gap: 14px; font-size: 13px; color: var(--ink-2); }
     header nav a { text-decoration: none; } header nav a:hover { color: var(--ink); }
     .hero { padding: 36px 0 18px; }
+    .demo-note { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); background: var(--surface);
+                 border: 1px dashed var(--axis); border-radius: 10px; padding: 8px 12px; }
     .eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 8px; }
     .hero h1 { font-size: clamp(30px, 5vw, 52px); line-height: 1.05; letter-spacing: -.03em; margin: 0; font-weight: 700; max-width: 18ch; }
     .hero h1 .num { color: var(--series-1); }
@@ -154,14 +156,15 @@
         <path d="M6 18l4.5-5 3.5 3 6-8" fill="none" stroke="var(--surface)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       ASCStats
     </div>
-    {% if not empty %}<span class="pill"><span class="pulse"></span>App Store Connect · data through {{ end|date:"M j, Y" }}</span>{% endif %}
+    {% if end %}<span class="pill"><span class="pulse"></span>App Store Connect · data through {{ end|date:"M j, Y" }}</span>{% endif %}
     <nav class="tabs" aria-label="Pages">
-      <a href="{% url 'dashboard' %}{% if period %}?period={{ period.days }}{% endif %}"{% if page == "overview" %} aria-current="page"{% endif %}>Overview</a>
+      <a href="{% period_url 'overview' period.days %}"{% if page == "overview" %} aria-current="page"{% endif %}>Overview</a>
       <a href="{% url 'funnel' %}"{% if page == "funnel" %} aria-current="page"{% endif %}>Funnel</a>
-      <a href="{% url 'revenue' %}{% if period %}?period={{ period.days }}{% endif %}"{% if page == "revenue" %} aria-current="page"{% endif %}>Revenue</a>
+      <a href="{% period_url 'revenue' period.days %}"{% if page == "revenue" %} aria-current="page"{% endif %}>Revenue</a>
     </nav>
-    <nav><a href="/api/docs">API</a><a href="/admin/">Admin</a></nav>
+    <nav>{% if demo %}<a href="{{ source_url }}">Source</a>{% else %}<a href="/api/docs">API</a><a href="/admin/">Admin</a>{% endif %}</nav>
   </header>
+  {% if demo %}<p class="demo-note">A static demo with synthetic data for three made-up apps, frozen on Jun 29, 2026, the iPhone's launch day. The real thing runs on App Store Connect; <a href="{{ source_url }}">see the source</a>.</p>{% endif %}
 
   {% block content %}{% endblock %}
   <footer>ASCStats · read-only App Store Connect pipeline · Django, Postgres, Kubernetes, Airflow</footer>
@@ -188,6 +191,14 @@
     if (el) { const b = el.getBoundingClientRect(); show(el, b.right, b.top); }
   });
   document.addEventListener("focusout", () => { tip.hidden = true; });
+
+  // Fragments are plain paths, never query strings: a form's hx-get such as
+  // /chart/{app}/{days}/ is filled in from its fields (and hx-params="none" sends nothing else).
+  document.addEventListener("htmx:configRequest", e => {
+    if (!e.detail.path.includes("{")) return;
+    const fields = new FormData(e.detail.elt.closest("form"));
+    e.detail.path = e.detail.path.replace(/\{(\w+)\}/g, (_, name) => encodeURIComponent(fields.get(name)));
+  });
 </script>
 </body>
 </html>

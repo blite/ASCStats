@@ -73,6 +73,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "ascstats.stats.context.site",
             ],
         },
     },
@@ -108,3 +109,10 @@ S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL") or None  # MinIO; unset for 
 # Report source: "asc" talks to App Store Connect, "synthetic" generates fake but realistic files.
 ASC_SOURCE = os.environ.get("ASC_SOURCE", "synthetic")
 ASC_VENDOR_NUMBER = os.environ.get("ASC_VENDOR_NUMBER", "")
+
+# --- Static demo (export_site) ------------------------------------------------------------
+
+# True only while export_site renders the static demo: pages say so and drop the live-only
+# links (API, admin).
+DEMO_SITE = False
+SOURCE_URL = "https://github.com/blite/ASCStats"

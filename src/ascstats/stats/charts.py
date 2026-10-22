@@ -77,6 +77,7 @@ def fmt_day(day: date) -> str:
 
 
 PERIODS = (1, 7, 30)  # the headline window a page can switch between, in days
+DEFAULT_PERIOD = 30
 
 
 @dataclass(frozen=True)
@@ -86,15 +87,7 @@ class Period:
     one-day period is the latest day with data, not today."""
 
     end: date
-    days: int = 30
-
-    @classmethod
-    def parse(cls, end: date, value: str | None) -> Period:
-        try:
-            n = int(value or 30)
-        except ValueError:
-            n = 30
-        return cls(end, n if n in PERIODS else 30)
+    days: int = DEFAULT_PERIOD
 
     @property
     def start(self) -> date:

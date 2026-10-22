@@ -1,4 +1,4 @@
-{% extends "stats/base.html" %}{% load humanize %}
+{% extends "stats/base.html" %}{% load humanize stats_extras %}
 {% block content %}
   {% if empty %}
   <section class="hero"><h1>No data yet.</h1><p>Run <code>manage.py seed_synthetic</code> or import a day with <code>manage.py import_asc</code>.</p></section>
@@ -79,7 +79,7 @@
   </section>
 
   <section class="card">
-    <form class="card-head" hx-get="{% url 'chart' %}" hx-target="#chart" hx-trigger="load, change" hx-swap="innerHTML">
+    <form class="card-head" hx-get="{% url_pattern 'chart' 'app' 'days' %}" hx-params="none" hx-target="#chart" hx-trigger="load, change" hx-swap="innerHTML">
       <div>
         <h2>App deep-dive</h2>
         <p class="sub">Daily downloads, every release, and the trend each release was measured against.</p>

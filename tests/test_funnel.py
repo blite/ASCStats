@@ -100,6 +100,6 @@ def test_funnel_pages_render_on_synthetic_data(client, apps):
     page = client.get("/funnel/")
     assert page.status_code == 200
     assert b"Where&#x27;s the leak" in page.content or b"Where's the leak" in page.content
-    detail = client.get("/funnel/app/", {"app": 1000000001})
+    detail = client.get("/funnel/app/1000000001/")
     assert b"step rates by week" in detail.content
     assert b"how each source converts" in detail.content
