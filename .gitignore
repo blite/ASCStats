@@ -17,3 +17,6 @@ airflow/logs/
 !k8s/secrets/dev-*.env
 k8s/**/*.secret.yaml
 airflow/.kube/
+# local real-data setup: the Compose override and the data folder it stores into
+compose.override.yaml
+/data/
