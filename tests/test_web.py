@@ -37,7 +37,11 @@ def test_conversion_endpoint(client, seeded):
 
 
 def test_dashboard_and_chart(client, seeded):
-    assert b"hx-get" in client.get("/").content
+    home = client.get("/").content
+    assert b'href="/app/1000000001/"' in home  # each release lane opens its app page
+    assert b"App deep-dive" not in home  # the deep-dive lives on the app page only
+    assert b"App deep-dive" in client.get("/app/1000000001/").content
+    assert client.get("/app/999/").status_code == 404
     chart = client.get("/chart/1000000001/30/")
     assert chart.status_code == 200
     assert b"<rect" in chart.content
@@ -112,7 +116,8 @@ def test_period_switch(client, seeded):
 
     downloads = [dashboard.tiles(end, p)[0] for p in (day, week)]
     assert 0 < downloads[0].value < downloads[1].value
-    assert downloads[0].note == f"{day.label} vs the day before"
+    assert day.label == f"{end:%a}, {end:%b} {end.day}"  # the day named outright
+    assert downloads[0].note == f"{day.label} vs {Period(end - timedelta(days=1), 1).label}"
     assert 0 < revenue(end, day)["total"] < revenue(end, week)["total"]
 
     for base in ("/", "/revenue/"):
@@ -122,7 +127,8 @@ def test_period_switch(client, seeded):
         assert b'href="/revenue/7d/"' in page  # the choice follows you between pages
         default = client.get(base).content
         assert f'<a href="{base}" aria-current="true">30 days</a>'.encode() in default
-        assert day.label.encode() in client.get(f"{base}1d/").content
+        one_day = client.get(f"{base}1d/").content
+        assert f'<a href="{base}1d/" aria-current="true">{day.label}</a>'.encode() in one_day
         assert client.get(f"{base}90d/").status_code == 404
         assert not re.search(rb'(href|hx-get)="/[^"]*\?', page)  # no query strings anywhere
 
@@ -130,4 +136,39 @@ def test_period_switch(client, seeded):
 def test_fragments_are_paths(client, seeded):
     assert client.get("/chart/1000000001/45/").status_code == 404  # not a window
     assert client.get("/chart/1000000001/90/").status_code == 200
-    assert b'hx-get="/chart/{app}/{days}/" hx-params="none"' in client.get("/").content
+    page = client.get("/app/1000000001/").content
+    assert b'hx-get="/chart/{app}/{days}/" hx-params="none"' in page
+
+
+def test_home_shows_new_ratings_and_reviews(client, seeded):
+    from datetime import date, timedelta
+
+    from ascstats.stats.models import App
+    from ascstats.stats.ratings import recent_activity
+
+    end = date.today() - timedelta(days=1)
+    week = recent_activity(list(App.objects.active()), end, 7)
+    assert 0 < week["observed"] <= 7  # the fixture seeds only a few days of snapshots
+    assert week["new_total"] == sum(c.new_ratings for c in week["changes"]) > 0
+    assert all(c.change is not None for c in week["changes"])
+    assert all(r.created.date() >= end - timedelta(days=6) for r in week["reviews"])
+    home = client.get("/7d/").content.decode()
+    assert "Ratings and reviews" in home
+    assert f"<strong>{week['new_total']}</strong> new ratings" in home
+
+
+def test_home_has_an_all_time_rollup(client, seeded):
+    from datetime import date, timedelta
+
+    from ascstats.stats import dashboard
+    from ascstats.stats.charts import Period
+    from ascstats.stats.models import SalesDay
+    from ascstats.stats.revenue import revenue
+
+    end = date.today() - timedelta(days=1)
+    totals = dashboard.all_time(end)
+    assert totals["since"] == SalesDay.objects.order_by("date").first().date
+    assert totals["downloads"] >= dashboard.tiles(end, Period(end, 30))[0].value > 0
+    assert totals["proceeds"] >= revenue(end, Period(end, 30))["total"] > 0
+    for page in ("/", "/1d/"):  # the same whichever period is selected
+        assert f"{totals['downloads']:,}".encode() in client.get(page).content

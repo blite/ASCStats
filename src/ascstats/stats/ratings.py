@@ -310,3 +310,62 @@ def current(app: App, daily: dict[date, tuple[int, int]] | None = None) -> dict 
             "week_days": len(week),
         }
     return out
+
+
+@dataclass
+class AppRatingChange:
+    app: App
+    count: int  # ratings across storefronts at the latest snapshot
+    average: float
+    new_ratings: int  # given in the window
+    new_average: float | None  # stars of only those new ratings
+    change: float | None  # overall average now minus before the window, in stars
+
+
+def recent_activity(apps: list[App], end: date, days: int, limit: int = 8) -> dict:
+    """What changed for the overview: new ratings per app over the last ``days`` days of
+    snapshots (ending at the latest one), and the newest written reviews across apps since
+    ``end`` minus ``days``. Apps without a snapshot are left out of the ratings."""
+    latest = RatingSnapshot.objects.filter(app__in=apps).aggregate(d=Max("date"))["d"]
+    changes, observed = [], 0
+    if latest is not None:
+        since = latest - timedelta(days=days)
+        totals = {
+            r["app"]: (r["count"], r["stars"])
+            for r in RatingSnapshot.objects.filter(app__in=apps, date=latest)
+            .values("app")
+            .annotate(count=Sum("count"), stars=Sum("star_sum"))
+        }
+        for app in apps:
+            count, stars = totals.get(app.pk, (0, 0))
+            if not count:
+                continue
+            window = [v for d, v in daily_new_ratings(app).items() if since < d <= latest]
+            observed = max(observed, len(window))
+            new, new_stars = sum(c for c, _ in window), sum(s for _, s in window)
+            before = count - new
+            changes.append(
+                AppRatingChange(
+                    app=app,
+                    count=count,
+                    average=stars / count,
+                    new_ratings=new,
+                    new_average=new_stars / new if new > 0 else None,
+                    change=stars / count - (stars - new_stars) / before
+                    if window and before > 0
+                    else None,
+                )
+            )
+        changes.sort(key=lambda c: (-c.new_ratings, -c.count))
+    reviews = list(
+        CustomerReview.objects.filter(
+            app__in=apps, created__gte=_midnight(end - timedelta(days=days - 1))
+        ).select_related("app")[:limit]
+    )
+    return {
+        "latest": latest,
+        "observed": observed,  # days of snapshot pairs in the window; 0 until the second snapshot
+        "changes": changes,
+        "new_total": sum(c.new_ratings for c in changes),
+        "reviews": reviews,
+    }

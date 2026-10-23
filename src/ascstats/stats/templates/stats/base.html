@@ -84,6 +84,9 @@
     .tile .row { display: flex; align-items: end; justify-content: space-between; gap: 8px; }
     .tile svg { width: 120px; height: 32px; flex: none; }
     .tile .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .alltime { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; }
+    .alltime .label { font-size: 13px; color: var(--ink-2); }
+    .alltime .value { font-size: 26px; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
     .split { display: flex; gap: 14px; margin-top: 6px; font-size: 13px; color: var(--ink-2); flex-wrap: wrap; }
     .key { display: inline-flex; align-items: center; gap: 6px; }
     .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
@@ -99,6 +102,8 @@
     .lane-total { font-size: 11px; fill: var(--muted); }
     .lane-area { fill: var(--lane-fill); }
     .lane-line { fill: none; stroke: var(--lane-line); stroke-width: 1.5; stroke-linejoin: round; }
+    .lane { cursor: pointer; } .lane:hover .lane-name, .lane:focus-visible .lane-name { fill: var(--series-1); text-decoration: underline; }
+    .lane:hover .lane-area { fill: rgba(42,120,214,.14); }
     .rel { stroke: var(--surface); stroke-width: 2; cursor: pointer; }
     .rel.up { fill: var(--up); } .rel.down { fill: var(--down); } .rel.neutral { fill: var(--neutral); }
     .rel.unknown { fill: var(--surface); stroke: var(--neutral); }

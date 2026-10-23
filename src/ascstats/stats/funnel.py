@@ -124,7 +124,55 @@ def last_day() -> date | None:
     )["d"]
 
 
-# --- 1. leak strip -----------------------------------------------------------------------------
+# --- 1. conversion, all apps ------------------------------------------------------------------
+
+PAGE_TO_DOWNLOAD = Step(
+    "page", "Page view → download", "first_time_downloads", "unique_page_views", 100, 0,
+    poisson=True,  # not a true step: downloads straight from search have no page view
+)  # fmt: skip
+
+
+@dataclass
+class ConversionRow:
+    name: str
+    app: App | None  # None for the all-apps total
+    impressions: int
+    page_views: int
+    downloads: int
+    cells: dict[str, dict]  # tap, install, page: {"value", "count", "thin"}
+
+
+def conversion_table(end: date) -> dict:
+    """Raw rates over the last ``WINDOW`` days for every app with impressions, busiest first,
+    under an all-apps total: the plain numbers the leak ranking is then measured against."""
+    apps = list(App.objects.active())
+    start = end - timedelta(days=WINDOW - 1)
+    sums = _sums(apps, start, end)
+    steps = [s for s in STEPS if s.key in ("tap", "install")] + [PAGE_TO_DOWNLOAD]
+
+    def cell(rate: Rate) -> dict:
+        return {
+            "value": "\u2013" if rate.raw is None else f"{100 * rate.raw:.1f}%",
+            "count": f"{int(rate.k):,} of {int(rate.n):,}",
+            "thin": rate.low_volume,
+        }
+
+    def row(name, app, v):
+        return ConversionRow(
+            name, app, v[UNIQUE_IMP], v["unique_page_views"], v["first_time_downloads"],
+            {s.key: cell(Rate(v[s.numerator], v[s.denominator], s)) for s in steps},
+        )  # fmt: skip
+
+    rows = sorted(
+        (row(a.name, a, sums[a.pk]) for a in apps if sums.get(a.pk, {}).get(UNIQUE_IMP)),
+        key=lambda r: (-r.impressions, r.name),
+    )
+    fields = {f for s in steps for f in (s.numerator, s.denominator)}
+    total = row("All apps", None, {f: sum(v[f] for v in sums.values()) for f in fields})
+    return {"rows": rows, "total": total, "steps": steps, "start": start, "end": end}
+
+
+# --- 2. leak strip -----------------------------------------------------------------------------
 
 CELL_W = 220
 
@@ -243,7 +291,7 @@ def leak_strip(end: date) -> dict:
     }
 
 
-# --- 2. step rates over time, with releases ---------------------------------------------------
+# --- 3. step rates over time, with releases ---------------------------------------------------
 
 PANEL_W, PANEL_H, PAD_L, PAD_R, PAD_T, PAD_B = 1000, 120, 48, 12, 10, 18
 
@@ -401,7 +449,7 @@ def step_trends(app: App, end: date) -> dict:
     }
 
 
-# --- 3. source mix vs rate ---------------------------------------------------------------------
+# --- 4. source mix vs rate ---------------------------------------------------------------------
 
 SOURCES = ["App Store search", "App Store browse", "Web referrer", "App referrer"]
 SOURCE_CLASS = {name: f"c{i + 1}" for i, name in enumerate(SOURCES)} | {"Other": "other"}

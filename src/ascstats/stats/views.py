@@ -1,10 +1,11 @@
-"""The dashboard: a portfolio page, plus an htmx-swapped deep-dive per app."""
+"""The dashboard: a portfolio page, plus a page per app with an htmx-swapped deep-dive."""
 
 from django.http import Http404
 from django.shortcuts import render
 
 from . import dashboard as d
 from . import funnel as f
+from . import ratings as rt
 from . import revenue as r
 from .cache import cached_page
 from .charts import DEFAULT_PERIOD, PERIODS, Period
@@ -27,16 +28,15 @@ def dashboard(request, days=DEFAULT_PERIOD):
     period = _period(end, days)
     tiles = d.tiles(end, period)
     board = d.scoreboard(end)
-    apps = [lane.app for lane in board.lanes] or list(App.objects.active())
     context = {
         "page": "overview",
         "end": end,
         "period": period,
         "tiles": tiles,
+        "all_time": d.all_time(end),
         "board": board,
         "calendar": d.pipeline_calendar(end),
-        "apps": apps,
-        "windows": WINDOWS,
+        "activity": rt.recent_activity(list(App.objects.active()), end, period.days),
         "app_count": App.objects.active().count(),
         "best": max(
             (r for r in board.releases if r["kind"] == "up"),
@@ -46,6 +46,15 @@ def dashboard(request, days=DEFAULT_PERIOD):
         "runs": IngestionRun.objects.select_related("app")[:6],
     }
     return render(request, "stats/dashboard.html", context)
+
+
+@cached_page
+def app_page(request, apple_id):
+    app = App.objects.active().filter(apple_id=apple_id).first()
+    if app is None:
+        raise Http404("no such app")
+    context = {"page": "app", "end": d.last_day(), "app": app, "windows": WINDOWS}
+    return render(request, "stats/app.html", context)
 
 
 @cached_page
@@ -74,7 +83,12 @@ def funnel(request):
     end = f.last_day()
     if end is None:
         return render(request, "stats/funnel.html", {"empty": True, "page": "funnel"})
-    context = {"page": "funnel", "end": end, "strip": f.leak_strip(end)}
+    context = {
+        "page": "funnel",
+        "end": end,
+        "conversion": f.conversion_table(end),
+        "strip": f.leak_strip(end),
+    }
     return render(request, "stats/funnel.html", context)
 
 

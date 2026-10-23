@@ -39,11 +39,31 @@
     </div>
   </div>
 
+  {% if all_time %}{% with a=all_time %}
+  <section class="card fade" aria-label="All time">
+    <div class="card-head">
+      <div>
+        <h2>All time</h2>
+        <p class="sub">Every day imported, {{ a.since|date:"M j, Y" }} to {{ end|date:"M j, Y" }} ({{ a.days|intcomma }} days), whichever period is selected above. Ratings are Apple's running totals from the latest snapshot.</p>
+      </div>
+    </div>
+    <div class="alltime">
+      <div><div class="label">Downloads</div><div class="value">{{ a.downloads|intcomma }}</div></div>
+      <div><div class="label">In-app purchases</div><div class="value">{{ a.iap_units|intcomma }}</div></div>
+      <div><div class="label">Updates installed</div><div class="value">{{ a.updates|intcomma }}</div></div>
+      <div><div class="label">Proceeds{% if a.unconverted %}*{% endif %}</div><div class="value"><a href="{% url 'revenue' %}" style="text-decoration:none">{{ a.proceeds|money }}</a></div></div>
+      <div><div class="label">Ratings</div><div class="value">{{ a.ratings|intcomma }}{% if a.average is not None %} <span class="muted" style="font-size:.6em">{{ a.average|floatformat:2 }}★</span>{% endif %}</div></div>
+      <div><div class="label">Written reviews</div><div class="value">{{ a.reviews|intcomma }}</div></div>
+    </div>
+    {% if a.unconverted %}<p class="muted" style="font-size:12px;margin:8px 0 0">* Proceeds in {{ a.unconverted|join:", " }} are left out: the ECB publishes no rate for them.</p>{% endif %}
+  </section>
+  {% endwith %}{% endif %}
+
   <section class="card fade">
     <div class="card-head">
       <div>
         <h2>Every release, every app</h2>
-        <p class="sub">Each lane is one app's daily downloads over the past year (7-day average, scaled to its own peak). Each dot is an iOS release, colored by whether downloads beat the trend the app was already on.</p>
+        <p class="sub">Each lane is one app's daily downloads over the past year (7-day average, scaled to its own peak). Each dot is an iOS release, colored by whether downloads beat the trend the app was already on. Click a lane for the app's page.</p>
       </div>
       <div class="split" aria-label="Legend">
         <span class="key"><span class="dot up"></span>Lifted downloads</span>
@@ -58,12 +78,14 @@
         <text class="tick" x="{{ t.x }}" y="{{ board.height|add:'-4' }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
         {% for lane in board.lanes %}
         <g>
-          <text class="lane-name" x="0" y="{{ lane.y|add:22 }}">{{ lane.app.name|truncatechars:26 }}</text>
-          <text class="lane-total" x="0" y="{{ lane.y|add:37 }}">{{ lane.total|intcomma }} downloads</text>
-          <g class="reveal" style="animation-delay: {{ forloop.counter0 }}00ms">
-            <path class="lane-area" d="{{ lane.area }}"/>
-            <polyline class="lane-line" points="{{ lane.line }}"/>
-          </g>
+          <a class="lane" href="{% url 'app' lane.app.apple_id %}" aria-label="{{ lane.app.name }}: open the app page">
+            <text class="lane-name" x="0" y="{{ lane.y|add:22 }}">{{ lane.app.name|truncatechars:26 }}</text>
+            <text class="lane-total" x="0" y="{{ lane.y|add:37 }}">{{ lane.total|intcomma }} downloads</text>
+            <g class="reveal" style="animation-delay: {{ forloop.counter0 }}00ms">
+              <path class="lane-area" d="{{ lane.area }}"/>
+              <polyline class="lane-line" points="{{ lane.line }}"/>
+            </g>
+          </a>
           {% for dot in lane.dots %}<circle class="rel {{ dot.kind }}" cx="{{ dot.x }}" cy="{{ dot.y }}" r="5" tabindex="0" data-tip="{{ dot.tip }}" aria-label="{{ dot.tip }}"/>{% endfor %}
         </g>
         {% endfor %}
@@ -73,26 +95,45 @@
       <summary>Table view: all {{ board.releases|length }} releases</summary>
       <table>
         <tr><th>App</th><th>Version</th><th>Released</th><th>Effect</th></tr>
-        {% for r in board.releases %}<tr><td>{{ r.app }}</td><td>{{ r.impact.version }}</td><td>{{ r.impact.released_on|date:"M j, Y" }}</td><td>{{ r.verdict }}</td></tr>{% endfor %}
+        {% for r in board.releases %}<tr><td><a href="{% url 'app' r.apple_id %}">{{ r.app }}</a></td><td>{{ r.impact.version }}</td><td>{{ r.impact.released_on|date:"M j, Y" }}</td><td>{{ r.verdict }}</td></tr>{% endfor %}
       </table>
     </details>
   </section>
 
-  <section class="card">
-    <form class="card-head" hx-get="{% url_pattern 'chart' 'app' 'days' %}" hx-params="none" hx-target="#chart" hx-trigger="load, change" hx-swap="innerHTML">
+  {% with act=activity %}
+  <section class="card fade">
+    <div class="card-head">
       <div>
-        <h2>App deep-dive</h2>
-        <p class="sub">Daily downloads, every release, and the trend each release was measured against.</p>
+        <h2>Ratings and reviews</h2>
+        <p class="sub">{% if act.observed %}<strong>{{ act.new_total }}</strong> new rating{{ act.new_total|pluralize }} in the {{ act.observed }} day{{ act.observed|pluralize }} of daily snapshots to {{ act.latest|date:"M j" }}, and the newest written reviews {% if period.days == 1 %}since {{ period.label }}{% else %}from the {{ period.label }}{% endif %}.{% elif act.latest %}Rating changes start with the second daily snapshot (the first was {{ act.latest|date:"M j" }}). Newest written reviews {% if period.days == 1 %}since {{ period.label }}{% else %}from the {{ period.label }}{% endif %}.{% else %}No rating snapshots yet. Newest written reviews {% if period.days == 1 %}since {{ period.label }}{% else %}from the {{ period.label }}{% endif %}.{% endif %}</p>
       </div>
-      <div class="filters">
-        <select name="app" aria-label="App">{% for app in apps %}<option value="{{ app.apple_id }}">{{ app.name }}</option>{% endfor %}</select>
-        <div class="seg" role="radiogroup" aria-label="Window">
-          {% for w in windows %}<input type="radio" name="days" id="w{{ w }}" value="{{ w }}"{% if w == 90 %} checked{% endif %}><label for="w{{ w }}">{% if w == 365 %}1y{% else %}{{ w }}d{% endif %}</label>{% endfor %}
+    </div>
+    <div class="two">
+      <div class="scroll">
+        <table>
+          <tr><th>App</th><th class="num">Rating</th><th class="num">New</th><th class="num">New avg</th><th class="num">Change</th></tr>
+          {% for c in act.changes %}<tr>
+            <td><a href="{% url 'app' c.app.apple_id %}">{{ c.app.name|truncatechars:28 }}</a></td>
+            <td class="num">{{ c.average|floatformat:2 }}★ <span class="muted">{{ c.count|intcomma }}</span></td>
+            <td class="num">{% if act.observed %}{{ c.new_ratings }}{% else %}<span class="muted">–</span>{% endif %}</td>
+            <td class="num">{% if c.new_average is not None %}{{ c.new_average|floatformat:1 }}★{% else %}<span class="muted">–</span>{% endif %}</td>
+            <td class="num">{% if c.change is None %}<span class="muted">–</span>{% elif c.change >= 0.005 %}<span class="chip up">▲ {{ c.change|floatformat:2 }}</span>{% elif c.change <= -0.005 %}<span class="chip down">▼ {{ c.change|floatformat:2|cut:"-" }}</span>{% else %}<span class="chip flat">● 0.00</span>{% endif %}</td>
+          </tr>{% empty %}<tr><td colspan="5" class="muted">No ratings yet.</td></tr>{% endfor %}
+        </table>
+      </div>
+      <div>
+        {% for rv in act.reviews %}
+        <div style="padding:8px 0;border-bottom:1px solid var(--grid);font-size:13px">
+          <div><span aria-label="{{ rv.rating }} of 5 stars" style="letter-spacing:1px">{% for i in "12345" %}{% if forloop.counter <= rv.rating %}★{% else %}<span class="muted">☆</span>{% endif %}{% endfor %}</span>
+            <strong style="margin-left:6px">{{ rv.title|truncatechars:60 }}</strong></div>
+          <div class="muted" style="font-size:12px"><a href="{% url 'app' rv.app.apple_id %}">{{ rv.app.name }}</a> · {{ rv.created|date:"M j" }} · {{ rv.territory }}{% if rv.version %} · v{{ rv.version }}{% endif %}</div>
+          {% if rv.body %}<div style="color:var(--ink-2);margin-top:2px">{{ rv.body|truncatechars:180 }}</div>{% endif %}
         </div>
+        {% empty %}<p class="muted">No new written reviews.</p>{% endfor %}
       </div>
-    </form>
-    <div id="chart"><p class="muted">Loading…</p></div>
+    </div>
   </section>
+  {% endwith %}
 
   <div class="two">
     <section class="card">

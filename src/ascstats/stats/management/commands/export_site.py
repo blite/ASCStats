@@ -63,6 +63,7 @@ class Command(BaseCommand):
         for page in ("", "revenue/"):
             paths += [page] + [f"{page}{n}d/" for n in PERIODS if n != DEFAULT_PERIOD]
         for app in App.objects.active():
+            paths.append(f"app/{app.apple_id}/")
             paths += [f"chart/{app.apple_id}/{w}/" for w in WINDOWS]
             paths.append(f"funnel/app/{app.apple_id}/")
         if out.exists():

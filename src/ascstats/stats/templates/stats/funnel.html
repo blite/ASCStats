@@ -4,22 +4,45 @@
 {% if empty %}
 <section class="hero"><h1>No App Store Analytics yet.</h1><p>Impressions and page views come from Apple's Analytics Reports, which arrive 1–2 days after the report requests are created.</p></section>
 {% else %}
+{% with t=conversion.total %}
 <section class="hero fade">
-  <p class="eyebrow">Funnel · {{ strip.start|date:"M j" }} – {{ strip.end|date:"M j, Y" }}</p>
-  {% with top=strip.rows.0 %}
-  {% if top and top.lost >= 1 %}
-  <h1>Biggest leak: <span class="num">{{ top.app.name }}</span>, about {{ top.lost|floatformat:0 }} downloads a month below its usual install rate.</h1>
-  {% else %}
-  <h1>No app is converting clearly below its usual rate.</h1>
-  {% endif %}
-  {% endwith %}
-  <p>Install rate = first-time downloads ÷ unique impressions. Many downloads come straight from search results without a page view, so page tap-through is a diagnostic beside it, not a step everything passes through.</p>
+  <p class="eyebrow">Funnel · {{ conversion.start|date:"M j" }} – {{ conversion.end|date:"M j, Y" }} · {{ conversion.rows|length }} apps</p>
+  <h1><span class="num">{{ t.cells.tap.value }}</span> of impressions became page views, <span class="num">{{ t.cells.install.value }}</span> downloads.</h1>
+  <p>Unique devices across all your apps over the last 28 days. Many downloads come straight from search results without a page view, so a page view is not a step every download passes through.</p>
 </section>
 
 <section class="card fade">
   <div class="card-head">
     <div>
+      <h2>Conversion by app</h2>
+      <p class="sub">Last 28 days, unique devices, busiest app first. Grey rates rest on fewer than 30 views or 5 conversions. Page view → download can top 100% because search downloads skip the page.</p>
+    </div>
+  </div>
+  <div class="scroll">
+  <table style="min-width: 760px">
+    <tr><th>App</th><th class="num">Impressions</th><th class="num">Page views</th><th class="num">Impression → page view</th><th class="num">Downloads</th><th class="num">Impression → download</th><th class="num">Page view → download</th></tr>
+    <tr style="font-weight:650"><td>{{ t.name }}</td><td class="num">{{ t.impressions|intcomma }}</td><td class="num">{{ t.page_views|intcomma }}</td><td class="num">{{ t.cells.tap.value }}</td><td class="num">{{ t.downloads|intcomma }}</td><td class="num">{{ t.cells.install.value }}</td><td class="num">{{ t.cells.page.value }}</td></tr>
+    {% for r in conversion.rows %}
+    <tr>
+      <td><a href="{% url 'app' r.app.apple_id %}">{{ r.name|truncatechars:28 }}</a></td>
+      <td class="num">{{ r.impressions|intcomma }}</td>
+      <td class="num">{{ r.page_views|intcomma }}</td>
+      {% with c=r.cells.tap %}<td class="num{% if c.thin %} muted{% endif %}" data-tip="{{ c.count }}">{{ c.value }}</td>{% endwith %}
+      <td class="num">{{ r.downloads|intcomma }}</td>
+      {% with c=r.cells.install %}<td class="num{% if c.thin %} muted{% endif %}" data-tip="{{ c.count }}">{{ c.value }}</td>{% endwith %}
+      {% with c=r.cells.page %}<td class="num{% if c.thin %} muted{% endif %}" data-tip="{{ c.count }}">{{ c.value }}</td>{% endwith %}
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+</section>
+{% endwith %}
+
+<section class="card fade">
+  <div class="card-head">
+    <div>
       <h2>Where's the leak</h2>
+      {% with top=strip.rows.0 %}{% if top and top.lost >= 1 %}<p style="margin:6px 0 0;font-size:15px">Biggest leak: <strong>{{ top.app.name }}</strong>, about {{ top.lost|floatformat:0 }} downloads a month below its usual install rate.</p>{% else %}<p style="margin:6px 0 0;font-size:15px">No app is converting clearly below its usual rate.</p>{% endif %}{% endwith %}
       <p class="sub">Last 28 days per app, ranked by downloads lost against each app's own usual rate (its previous 90 days, or all your apps when it has too little history). Each column shares one scale.</p>
     </div>
     <div class="split" aria-label="Legend">

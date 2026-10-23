@@ -6,14 +6,24 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from django.db.models import Max, Sum
+from django.db.models import Max, Min, Sum
 
 from .charts import Period, nice_axis, smooth, spark
 from .charts import days as _days
 from .charts import fmt_day as _fmt_day
 from .crashes import version_crashes
-from .models import ACTIVE_ROWS, IOS, App, IngestionRun, Report, SalesDay
+from .models import (
+    ACTIVE_ROWS,
+    IOS,
+    App,
+    CustomerReview,
+    IngestionRun,
+    RatingSnapshot,
+    Report,
+    SalesDay,
+)
 from .ratings import current, daily_new_ratings, version_ratings
+from .revenue import _lines as revenue_lines
 from .versions import VersionImpact, version_impact
 
 
@@ -82,6 +92,31 @@ def tiles(end: date, period: Period | None = None) -> list[Tile]:
     return out
 
 
+def all_time(end: date) -> dict | None:
+    """Totals for active apps over every day imported, whatever the period switch says.
+    Ratings are the latest snapshot's totals: Apple's counts already run since launch."""
+    first = SalesDay.objects.filter(ACTIVE_ROWS).aggregate(d=Min("date"))["d"]
+    if first is None:
+        return None
+    sums = SalesDay.objects.filter(ACTIVE_ROWS, date__lte=end).aggregate(
+        downloads=Sum("downloads"), iap_units=Sum("iap_units"), updates=Sum("updates")
+    )
+    lines = revenue_lines(first, end)
+    snaps = RatingSnapshot.objects.filter(app__is_active=True)
+    latest = snaps.aggregate(d=Max("date"))["d"]
+    rated = snaps.filter(date=latest).aggregate(count=Sum("count"), stars=Sum("star_sum"))
+    return {
+        "since": first,
+        "days": (end - first).days + 1,
+        **{k: v or 0 for k, v in sums.items()},
+        "proceeds": sum(float(ln.usd) for ln in lines if ln.usd is not None),
+        "unconverted": sorted({ln.currency for ln in lines if ln.usd is None}),
+        "ratings": rated["count"] or 0,
+        "average": rated["stars"] / rated["count"] if rated["count"] else None,
+        "reviews": CustomerReview.objects.filter(app__is_active=True).count(),
+    }
+
+
 # --- release scoreboard (one lane per app) -------------------------------------------------
 
 LANE_X0, LANE_X1, LANE_H, LANE_TOP = 200, 1020, 50, 28
@@ -147,7 +182,15 @@ def scoreboard(end: date, days: int = 365) -> Scoreboard:
             )
             dot = {"x": x(impact.released_on), "y": base - height - 4, "kind": kind, "tip": tip}
             lane.dots.append(dot)
-            releases.append({"app": app.name, "impact": impact, "kind": kind, "verdict": verdict})
+            releases.append(
+                {
+                    "app": app.name,
+                    "apple_id": app.apple_id,
+                    "impact": impact,
+                    "kind": kind,
+                    "verdict": verdict,
+                }
+            )
         lanes.append(lane)
     ticks = []
     month = date(start.year, start.month, 1)

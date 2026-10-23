@@ -41,6 +41,25 @@ def _days(app, start, n, imp, dl, iap=0, units=None):
 
 
 @pytest.mark.django_db
+def test_conversion_table_shows_raw_rates_for_every_app_busiest_first(apps):
+    busy, quiet, tiny = apps
+    window = END - timedelta(days=funnel.WINDOW - 1)
+    _days(busy, window - timedelta(days=5), funnel.WINDOW + 5, imp=1000, dl=50)  # 5 days early
+    _days(quiet, window, funnel.WINDOW, imp=100, dl=10)
+    _days(tiny, window, 1, imp=3, dl=1)
+    table = funnel.conversion_table(END)
+    assert [r.app for r in table["rows"]] == [busy, quiet, tiny]
+    assert table["rows"][0].impressions == 1000 * funnel.WINDOW  # only the window counts
+    assert table["rows"][0].cells["tap"]["value"] == "25.0%"  # page views are imp // 4
+    assert table["rows"][0].cells["install"]["value"] == "5.0%"
+    assert table["rows"][1].cells["page"]["value"] == "40.0%"  # 10 of 25 page views
+    assert table["rows"][2].cells["install"]["thin"]
+    total = table["total"]
+    assert total.impressions == sum(r.impressions for r in table["rows"])
+    assert total.downloads == sum(r.downloads for r in table["rows"])
+
+
+@pytest.mark.django_db
 def test_leak_strip_ranks_the_app_that_fell_below_its_usual_rate(apps):
     healthy, leaking, tiny = apps
     window = END - timedelta(days=funnel.WINDOW - 1)
@@ -99,6 +118,7 @@ def test_funnel_pages_render_on_synthetic_data(client, apps):
     call_command("seed_synthetic", "--days", "60")
     page = client.get("/funnel/")
     assert page.status_code == 200
+    assert page.content.index(b"Conversion by app") < page.content.index(b"the leak")
     assert b"Where&#x27;s the leak" in page.content or b"Where's the leak" in page.content
     detail = client.get("/funnel/app/1000000001/")
     assert b"step rates by week" in detail.content

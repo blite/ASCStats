@@ -1,0 +1,24 @@
+{% extends "stats/base.html" %}{% load stats_extras %}
+{% block title %}{{ app.name }} · ASCStats{% endblock %}
+{% block content %}
+<section class="hero fade">
+  <p class="eyebrow"><a href="{% url 'dashboard' %}" style="text-decoration:none">← Overview</a> · App</p>
+  <h1>{{ app.name }}</h1>
+</section>
+
+<section class="card">
+  <form class="card-head" hx-get="{% url_pattern 'chart' 'app' 'days' %}" hx-params="none" hx-target="#chart" hx-trigger="load, change" hx-swap="innerHTML">
+    <input type="hidden" name="app" value="{{ app.apple_id }}">
+    <div>
+      <h2>App deep-dive</h2>
+      <p class="sub">Daily downloads, every release, and the trend each release was measured against.</p>
+    </div>
+    <div class="filters">
+      <div class="seg" role="radiogroup" aria-label="Window">
+        {% for w in windows %}<input type="radio" name="days" id="w{{ w }}" value="{{ w }}"{% if w == 90 %} checked{% endif %}><label for="w{{ w }}">{% if w == 365 %}1y{% else %}{{ w }}d{% endif %}</label>{% endfor %}
+      </div>
+    </div>
+  </form>
+  <div id="chart"><p class="muted">Loading…</p></div>
+</section>
+{% endblock %}

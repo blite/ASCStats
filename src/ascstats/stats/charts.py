@@ -76,6 +76,12 @@ def fmt_day(day: date) -> str:
     return f"{day:%b} {day.day}, {day.year}"
 
 
+def fmt_weekday(day: date) -> str:
+    """'Thu, Oct 22': the one-day period names its day outright, never 'latest' or
+    'yesterday', which a static export would make stale."""
+    return f"{day:%a}, {day:%b} {day.day}"
+
+
 PERIODS = (1, 7, 30)  # the headline window a page can switch between, in days
 DEFAULT_PERIOD = 30
 
@@ -99,13 +105,15 @@ class Period:
 
     @property
     def label(self) -> str:
-        """'last 7 days', or the date itself for one day."""
-        return f"{self.end:%b} {self.end.day}" if self.days == 1 else f"last {self.days} days"
+        """'last 7 days', or the day itself for one day."""
+        return fmt_weekday(self.end) if self.days == 1 else f"last {self.days} days"
 
     @property
     def versus(self) -> str:
-        return "vs the day before" if self.days == 1 else f"vs the {self.days} days before"
+        if self.days == 1:
+            return f"vs {fmt_weekday(self.prev_start)}"
+        return f"vs the {self.days} days before"
 
     def options(self) -> list[dict]:
-        names = {1: "Latest day", 7: "7 days", 30: "30 days"}
+        names = {1: fmt_weekday(self.end), 7: "7 days", 30: "30 days"}
         return [{"days": n, "name": names[n], "current": n == self.days} for n in PERIODS]
