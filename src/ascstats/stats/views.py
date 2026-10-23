@@ -8,13 +8,15 @@ from . import funnel as f
 from . import ratings as rt
 from . import revenue as r
 from .cache import cached_page
-from .charts import DEFAULT_PERIOD, PERIODS, Period
+from .charts import ALL, DEFAULT_PERIOD, PERIODS, Period
 from .models import App, IngestionRun
 
 WINDOWS = [30, 90, 180, 365]
 
 
-def _period(end, days: int) -> Period:
+def _period(end, days: int | str) -> Period:
+    if days == ALL:
+        return Period.all(end, d.first_day())
     if days not in PERIODS:
         raise Http404("no such period")
     return Period(end, days)
@@ -33,7 +35,6 @@ def dashboard(request, days=DEFAULT_PERIOD):
         "end": end,
         "period": period,
         "tiles": tiles,
-        "all_time": d.all_time(end),
         "board": board,
         "calendar": d.pipeline_calendar(end),
         "activity": rt.recent_activity(list(App.objects.active()), end, period.days),
@@ -53,7 +54,14 @@ def app_page(request, apple_id):
     app = App.objects.active().filter(apple_id=apple_id).first()
     if app is None:
         raise Http404("no such app")
-    context = {"page": "app", "end": d.last_day(), "app": app, "windows": WINDOWS}
+    end = d.last_day()
+    context = {
+        "page": "app",
+        "end": end,
+        "app": app,
+        "windows": WINDOWS,
+        "revenue": r.app_revenue(app, end) if end else None,
+    }
     return render(request, "stats/app.html", context)
 
 

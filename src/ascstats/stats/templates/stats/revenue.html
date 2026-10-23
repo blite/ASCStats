@@ -13,7 +13,7 @@
 
 <div class="grid4">
   <div class="card tile fade"><div class="label">Proceeds{% if period.days == 1 %} on{% else %},{% endif %} {{ period.label }}</div><div class="value">{{ total|money }}</div>
-    <span class="chip {% if change is None %}flat{% elif change >= 0 %}up{% else %}down{% endif %}">{% if change is None %}● new{% elif change >= 0 %}▲ {{ change|floatformat:0 }}%{% else %}▼ {{ change|floatformat:0 }}%{% endif %}</span>
+    {% if not period.all_time %}<span class="chip {% if change is None %}flat{% elif change >= 0 %}up{% else %}down{% endif %}">{% if change is None %}● new{% elif change >= 0 %}▲ {{ change|floatformat:0 }}%{% else %}▼ {{ change|floatformat:0 }}%{% endif %}</span>{% endif %}
     <div class="note">{{ period.versus }}</div></div>
   <div class="card tile fade" style="animation-delay:100ms"><div class="label">Past 12 months</div><div class="value">{{ year|money }}</div>
     <div class="note">{{ apps|length }} earning app{{ apps|length|pluralize }}</div></div>

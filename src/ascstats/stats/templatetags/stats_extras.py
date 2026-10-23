@@ -1,7 +1,7 @@
 from django import template
 from django.urls import reverse
 
-from ascstats.stats.charts import DEFAULT_PERIOD
+from ascstats.stats.charts import ALL, DEFAULT_PERIOD
 from ascstats.stats.revenue import money as _money
 
 register = template.Library()
@@ -11,11 +11,13 @@ PERIOD_PAGES = {"overview": "dashboard", "revenue": "revenue"}
 
 @register.simple_tag
 def period_url(page, days):
-    """A page for a period: /7d/, /revenue/1d/. The default period is the page's own
+    """A page for a period: /7d/, /revenue/1d/, /all/. The default period is the page's own
     URL, so each view has one address."""
     name = PERIOD_PAGES[page]
     if not days or days == DEFAULT_PERIOD:
         return reverse(name)
+    if days == ALL:
+        return reverse(f"{name}_all")
     return reverse(f"{name}_period", args=[days])
 
 

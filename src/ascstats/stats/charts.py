@@ -84,16 +84,28 @@ def fmt_weekday(day: date) -> str:
 
 PERIODS = (1, 7, 30)  # the headline window a page can switch between, in days
 DEFAULT_PERIOD = 30
+ALL = "all"  # the extra choice: every day imported
 
 
 @dataclass(frozen=True)
 class Period:
     """The last ``days`` days up to ``end`` (the newest day with data), compared with the
     same number of days just before. Apple publishes a day only after it ends, so the
-    one-day period is the latest day with data, not today."""
+    one-day period is the latest day with data, not today. ``Period.all`` covers every day
+    since the first one imported, with nothing before it to compare against."""
 
     end: date
     days: int = DEFAULT_PERIOD
+    all_time: bool = False
+
+    @classmethod
+    def all(cls, end: date, first: date) -> Period:
+        return cls(end, (end - first).days + 1, all_time=True)
+
+    @property
+    def key(self) -> int | str:
+        """What the URL and the switch call it: 7, or "all"."""
+        return ALL if self.all_time else self.days
 
     @property
     def start(self) -> date:
@@ -105,15 +117,26 @@ class Period:
 
     @property
     def label(self) -> str:
-        """'last 7 days', or the day itself for one day."""
+        """'last 7 days', 'all time', or the day itself for one day."""
+        if self.all_time:
+            return "all time"
         return fmt_weekday(self.end) if self.days == 1 else f"last {self.days} days"
 
     @property
     def versus(self) -> str:
+        if self.all_time:
+            return f"since {fmt_day(self.start)}"
         if self.days == 1:
             return f"vs {fmt_weekday(self.prev_start)}"
         return f"vs the {self.days} days before"
 
+    @property
+    def span(self) -> str:
+        """For "reviews ...": 'since Thu, Oct 22', 'from the last 7 days', 'of all time'."""
+        if self.all_time:
+            return "of all time"
+        return f"since {self.label}" if self.days == 1 else f"from the {self.label}"
+
     def options(self) -> list[dict]:
-        names = {1: fmt_weekday(self.end), 7: "7 days", 30: "30 days"}
-        return [{"days": n, "name": names[n], "current": n == self.days} for n in PERIODS]
+        names = {1: fmt_weekday(self.end), 7: "7 days", 30: "30 days", ALL: "All"}
+        return [{"key": k, "name": names[k], "current": k == self.key} for k in (*PERIODS, ALL)]

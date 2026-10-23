@@ -157,7 +157,7 @@ def test_home_shows_new_ratings_and_reviews(client, seeded):
     assert f"<strong>{week['new_total']}</strong> new ratings" in home
 
 
-def test_home_has_an_all_time_rollup(client, seeded):
+def test_all_period_covers_every_day_imported(client, seeded):
     from datetime import date, timedelta
 
     from ascstats.stats import dashboard
@@ -166,9 +166,37 @@ def test_home_has_an_all_time_rollup(client, seeded):
     from ascstats.stats.revenue import revenue
 
     end = date.today() - timedelta(days=1)
-    totals = dashboard.all_time(end)
-    assert totals["since"] == SalesDay.objects.order_by("date").first().date
-    assert totals["downloads"] >= dashboard.tiles(end, Period(end, 30))[0].value > 0
-    assert totals["proceeds"] >= revenue(end, Period(end, 30))["total"] > 0
-    for page in ("/", "/1d/"):  # the same whichever period is selected
-        assert f"{totals['downloads']:,}".encode() in client.get(page).content
+    old = SalesDay.objects.order_by("date").first()
+    old.pk, old.date = None, end - timedelta(days=200)  # older than the tiles' 90-day sparkline
+    old.save()
+    first = old.date
+    everything = Period.all(end, first)
+    assert (everything.start, everything.key, everything.label) == (first, "all", "all time")
+    downloads = dashboard.tiles(end, everything)[0]
+    assert downloads.value == sum(SalesDay.objects.values_list("downloads", flat=True))
+    assert downloads.change_pct is None  # nothing before the first day to compare with
+    assert revenue(end, everything)["total"] >= revenue(end, Period(end, 30))["total"] > 0
+    for base in ("/", "/revenue/"):
+        page = client.get(f"{base}all/").content.decode()
+        assert f'<a href="{base}all/" aria-current="true">All</a>' in page
+        assert "all time" in page.lower()
+        assert 'href="/revenue/all/"' in page  # the choice follows you between pages
+    assert f"{downloads.value:,}" in client.get("/all/").content.decode()
+
+
+def test_app_page_shows_its_revenue(client, seeded):
+    from datetime import date, timedelta
+
+    from ascstats.stats.models import App
+    from ascstats.stats.revenue import app_revenue, revenue
+
+    end = date.today() - timedelta(days=1)
+    by_app = {row["app"].apple_id: row for row in revenue(end)["apps"]}
+    app = App.objects.get(apple_id=next(iter(by_app)))
+    mine = app_revenue(app, end)
+    assert round(mine["recent"], 2) == round(by_app[app.apple_id]["recent"], 2)
+    assert round(mine["year"], 2) == round(by_app[app.apple_id]["year"], 2)
+    assert len(mine["bars"]) == 52
+    page = client.get(f"/app/{app.apple_id}/").content.decode()
+    assert "Revenue" in page
+    assert "Weekly proceeds over the past year" in page

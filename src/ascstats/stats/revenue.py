@@ -35,10 +35,12 @@ class Line:
     usd: Decimal | None
 
 
-def _lines(start: date, end: date) -> list[Line]:
+def _lines(start: date, end: date, app: App | None = None) -> list[Line]:
+    rows = SalesRow.objects.filter(ACTIVE_ROWS, report_date__range=(start, end))
+    if app is not None:
+        rows = rows.filter(app=app)
     rows = list(
-        SalesRow.objects.filter(ACTIVE_ROWS, report_date__range=(start, end))
-        .exclude(developer_proceeds=0)
+        rows.exclude(developer_proceeds=0)
         .values("report_date", "app_id", "sku", "title", "country_code", "currency_of_proceeds")
         .annotate(n_units=Sum("units"), local=Sum(F("units") * F("developer_proceeds")))
     )
@@ -73,14 +75,17 @@ WEEKS = 52
 
 
 def revenue(end: date, period: Period | None = None) -> dict:
-    period = period or Period(end)  # at most 30 days, so it and the one before fit in the year
-    lines = _lines(end - timedelta(days=364), end)
+    period = period or Period(end)
+    year_start = end - timedelta(days=364)
     since, before = period.start, period.prev_start
+    # The year's charts and tables plus the period and the one before it; all time can reach
+    # further back than the year, and those older rows count only towards the period.
+    lines = _lines(min(year_start, before), end)
     apps = {a.pk: a for a in App.objects.all()}
     # A product keeps its SKU when renamed; show the latest name it sold under.
     name_of = {ln.sku: ln.title for ln in sorted(lines, key=lambda ln: ln.day)}
 
-    # One pass over the year's rows: every total below is read from these buckets.
+    # One pass over the rows: every total below is read from these buckets.
     by_week = defaultdict(float)  # (week index, app id) -> usd; week 51 ends on ``end``
     year_by_app, now_by_app, before_by_app = (
         defaultdict(float),
@@ -100,20 +105,21 @@ def revenue(end: date, period: Period | None = None) -> dict:
             continue
         usd = float(ln.usd)
         name = name_of[ln.sku]
+        p = products[(ln.app_id, ln.sku, name)]
+        if ln.day >= since:
+            now_by_app[ln.app_id] += usd
+            p["recent"] += usd
+        elif ln.day >= before:
+            before_by_app[ln.app_id] += usd
+        if ln.day < year_start:
+            continue
         week = WEEKS - 1 - (end - ln.day).days // 7
         if week >= 0:  # the year has a day more than 52 whole weeks
             by_week[(week, ln.app_id)] += usd
         year_by_app[ln.app_id] += usd
-        if ln.day >= since:
-            now_by_app[ln.app_id] += usd
-        elif ln.day >= before:
-            before_by_app[ln.app_id] += usd
         by_app_product[ln.app_id][name] += usd
-        p = products[(ln.app_id, ln.sku, name)]
         p["usd"] += usd
         p["units"] += ln.units
-        if ln.day >= since:
-            p["recent"] += usd
         countries[ln.country] += usd
 
     # --- apps, ranked by the year's proceeds; the top SLOTS keep a color everywhere
@@ -217,5 +223,90 @@ def revenue(end: date, period: Period | None = None) -> dict:
         "countries": country_bars,
         "unconverted": [(c, round(v, 2)) for c, v in sorted(unconverted.items())],
         "width": W, "height": H, "pad_l": PAD_L, "plot_r": W - PAD_R,
+        "pad_t": PAD_T, "plot_h": plot_h,
+    }  # fmt: skip
+
+
+# --- one app, for its page ------------------------------------------------------------------
+
+APP_H = 200
+
+
+def app_revenue(app: App, end: date) -> dict | None:
+    """One app's proceeds: the last 30 days against the 30 before, the past year by week,
+    and its products and storefronts over the year. None when it never earned anything."""
+    year_start = end - timedelta(days=364)
+    lines = _lines(year_start, end, app=app)
+    if not lines:
+        return None
+    recent = Period(end, 30)
+    name_of = {ln.sku: ln.title for ln in sorted(lines, key=lambda ln: ln.day)}
+    by_week = defaultdict(float)
+    products = defaultdict(lambda: {"usd": 0.0, "units": 0, "recent": 0.0})
+    countries = defaultdict(float)
+    unconverted = defaultdict(Decimal)
+    now = before = year = 0.0
+    for ln in lines:
+        if ln.usd is None:
+            unconverted[ln.currency] += ln.local
+            continue
+        usd = float(ln.usd)
+        year += usd
+        week = WEEKS - 1 - (end - ln.day).days // 7
+        if week >= 0:
+            by_week[week] += usd
+        p = products[name_of[ln.sku]]
+        p["usd"] += usd
+        p["units"] += ln.units
+        if ln.day >= recent.start:
+            now += usd
+            p["recent"] += usd
+        elif ln.day >= recent.prev_start:
+            before += usd
+        countries[ln.country] += usd
+
+    week_starts = [end - timedelta(days=7 * (WEEKS - 1 - i) + 6) for i in range(WEEKS)]
+    top, tick_values = nice_axis(max([*by_week.values(), 1.0]), 4, 0.01)
+    plot_w, plot_h = W - PAD_L - PAD_R, APP_H - PAD_T - PAD_B
+    slot = plot_w / WEEKS
+    base = PAD_T + plot_h
+    bars = []
+    for i, ws in enumerate(week_starts):
+        v = by_week[i]
+        h = plot_h * max(v, 0) / top
+        bars.append({
+            "x": round(PAD_L + i * slot + 2, 1), "y": round(base - h + 1, 1),
+            "w": round(slot - 4, 1), "h": round(max(h - 2, 0.8 if v else 0), 1),
+            "hit_x": round(PAD_L + i * slot, 1), "hit_w": round(slot, 1),
+            "tip": f"Week of {ws:%b} {ws.day}\n{money(v)}",
+        })  # fmt: skip
+    grid = [
+        {"y": round(base - plot_h * v / top, 1), "label": money(v).replace(".00", "")}
+        for v in tick_values
+    ]
+    downloads = (
+        SalesDay.objects.filter(app=app, date__range=(recent.start, end)).aggregate(
+            n=Sum("downloads")
+        )["n"]
+        or 0
+    )
+    country_rows = sorted(countries.items(), key=lambda kv: -kv[1])[:6]
+    cmax = max([v for _, v in country_rows] or [1])
+    return {
+        "recent": now,
+        "change": pct_change(before, now),
+        "year": year,
+        "per_1k": 1000 * now / downloads if downloads else None,
+        "bars": bars,
+        "grid": grid,
+        "xticks": month_ticks(week_starts, lambda i: round(PAD_L + (i + 0.5) * slot, 1)),
+        "products": sorted(
+            ({"title": t, **v} for t, v in products.items()), key=lambda p: -p["usd"]
+        )[:6],
+        "countries": [
+            {"code": c, "usd": v, "w": round(100 * max(v, 0) / cmax, 1)} for c, v in country_rows
+        ],
+        "unconverted": [(c, round(v, 2)) for c, v in sorted(unconverted.items())],
+        "width": W, "height": APP_H, "pad_l": PAD_L, "plot_r": W - PAD_R,
         "pad_t": PAD_T, "plot_h": plot_h,
     }  # fmt: skip

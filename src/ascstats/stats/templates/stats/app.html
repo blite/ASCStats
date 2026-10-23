@@ -1,4 +1,4 @@
-{% extends "stats/base.html" %}{% load stats_extras %}
+{% extends "stats/base.html" %}{% load humanize stats_extras %}
 {% block title %}{{ app.name }} · ASCStats{% endblock %}
 {% block content %}
 <section class="hero fade">
@@ -20,5 +20,46 @@
     </div>
   </form>
   <div id="chart"><p class="muted">Loading…</p></div>
+</section>
+
+<section class="card fade">
+  <div class="card-head">
+    <div>
+      <h2>Revenue</h2>
+      <p class="sub">Developer proceeds in USD at each day's ECB rate, net of refunds. <a href="{% url 'revenue' %}">All apps</a></p>
+    </div>
+  </div>
+  {% if revenue %}{% with rv=revenue %}
+  <div class="grid4" style="margin:4px 0 14px">
+    <div><div class="label muted" style="font-size:13px">Last 30 days</div><div style="font-size:26px;font-weight:650">{{ rv.recent|money }}</div>
+      <span class="chip {% if rv.change is None %}flat{% elif rv.change >= 0 %}up{% else %}down{% endif %}">{% if rv.change is None %}● new{% elif rv.change >= 0 %}▲ {{ rv.change|floatformat:0 }}%{% else %}▼ {{ rv.change|floatformat:0|cut:"-" }}%{% endif %}</span> <span class="muted" style="font-size:12px">vs the 30 days before</span></div>
+    <div><div class="label muted" style="font-size:13px">Past 12 months</div><div style="font-size:26px;font-weight:650">{{ rv.year|money }}</div></div>
+    <div><div class="label muted" style="font-size:13px">Per 1,000 downloads</div><div style="font-size:26px;font-weight:650">{{ rv.per_1k|money }}</div><span class="muted" style="font-size:12px">last 30 days</span></div>
+  </div>
+  <div class="scroll">
+    <svg viewBox="0 0 {{ rv.width }} {{ rv.height }}" style="min-width: 680px" role="img" aria-label="Weekly proceeds over the past year">
+      {% for g in rv.grid %}<line class="{% if forloop.first %}axis{% else %}hair{% endif %}" x1="{{ rv.pad_l }}" y1="{{ g.y }}" x2="{{ rv.plot_r }}" y2="{{ g.y }}"/>
+      <text class="tick" x="{{ rv.pad_l|add:'-8' }}" y="{{ g.y }}" dy="4" text-anchor="end">{{ g.label }}</text>{% endfor %}
+      {% for t in rv.xticks %}<text class="tick" x="{{ t.x }}" y="{{ rv.height|add:'-6' }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
+      {% for b in rv.bars %}<g data-tip="{{ b.tip }}"><rect x="{{ b.hit_x }}" y="{{ rv.pad_t }}" width="{{ b.hit_w }}" height="{{ rv.plot_h }}" fill="transparent"/>{% if b.h %}<rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="1.5" fill="var(--series-1)"/>{% endif %}</g>{% endfor %}
+    </svg>
+  </div>
+  <div class="two" style="margin-top:14px">
+    <table>
+      <tr><th>Product</th><th class="num">Units</th><th class="num">Last 30 days</th><th class="num">Past year</th></tr>
+      {% for p in rv.products %}<tr><td>{{ p.title|truncatechars:40 }}</td><td class="num">{{ p.units|intcomma }}</td><td class="num">{{ p.recent|money }}</td><td class="num"><strong>{{ p.usd|money }}</strong></td></tr>{% endfor %}
+    </table>
+    <div>
+      {% for c in rv.countries %}
+      <div style="display:grid;grid-template-columns:34px 1fr 76px;align-items:center;gap:10px;margin:7px 0;font-size:13px" data-tip="{{ c.code }}&#10;{{ c.usd|money }} in the past year">
+        <span style="font-weight:600">{{ c.code }}</span>
+        <svg height="12" width="100%" preserveAspectRatio="none" viewBox="0 0 100 12" aria-hidden="true"><rect x="0" y="2" width="{{ c.w }}" height="8" rx="2" fill="var(--series-1)"/></svg>
+        <span style="text-align:right;font-variant-numeric:tabular-nums">{{ c.usd|money }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% if rv.unconverted %}<p class="muted" style="font-size:12px;margin:8px 0 0">Not converted (no ECB rate): {% for c, v in rv.unconverted %}{{ v }} {{ c }}{% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+  {% endwith %}{% else %}<p class="muted">No proceeds in the past year: this app has earned nothing from paid downloads or in-app purchases.</p>{% endif %}
 </section>
 {% endblock %}

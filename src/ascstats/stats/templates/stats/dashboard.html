@@ -19,8 +19,8 @@
       <div class="row">
         <div>
           <div class="value">{{ t.value|intcomma }}</div>
-          <span class="chip {{ t.direction }}">{% if t.direction == "up" %}▲{% elif t.direction == "down" %}▼{% else %}●{% endif %}
-            {% if t.change_pct is None %}new{% else %}{{ t.change_pct|floatformat:0 }}%{% endif %}</span>
+          {% if not period.all_time %}<span class="chip {{ t.direction }}">{% if t.direction == "up" %}▲{% elif t.direction == "down" %}▼{% else %}●{% endif %}
+            {% if t.change_pct is None %}new{% else %}{{ t.change_pct|floatformat:0 }}%{% endif %}</span>{% endif %}
         </div>
         <svg viewBox="0 0 120 32" role="img" aria-label="{{ t.label }}, last 90 days, 7-day average"><polyline class="reveal" points="{{ t.spark }}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
       </div>
@@ -38,26 +38,6 @@
       <div class="note">downloads vs each app's own pre-release trend</div>
     </div>
   </div>
-
-  {% if all_time %}{% with a=all_time %}
-  <section class="card fade" aria-label="All time">
-    <div class="card-head">
-      <div>
-        <h2>All time</h2>
-        <p class="sub">Every day imported, {{ a.since|date:"M j, Y" }} to {{ end|date:"M j, Y" }} ({{ a.days|intcomma }} days), whichever period is selected above. Ratings are Apple's running totals from the latest snapshot.</p>
-      </div>
-    </div>
-    <div class="alltime">
-      <div><div class="label">Downloads</div><div class="value">{{ a.downloads|intcomma }}</div></div>
-      <div><div class="label">In-app purchases</div><div class="value">{{ a.iap_units|intcomma }}</div></div>
-      <div><div class="label">Updates installed</div><div class="value">{{ a.updates|intcomma }}</div></div>
-      <div><div class="label">Proceeds{% if a.unconverted %}*{% endif %}</div><div class="value"><a href="{% url 'revenue' %}" style="text-decoration:none">{{ a.proceeds|money }}</a></div></div>
-      <div><div class="label">Ratings</div><div class="value">{{ a.ratings|intcomma }}{% if a.average is not None %} <span class="muted" style="font-size:.6em">{{ a.average|floatformat:2 }}★</span>{% endif %}</div></div>
-      <div><div class="label">Written reviews</div><div class="value">{{ a.reviews|intcomma }}</div></div>
-    </div>
-    {% if a.unconverted %}<p class="muted" style="font-size:12px;margin:8px 0 0">* Proceeds in {{ a.unconverted|join:", " }} are left out: the ECB publishes no rate for them.</p>{% endif %}
-  </section>
-  {% endwith %}{% endif %}
 
   <section class="card fade">
     <div class="card-head">
@@ -105,7 +85,7 @@
     <div class="card-head">
       <div>
         <h2>Ratings and reviews</h2>
-        <p class="sub">{% if act.observed %}<strong>{{ act.new_total }}</strong> new rating{{ act.new_total|pluralize }} in the {{ act.observed }} day{{ act.observed|pluralize }} of daily snapshots to {{ act.latest|date:"M j" }}, and the newest written reviews {% if period.days == 1 %}since {{ period.label }}{% else %}from the {{ period.label }}{% endif %}.{% elif act.latest %}Rating changes start with the second daily snapshot (the first was {{ act.latest|date:"M j" }}). Newest written reviews {% if period.days == 1 %}since {{ period.label }}{% else %}from the {{ period.label }}{% endif %}.{% else %}No rating snapshots yet. Newest written reviews {% if period.days == 1 %}since {{ period.label }}{% else %}from the {{ period.label }}{% endif %}.{% endif %}</p>
+        <p class="sub">{% if act.observed %}<strong>{{ act.new_total }}</strong> new rating{{ act.new_total|pluralize }} in the {{ act.observed }} day{{ act.observed|pluralize }} of daily snapshots to {{ act.latest|date:"M j" }}, and the newest written reviews {{ period.span }}.{% elif act.latest %}Rating changes start with the second daily snapshot (the first was {{ act.latest|date:"M j" }}). Newest written reviews {{ period.span }}.{% else %}No rating snapshots yet. Newest written reviews {{ period.span }}.{% endif %}</p>
       </div>
     </div>
     <div class="two">

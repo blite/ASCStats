@@ -12,23 +12,17 @@ from .charts import Period, nice_axis, smooth, spark
 from .charts import days as _days
 from .charts import fmt_day as _fmt_day
 from .crashes import version_crashes
-from .models import (
-    ACTIVE_ROWS,
-    IOS,
-    App,
-    CustomerReview,
-    IngestionRun,
-    RatingSnapshot,
-    Report,
-    SalesDay,
-)
+from .models import ACTIVE_ROWS, IOS, App, IngestionRun, Report, SalesDay
 from .ratings import current, daily_new_ratings, version_ratings
-from .revenue import _lines as revenue_lines
 from .versions import VersionImpact, version_impact
 
 
 def last_day() -> date | None:
     return SalesDay.objects.filter(ACTIVE_ROWS).aggregate(last=Max("date"))["last"]
+
+
+def first_day() -> date | None:
+    return SalesDay.objects.filter(ACTIVE_ROWS).aggregate(first=Min("date"))["first"]
 
 
 def _daily(field: str, start: date, end: date, **filters) -> dict[date, int]:
@@ -83,38 +77,13 @@ def tiles(end: date, period: Period | None = None) -> list[Tile]:
         ("In-app purchases", "iap_units"),
         ("Updates installed", "updates"),
     ):
-        daily = _daily(measure, spark_days[0], end)
+        daily = _daily(measure, min(spark_days[0], start), end)  # all time reaches further
         current = sum(v for d, v in daily.items() if d >= start)
         previous = sum(_daily(measure, prev_start, start - timedelta(days=1)).values())
         series = smooth([daily.get(d, 0) for d in spark_days])
         note = f"{period.label} {period.versus}"
         out.append(Tile(label, current, previous, spark(series, 120, 32), note))
     return out
-
-
-def all_time(end: date) -> dict | None:
-    """Totals for active apps over every day imported, whatever the period switch says.
-    Ratings are the latest snapshot's totals: Apple's counts already run since launch."""
-    first = SalesDay.objects.filter(ACTIVE_ROWS).aggregate(d=Min("date"))["d"]
-    if first is None:
-        return None
-    sums = SalesDay.objects.filter(ACTIVE_ROWS, date__lte=end).aggregate(
-        downloads=Sum("downloads"), iap_units=Sum("iap_units"), updates=Sum("updates")
-    )
-    lines = revenue_lines(first, end)
-    snaps = RatingSnapshot.objects.filter(app__is_active=True)
-    latest = snaps.aggregate(d=Max("date"))["d"]
-    rated = snaps.filter(date=latest).aggregate(count=Sum("count"), stars=Sum("star_sum"))
-    return {
-        "since": first,
-        "days": (end - first).days + 1,
-        **{k: v or 0 for k, v in sums.items()},
-        "proceeds": sum(float(ln.usd) for ln in lines if ln.usd is not None),
-        "unconverted": sorted({ln.currency for ln in lines if ln.usd is None}),
-        "ratings": rated["count"] or 0,
-        "average": rated["stars"] / rated["count"] if rated["count"] else None,
-        "reviews": CustomerReview.objects.filter(app__is_active=True).count(),
-    }
 
 
 # --- release scoreboard (one lane per app) -------------------------------------------------
