@@ -38,18 +38,34 @@ iOS apps into Postgres and serves them through Django.
 ## Architecture
 
 ```mermaid
-flowchart LR
-    ASC[App Store Connect API] -- GET only --> CMD
-    subgraph image[ascstats image]
-        CMD["manage.py import_asc<br/>check → download → validate → load → quality"]
-        WEB[Django: admin · Ninja API · htmx page]
-    end
-    CMD -- raw .tsv.gz, unchanged --> S3[(MinIO / S3 / GCS)]
-    S3 -- replayable --> CMD
-    CMD -- delete+insert per app/report/day --> PG[(Postgres)]
+%%{init: {"flowchart": {"wrappingWidth": 400}}}%%
+flowchart TB
+    SRC["<b>Sources</b> · read-only<br/>App Store Connect API · iTunes Lookup · ECB rates"]
+    SCHED["<b>Schedulers</b><br/>Kubernetes CronJobs · Airflow 3 DAGs"]
+    PIPE["<b>Pipeline</b> · Django management commands<br/>check → download → validate → load → quality"]
+    S3[("<b>Raw bucket</b><br/>MinIO · S3 · GCS<br/>files kept as-is, replayable")]
+    PG[("<b>Postgres</b><br/>sales rows + daily rollups")]
+    WEB["<b>Django</b><br/>dashboard · JSON API · admin"]
+    PAGES["<b>GitHub Pages</b><br/>static demo, synthetic data"]
+
+    SRC -- "GET only" --> PIPE
+    SCHED -. "runs as a pod" .-> PIPE
+    PIPE -- "raw files" --> S3
+    PIPE -- "delete + insert per app/day" --> PG
     PG --> WEB
-    CRON[k8s CronJob] -. runs .-> CMD
-    AF[Airflow 3 DAGs] -. KubernetesPodOperator .-> CMD
+    WEB -- "export_site" --> PAGES
+
+    classDef source fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#0b1b3a
+    classDef sched fill:#ede9fe,stroke:#7c3aed,stroke-width:1.5px,color:#1e1338
+    classDef compute fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#052e16
+    classDef store fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#3b2300
+    classDef out fill:#fce7f3,stroke:#db2777,stroke-width:1.5px,color:#3b0a24
+    class SRC source
+    class SCHED sched
+    class PIPE,WEB compute
+    class S3,PG store
+    class PAGES out
+    linkStyle default stroke:#64748b,stroke-width:2px
 ```
 
 One container image does everything; only the command differs. The unit of work is a single
