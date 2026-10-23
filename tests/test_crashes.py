@@ -1,3 +1,4 @@
+import io
 from datetime import date, timedelta
 
 import pytest
@@ -83,3 +84,19 @@ def test_check_only_reads_and_names_apps_without_a_request(apps, settings, monke
     with pytest.raises(CommandError, match="1 app"):
         call_command("ensure_report_requests", "--check-only")
     assert {r.method for r in fake.requests} == {"GET"}
+
+
+@pytest.mark.django_db
+def test_check_only_skips_an_app_the_key_cannot_see(apps, settings, monkeypatch):
+    settings.ASC_SOURCE = "asc"
+    fake = FakeASC()
+    import httpx
+
+    forbidden = httpx.Response(403, json={"errors": [{"detail": "not allowed"}]})
+    fake.queue(f"/v1/apps/{SNAKE}/analyticsReportRequests", forbidden)
+    monkeypatch.setattr("ascstats.asc.credentials.client_from_env", fake.client)
+    err = io.StringIO()
+    call_command("ensure_report_requests", "--check-only", stderr=err)  # no CommandError
+    assert "skipped, App Store Connect said 403" in err.getvalue()
+    checked = {r.url.path for r in fake.requests}
+    assert len(checked) == len(apps)  # every app after the 403 was still checked

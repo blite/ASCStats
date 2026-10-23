@@ -31,7 +31,14 @@ class Command(BaseCommand):
         errors = []
         for app in App.objects.active():
             if check_only:
-                running = requester.running_request(app.apple_id)
+                try:
+                    running = requester.running_request(app.apple_id)
+                except ASCError as exc:
+                    # Apps that still have sales but left this team/key answer 403 or 404.
+                    if exc.status not in (403, 404):
+                        raise
+                    self.stderr.write(f"{app.name}: skipped, App Store Connect said {exc.status}")
+                    continue
                 if running is None:
                     errors.append(app.name)
                     self.stderr.write(
