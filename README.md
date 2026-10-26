@@ -203,7 +203,9 @@ kubectl -n ascstats create job --from=cronjob/import-sales import-sales-now   # 
 ```
 
 `k8s/` contains: a Postgres StatefulSet, MinIO, the web Deployment (migrations run in an init
-container), the `import-sales`, `import-analytics` and `ratings` CronJobs with `concurrencyPolicy: Forbid`,
+container), the `import-sales`, `import-analytics` and `ratings` CronJobs with `concurrencyPolicy: Forbid`
+(the two imports reload the last three days each run, so a day Apple publishes late is picked up
+the next day rather than lost),
 and Secret templates in `k8s/secrets/`. For local convenience Kustomize generates dev-only
 Secrets from `k8s/secrets/dev-*.env`; on a shared cluster delete that generator and create
 the Secrets from the templates (or External Secrets).

@@ -1,6 +1,8 @@
 # A daily import is a CronJob, not a queue. concurrencyPolicy: Forbid means a slow run is
 # never overlapped by the next one; the per-day delete+insert makes reruns safe anyway.
 # Exit code 3 ("not published yet") fails the Job, and backoffLimit retries it later.
+# Each run imports the last three days, not just yesterday: when Apple publishes after the
+# retries run out, the next day's run picks that day up instead of leaving a hole.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -24,8 +26,8 @@ spec:
             - name: import
               image: ascstats
               imagePullPolicy: IfNotPresent
-              # sh keeps import_asc's exit code (3 = not published yet) when it fails
-              args: ["sh", "-c", "python manage.py import_asc --report sales --date yesterday && python manage.py import_fx --days 14"]
+              # The follow-ups run either way; the job keeps import_asc's exit code (3 = not published yet)
+              args: ["sh", "-c", "python manage.py import_asc --report sales --from today-3 --to yesterday; s=$?; python manage.py import_fx --days 14; exit $(( s ? s : $? ))"]
               envFrom:
                 - configMapRef: {name: ascstats-config}
                 - secretRef: {name: asc-settings, optional: true}  # overrides the ConfigMap
@@ -70,7 +72,7 @@ spec:
             - name: import
               image: ascstats
               imagePullPolicy: IfNotPresent
-              args: ["sh", "-c", "python manage.py import_asc --report analytics --date yesterday && python manage.py build_conversion_metrics --days 7 && python manage.py build_versions"]
+              args: ["sh", "-c", "python manage.py import_asc --report analytics --from today-3 --to yesterday; s=$?; python manage.py build_conversion_metrics --days 7 && python manage.py build_versions; exit $(( s ? s : $? ))"]
               envFrom:
                 - configMapRef: {name: ascstats-config}
                 - secretRef: {name: asc-settings, optional: true}  # overrides the ConfigMap
