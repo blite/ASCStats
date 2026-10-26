@@ -224,7 +224,16 @@ the ConfigMap, so the vendor number never lands in git:
 kubectl -n ascstats create secret generic asc-settings \
   --from-literal=ASC_SOURCE=asc --from-literal=ASC_VENDOR_NUMBER=8xxxxxxx
 kubectl -n ascstats rollout restart deploy/web
+kubectl -n ascstats exec deploy/web -- python manage.py sync_app_status
 ```
+
+`sync_app_status` asks App Store Connect once whether each app is on sale: an app with no
+version in `READY_FOR_SALE` (a deleted app has none; App Store Connect answers 404) is switched
+off (`is_active`), since deleted apps keep appearing in the sales report. Apps the pipeline sees
+for the first time are checked the same way when they are created; nothing asks again on later
+runs, and an app switched off by hand is never switched back on. A daily analytics import
+runs app by app, so an app App Store Connect refuses (403, or 404 for no ONGOING report
+request) is skipped with a warning rather than failing the day for the others.
 
 The client cannot write: it has no POST/PATCH/DELETE method at all, and a test asserts that
 every recorded request is a GET. The one-time ONGOING Analytics report request is created by

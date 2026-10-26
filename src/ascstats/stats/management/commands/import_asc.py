@@ -3,13 +3,17 @@ manage.py import_asc --report sales --from 2026-01-01 --to 2026-01-31   (backfil
 manage.py import_asc --report sales --from today-7 --to yesterday        (restatement)
 
 Exit codes: 0 ok, 1 failed, 3 report not published yet (so a scheduler can retry later).
+
+Analytics without --app runs app by app: an app App Store Connect will not serve (403, or 404
+for a deleted app or one without an ONGOING report request) is skipped with a warning instead
+of failing the day for every other app. ensure_report_requests --check-only names those apps.
 """
 
 from datetime import UTC, date, datetime, timedelta
 
 from django.core.management.base import BaseCommand, CommandError
 
-from ascstats.asc.client import ReportNotReady
+from ascstats.asc.client import ASCError, ReportNotReady
 from ascstats.stats.models import App, Report
 from ascstats.stats.pipeline import STEPS, Pipeline
 
@@ -52,26 +56,34 @@ class Command(BaseCommand):
                 raise CommandError(f"unknown app {app}; run seed_synthetic or add it in admin")
 
         pipeline = Pipeline(source=source)
+        per_app = report == Report.ANALYTICS and target is None
+        targets = list(App.objects.active()) if per_app else [target]
         failed, not_ready = [], []
         day = start
         while day <= end:
-            try:
-                result = pipeline.run(report, day, step=step, app=target)
-            except ReportNotReady:
-                not_ready.append(day)
-                self.stderr.write(f"{report} {day}: not published yet")
-            except Exception as exc:
-                failed.append(day)
-                self.stderr.write(f"{report} {day}: {type(exc).__name__}: {exc}")
-                if start == end:
-                    raise CommandError(str(exc)) from exc
-            else:
-                self.stdout.write(
-                    f"{report} {day} {step}: parsed={result.rows_parsed} "
-                    f"deleted={result.rows_deleted} loaded={result.rows_loaded}"
-                )
+            for t in targets:
+                label = f"{report} {day}" + (f" {t.name}" if per_app else "")
+                try:
+                    result = pipeline.run(report, day, step=step, app=t)
+                except ReportNotReady:
+                    not_ready.append(day)
+                    self.stderr.write(f"{label}: not published yet")
+                except Exception as exc:
+                    if per_app and isinstance(exc, ASCError) and exc.status in (403, 404):
+                        self.stderr.write(f"{label}: skipped, {exc}")
+                        continue
+                    failed.append(day)
+                    self.stderr.write(f"{label}: {type(exc).__name__}: {exc}")
+                    if start == end and not per_app:
+                        raise CommandError(str(exc)) from exc
+                else:
+                    self.stdout.write(
+                        f"{label} {step}: parsed={result.rows_parsed} "
+                        f"deleted={result.rows_deleted} loaded={result.rows_loaded}"
+                    )
             day += timedelta(days=1)
 
+        failed, not_ready = sorted(set(failed)), sorted(set(not_ready))
         if failed:
             raise CommandError(f"{len(failed)} day(s) failed: {', '.join(map(str, failed))}")
         if not_ready:

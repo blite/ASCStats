@@ -23,6 +23,7 @@ from django.utils import timezone
 from ascstats.asc.client import ASCClient, ReportNotReady
 
 from . import synthetic
+from .app_status import apply_asc_status
 from .models import App, FunnelDay, IngestionRun, Report, SalesDay, SalesRow, UsageDay
 from .parsing import ANALYTICS_REPORTS, ValidationError, parse_analytics, parse_sales
 from .reducers import reduce_analytics, reduce_sales, rows, totals
@@ -288,9 +289,11 @@ class Pipeline:
 
     def _ensure_app(self, apple_id: int, lines: list) -> App:
         top = next((ln for ln in lines if not ln.parent_identifier), lines[0])
-        app, _ = App.objects.get_or_create(
+        app, created = App.objects.get_or_create(
             apple_id=apple_id, defaults={"name": top.title, "sku": top.sku}
         )
+        if created and self.source == "asc":
+            apply_asc_status(self.client, app)  # once, at setup: deleted apps stay in sales
         return app
 
     # --- quality -------------------------------------------------------------------------

@@ -1,10 +1,13 @@
 from datetime import date
 
+import httpx
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from ascstats.asc.client import ReportNotReady
+from ascstats.asc.client import ASCError, ReportNotReady
+from ascstats.stats import synthetic
+from ascstats.stats.app_status import inactive_reason
 from ascstats.stats.metrics import build_conversion_metrics
 from ascstats.stats.models import App, ConversionMetric, FunnelDay, IngestionRun, SalesDay, SalesRow
 from ascstats.stats.parsing import ValidationError
@@ -160,3 +163,67 @@ def test_list_apps_emits_string_ids_for_pod_args(apps, capsys):
     ids = json.loads(capsys.readouterr().out)
     assert ids
     assert all(isinstance(i, str) for i in ids)
+
+
+@pytest.mark.django_db
+def test_analytics_import_skips_an_app_asc_will_not_serve(apps, monkeypatch, capsys):
+    """One deleted app (403) or one without an ONGOING request (404) must not cost the day
+    for every other app."""
+    blocked = {apps[0].pk: 403, apps[1].pk: 404}
+    real_run = Pipeline.run
+
+    def run(self, report, day, step="all", app=None):
+        if app is not None and app.pk in blocked:
+            raise ASCError(blocked[app.pk], "nope")
+        return real_run(self, report, day, step=step, app=app)
+
+    monkeypatch.setattr(Pipeline, "run", run)
+    call_command("import_asc", "--report", "analytics", "--date", str(DAY))
+    assert set(FunnelDay.objects.values_list("app", flat=True)) == {apps[2].pk}
+    assert capsys.readouterr().err.count("skipped") == 2
+
+    blocked[apps[2].pk] = 500  # anything else still fails the run
+    with pytest.raises(CommandError, match="1 day"):
+        call_command("import_asc", "--report", "analytics", "--date", str(DAY))
+
+
+def _versions(*states):
+    return httpx.Response(200, json={
+        "data": [{"id": f"v{n}", "attributes": {"appStoreState": s}} for n, s in enumerate(states)],
+        "links": {},
+    })  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("response", "reason"),
+    [
+        (None, None),  # the recorded fixture: one version READY_FOR_SALE, one in review
+        (httpx.Response(404, json={"errors": []}), "not in App Store Connect"),
+        (httpx.Response(403, json={"errors": []}), "not visible to this API key"),
+        (
+            _versions("DEVELOPER_REMOVED_FROM_SALE"),
+            "not ready for sale (DEVELOPER_REMOVED_FROM_SALE)",
+        ),
+        (_versions("READY_FOR_SALE", "REMOVED_FROM_SALE"), None),  # one platform still on sale
+        (_versions(), "not ready for sale (no versions)"),
+    ],
+)
+def test_inactive_reason_from_asc(response, reason):
+    fake = FakeASC()
+    if response is not None:
+        fake.queue("/v1/apps/42/appStoreVersions", response)
+    assert inactive_reason(fake.client(), 42) == reason
+
+
+@pytest.mark.django_db
+def test_new_app_is_checked_against_asc_once():
+    fake = FakeASC()
+    deleted = synthetic.APPS[0].apple_id
+    fake.queue(f"/v1/apps/{deleted}/appStoreVersions", httpx.Response(404, json={"errors": []}))
+    pipeline = Pipeline(source="asc", client_factory=fake.client)
+    pipeline.run("sales", DAY)
+    assert set(App.objects.filter(is_active=False).values_list("apple_id", flat=True)) == {deleted}
+
+    asked = len([r for r in fake.requests if r.url.path.endswith("/appStoreVersions")])
+    pipeline.run("sales", DAY)  # existing apps are not asked again
+    assert len([r for r in fake.requests if r.url.path.endswith("/appStoreVersions")]) == asked
