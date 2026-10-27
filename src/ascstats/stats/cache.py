@@ -1,7 +1,8 @@
 """Pages are cached until the data changes, which happens a few times a day at most.
 
 The cache key includes a data version: one query reading the latest import, metric rebuild,
-rating snapshot, review, summary, FX and version-dating marks plus the set of active apps.
+rating snapshot, review, summary, FX, version-dating and hand-entered event marks plus the set
+of active apps.
 Every write the pipeline (or an admin toggling an app) makes moves one of them, so a cached
 page can never outlive the data it was built from, with no invalidation calls to forget.
 """
@@ -17,6 +18,7 @@ from django.http import HttpResponse
 
 from .models import (
     App,
+    AppEvent,
     AppVersion,
     ConversionMetric,
     CustomerReview,
@@ -42,6 +44,7 @@ def data_version() -> str:
           (SELECT COUNT(*) FROM {_t(CustomerReview)}), (SELECT COUNT(*) FROM {_t(ReviewSummary)}),
           (SELECT MAX(date) FROM {_t(FxDay)}),
           (SELECT COUNT(*) FROM {_t(AppVersion)}), (SELECT MAX(first_seen) FROM {_t(AppVersion)}),
+          (SELECT COUNT(*) FROM {_t(AppEvent)}), (SELECT MAX(created_at) FROM {_t(AppEvent)}),
           (SELECT SUM(CASE WHEN is_active THEN id ELSE 0 END) FROM {_t(App)})
     """  # table names come from model metadata, never from input
     with connection.cursor() as cursor:

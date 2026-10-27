@@ -245,6 +245,24 @@ class AppVersion(models.Model):
         return f"{self.app_id} {self.platform} {self.version}"
 
 
+class AppEvent(models.Model):
+    """Something done to an app outside a release, such as a price change or a promotion,
+    entered by hand so the charts can show it next to the release markers."""
+
+    app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="events", db_index=False)
+    date = models.DateField()
+    label = models.CharField(max_length=80, help_text="Short, shown on the chart")
+    note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["app", "date"], name="event_app_date")]
+        ordering = ["app", "date"]
+
+    def __str__(self) -> str:
+        return f"{self.app_id} {self.date} {self.label}"
+
+
 class RatingSnapshot(models.Model):
     """The App Store's public rating totals for one app in one storefront on one day.
 

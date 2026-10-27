@@ -200,3 +200,21 @@ def test_app_page_shows_its_revenue(client, seeded):
     page = client.get(f"/app/{app.apple_id}/").content.decode()
     assert "Revenue" in page
     assert "Weekly proceeds over the past year" in page
+
+
+def test_events_show_on_the_app_charts(client, seeded):
+    from datetime import date, timedelta
+
+    from ascstats.stats.models import AppEvent
+
+    day = (date.today() - timedelta(days=2)).isoformat()
+    before = client.get("/chart/1000000001/30/").content
+    assert b"rel event" not in before
+    tag = ["--app", "1000000001", "--date", day, "--label", "Price $1.99 → $3.99"]
+    call_command("add_event", *tag)
+    call_command("add_event", *tag, "--note", "first raise")
+    assert AppEvent.objects.get().note == "first raise"  # same tag again updates, not duplicates
+    chart = client.get("/chart/1000000001/30/").content.decode()  # the event moves the cache key
+    assert 'class="rel event"' in chart
+    assert "Price $1.99 → $3.99" in chart
+    assert "first raise" in chart

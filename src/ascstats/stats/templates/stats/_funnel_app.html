@@ -1,13 +1,13 @@
 {% if empty %}<p class="muted">No App Store Analytics for this app yet.</p>{% else %}
 <h3 style="margin:4px 0 2px;font-size:16px">{{ app.name }}: step rates by week</h3>
-<p class="sub">Line = weekly rate, band = 90% interval, hollow points = too few to judge, gaps = weeks Apple published nothing. The last week is dashed while it is still in progress. Release labels compare the install rate in the 28 days before and after.</p>
+<p class="sub">Line = weekly rate, band = 90% interval, hollow points = too few to judge, gaps = weeks Apple published nothing. The last week is dashed while it is still in progress. Release labels compare the install rate in the 28 days before and after; dashed lines are hand-entered events.</p>
 <div class="scroll">
 {% for p in trends.panels %}
 <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px"><strong style="font-size:13px">{{ p.step.label }}</strong>{% if p.step.key == "install" %}<span class="muted" style="font-size:12px">headline</span>{% elif p.step.key == "iap" %}<span class="muted" style="font-size:12px">purchases per 100 downloads</span>{% endif %}</div>
 <svg viewBox="0 0 {{ trends.width }} {{ trends.panel_h }}" style="min-width:640px" role="img" aria-label="{{ p.step.label }} by week">
   {% for g in p.grid %}<line class="{% if forloop.first %}axis{% else %}hair{% endif %}" x1="{{ trends.pad_l }}" y1="{{ g.y }}" x2="{{ trends.plot_r }}" y2="{{ g.y }}"/>
   <text class="tick" x="{{ trends.pad_l|add:'-6' }}" y="{{ g.y }}" dy="4" text-anchor="end">{{ g.label }}</text>{% endfor %}
-  {% for m in trends.markers %}<line x1="{{ m.x }}" y1="4" x2="{{ m.x }}" y2="{{ p.base }}" stroke="var(--axis)"/>{% if forloop.parentloop.first %}<text class="tick" x="{{ m.x|add:'4' }}" y="12" style="fill:var(--ink-2)">{{ m.label }}</text>{% endif %}{% endfor %}
+  {% for m in trends.markers %}<line x1="{{ m.x }}" y1="4" x2="{{ m.x }}" y2="{{ p.base }}" stroke="var(--axis)"{% if m.event %} stroke-dasharray="3 3"{% endif %}/>{% if forloop.parentloop.first %}<text class="tick" x="{{ m.x|add:'4' }}" y="12" style="fill:var(--ink-2)">{{ m.label }}</text>{% endif %}{% endfor %}
   {% for b in p.bands %}<path d="{{ b }}" fill="var(--series-1)" opacity=".16"/>{% endfor %}
   {% for l in p.lines %}<polyline points="{{ l }}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>{% endfor %}
   {% for l in p.dashed %}<polyline points="{{ l }}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-dasharray="4 3"/>{% endfor %}

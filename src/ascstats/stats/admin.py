@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from .models import (
     App,
+    AppEvent,
     AppVersion,
     ConversionMetric,
     FunnelDay,
@@ -72,6 +73,15 @@ class ConversionMetricAdmin(admin.ModelAdmin):
 class AppVersionAdmin(admin.ModelAdmin):
     list_display = ["app", "version", "first_seen", "platform", "asc_state", "asc_created"]
     list_filter = ["app", "asc_state"]
+    list_select_related = ["app"]
+
+
+@admin.register(AppEvent)
+class AppEventAdmin(admin.ModelAdmin):
+    list_display = ["date", "app", "label"]
+    list_filter = ["app"]
+    date_hierarchy = "date"
+    search_fields = ["label", "note"]
     list_select_related = ["app"]
 
 

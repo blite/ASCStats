@@ -12,7 +12,7 @@ from .charts import Period, nice_axis, smooth, spark
 from .charts import days as _days
 from .charts import fmt_day as _fmt_day
 from .crashes import version_crashes
-from .models import ACTIVE_ROWS, IOS, App, IngestionRun, Report, SalesDay
+from .models import ACTIVE_ROWS, IOS, App, AppEvent, IngestionRun, Report, SalesDay
 from .ratings import current, daily_new_ratings, version_ratings
 from .versions import VersionImpact, version_impact
 
@@ -287,6 +287,15 @@ def app_detail(app: App, end: date, days: int) -> dict:
                     "tip": f"iOS {imp.version} · {_fmt_day(imp.released_on)}\n{verdict}",
                 }
             )
+    for ev in AppEvent.objects.filter(app=app, date__range=(start, end)):
+        markers.append(
+            {
+                "x": xc(ev.date) - step / 2,
+                "label": ev.label,
+                "kind": "event",
+                "tip": f"{ev.label} · {_fmt_day(ev.date)}" + (f"\n{ev.note}" if ev.note else ""),
+            }
+        )
     grid = [{"y": y(v), "label": f"{v:g}"} for v in tick_values]
     xticks = [
         {"x": xc(d), "label": f"{d:%b} {d.day}"}
@@ -330,6 +339,7 @@ def app_detail(app: App, end: date, days: int) -> dict:
         "avg_line": " ".join(f"{xc(d)},{y(v)}" for d, v in zip(span, avg, strict=True)),
         "projections": [" ".join(f"{xc(d)},{y(v)}" for d, v in p) for p in projections],
         "markers": markers,
+        "has_events": any(m["kind"] == "event" for m in markers),
         "grid": grid,
         "xticks": xticks,
         "table": table,

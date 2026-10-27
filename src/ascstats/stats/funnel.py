@@ -25,7 +25,7 @@ from datetime import date, timedelta
 from django.db.models import Max, Sum
 
 from .charts import days, month_ticks, nice_axis
-from .models import ACTIVE_ROWS, IOS, App, AppVersion, ConversionMetric, FunnelDay
+from .models import ACTIVE_ROWS, IOS, App, AppEvent, AppVersion, ConversionMetric, FunnelDay
 
 Z90 = 1.645
 WINDOW = 28  # days in the leak strip's current window
@@ -438,6 +438,10 @@ def step_trends(app: App, end: date) -> dict:
         if a and b and not (a.low_volume or b.low_volume):
             label += f": {b.fmt(b.raw)} → {a.fmt(a.raw)}"
         markers.append({"x": x, "label": label})
+    for ev in AppEvent.objects.filter(app=app, date__range=(first, end)):
+        i = (_week_start(ev.date) - first).days // 7
+        x = round(PAD_L + i * slot + slot * ev.date.weekday() / 7, 1)
+        markers.append({"x": x, "label": ev.label, "event": True})
     return {
         "panels": panels,
         "markers": markers,

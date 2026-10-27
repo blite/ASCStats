@@ -4,6 +4,7 @@
   {% if best_day %}<span class="muted">best day {{ best_day.1|date:"M j" }}: {{ best_day.0 }}</span>{% endif %}
   <span class="key" style="margin-left:auto"><span class="sw" style="background: var(--series-1)"></span>Daily downloads</span>
   <span class="key"><svg width="18" height="10" aria-hidden="true"><line x1="0" y1="5" x2="18" y2="5" stroke="var(--ink)" stroke-width="2"/></svg>7-day average</span>
+  {% if has_events %}<span class="key"><svg width="10" height="10" aria-hidden="true"><rect x="2" y="2" width="6" height="6" transform="rotate(45 5 5)" fill="var(--ink-2)"/></svg>Event</span>{% endif %}
   {% if projections %}<span class="key"><svg width="18" height="10" aria-hidden="true"><line x1="0" y1="5" x2="18" y2="5" stroke="var(--ink-2)" stroke-width="2" stroke-dasharray="4 3"/></svg>Trend projection after a release</span>{% endif %}
 </div>
 <div class="scroll">
@@ -13,7 +14,7 @@
   {% for t in xticks %}<text class="tick" x="{{ t.x }}" y="{{ height|add:'-8' }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
   {% for m in markers %}<g data-tip="{{ m.tip }}" tabindex="0" aria-label="{{ m.tip }}">
     <line x1="{{ m.x }}" y1="{{ pad_t|add:'-6' }}" x2="{{ m.x }}" y2="{{ base }}" stroke="var(--axis)" stroke-width="1"/>
-    <circle class="rel {{ m.kind }}" cx="{{ m.x }}" cy="{{ pad_t|add:'-12' }}" r="5"/>
+    {% if m.kind == "event" %}<path class="rel event" d="M{{ m.x }} {{ pad_t|add:'-17' }} l5 5 l-5 5 l-5 -5z"/>{% else %}<circle class="rel {{ m.kind }}" cx="{{ m.x }}" cy="{{ pad_t|add:'-12' }}" r="5"/>{% endif %}
     <text class="tick" x="{{ m.x }}" y="{{ pad_t|add:'-22' }}" text-anchor="middle" style="fill: var(--ink-2)">{{ m.label }}</text>
   </g>{% endfor %}
   {% for b in bars %}<g class="day" data-tip="{{ b.tip }}">
