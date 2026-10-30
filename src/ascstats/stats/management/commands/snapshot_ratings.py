@@ -8,7 +8,7 @@ from ascstats.stats.ratings import snapshot
 
 class Command(BaseCommand):
     help = (
-        "Record today's public App Store rating totals and prices (iTunes Lookup) for every "
+        "Record today's public App Store rating totals (iTunes Lookup) for every "
         "active app: the US and busy storefronts daily, quiet ones weekly. Run daily: Apple "
         "publishes no rating history."
     )

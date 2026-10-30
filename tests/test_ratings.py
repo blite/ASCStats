@@ -1,6 +1,5 @@
 import zlib
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
 
 import httpx
 import pytest
@@ -224,35 +223,6 @@ def test_weekly_storefront_lands_its_week_and_still_counts_in_totals(apps):
     assert latest_totals([snake]) == {snake.pk: (107 + 13, 428 + 55)}
     RatingSnapshot.objects.filter(storefront="fr", date=DAY + timedelta(days=7)).delete()
     assert current(snake)["count"] == 107 + 10  # fr not asked on the latest day: still counted
-
-
-@pytest.mark.django_db
-@pytest.mark.parametrize(("us_before", "every"), [("0.99", False), ("1.99", True)])
-def test_a_us_price_change_asks_every_storefront(apps, settings, monkeypatch, us_before, every):
-    settings.ASC_SOURCE = "asc"
-    snake = App.objects.get(apple_id=SNAKE)
-    quiet = next(f for f in CODES if _turn(f))
-    monkeypatch.setattr("ascstats.stats.ratings.storefronts", lambda _: ["us", quiet])
-    yesterday = DAY - timedelta(days=1)
-    RatingSnapshot.objects.bulk_create([
-        RatingSnapshot(app=snake, date=yesterday, storefront="us", count=5, star_sum=20,
-                       price=Decimal(us_before), currency="USD"),
-        RatingSnapshot(app=snake, date=yesterday, storefront=quiet, count=2, star_sum=8),
-    ])  # fmt: skip
-    results = {
-        "us": [{"trackId": SNAKE, "userRatingCount": 5, "averageUserRating": 4.0,
-                "price": 0.99, "currency": "USD"}],
-        quiet: [{"trackId": SNAKE, "userRatingCount": 2, "averageUserRating": 4.0,
-                 "price": 1.09, "currency": "EUR"}],
-    }  # fmt: skip
-    calls = []
-    snapshot(DAY, transport=lookup_transport(results, calls), pause=0)
-    assert [c.url.params["country"] for c in calls] == (["us", quiet] if every else ["us"])
-    us = RatingSnapshot.objects.get(app=snake, date=DAY, storefront="us")
-    assert (us.price, us.currency) == (Decimal("0.99"), "USD")
-    if every:
-        abroad = RatingSnapshot.objects.get(app=snake, date=DAY, storefront=quiet)
-        assert (abroad.price, abroad.currency) == (Decimal("1.09"), "EUR")
 
 
 def _scripted(answers: dict[str, list], calls: list) -> httpx.MockTransport:

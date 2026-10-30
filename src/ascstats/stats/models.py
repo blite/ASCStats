@@ -285,10 +285,6 @@ class RatingSnapshot(models.Model):
     count = models.IntegerField()
     star_sum = models.IntegerField(help_text="count x average, rounded: total stars given")
     version = models.CharField(max_length=50, blank=True, help_text="version on sale that day")
-    price = models.DecimalField(
-        max_digits=12, decimal_places=2, null=True, blank=True, help_text="the app's own price"
-    )
-    currency = models.CharField(max_length=3, blank=True, help_text="the storefront's currency")
 
     class Meta:
         constraints = [

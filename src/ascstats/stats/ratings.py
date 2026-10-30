@@ -8,7 +8,7 @@ Three sources:
   The average is unrounded, so each snapshot's star sum is exact and the difference of two
   consecutive snapshots is the exact count and average of the ratings given in between.
   One request covers every app in one storefront; quiet storefronts are only asked weekly
-  (``due_storefronts``). The same answer carries each app's price in that storefront.
+  (``due_storefronts``).
 - **Written reviews**: App Store Connect (GET only), filed under the version Apple says they
   were written for (``/appStoreVersions/{id}/customerReviews``).
 - **Review summaries**: App Store Connect's AI-written summary per territory, when Apple has
@@ -23,7 +23,6 @@ import zlib
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from decimal import Decimal
 
 import httpx
 from django.conf import settings
@@ -133,14 +132,12 @@ def snapshot(
     pause: float = LOOKUP_PAUSE,
     every_storefront: bool = False,
 ) -> int:
-    """Record today's public rating totals and prices for every active app in the storefronts
-    due today, or in all of them with ``every_storefront``, and return the rows written.
+    """Record today's public rating totals for every active app in the storefronts due today,
+    or in all of them with ``every_storefront``, and return the rows written.
 
-    The US goes first: when an app's US price changed, every storefront is asked, since Apple
-    moves the other storefronts' prices on the same day. Each storefront is saved as soon as it
-    answers and one already saved today is not asked again, so a rerun after a failure only
-    asks what is missing. Two storefronts failing in a row stop the run for the day rather
-    than keep asking a server that is refusing."""
+    Each storefront is saved as soon as it answers and one already saved today is not asked
+    again, so a rerun after a failure only asks what is missing. Two storefronts failing in a
+    row stop the run for the day rather than keep asking a server that is refusing."""
     day = day or timezone.localdate()
     source = source or settings.ASC_SOURCE
     apps = {a.apple_id: a for a in App.objects.active()}
@@ -155,11 +152,8 @@ def snapshot(
             listings[apple_id] = synthetic.lookup_listing(syn)
             version = synthetic.version_on(syn, day)[0]
             for front, (count, stars) in synthetic.rating_snapshot(syn, day).items():
-                us = front == "us"  # synthetic prices are US-only
                 rows.append(RatingSnapshot(app=app, date=day, storefront=front, count=count,
-                                           star_sum=stars, version=version,
-                                           price=Decimal(syn.price) if us else None,
-                                           currency="USD" if us else ""))  # fmt: skip
+                                           star_sum=stars, version=version))  # fmt: skip
         with transaction.atomic():
             RatingSnapshot.objects.filter(date=day, app__in=apps.values()).delete()
             RatingSnapshot.objects.bulk_create(rows)
@@ -199,41 +193,24 @@ def snapshot(
             # the US listing, or the first one for an app the US store does not sell
             if front == "us" or (app.apple_id not in listings and app.pk not in recent["us"]):
                 listings[app.apple_id] = r
-            count, price = r.get("userRatingCount") or 0, r.get("price")
+            count = r.get("userRatingCount") or 0
             rows.append(RatingSnapshot(
                 app=app, date=day, storefront=front, count=count,
                 star_sum=round(count * (r.get("averageUserRating") or 0)),
                 version=r.get("version") or "",
-                price=Decimal(str(price)) if price is not None else None,
-                currency=r.get("currency") or "",
             ))  # fmt: skip
         with transaction.atomic():
             today.filter(storefront=front).delete()
             RatingSnapshot.objects.bulk_create(rows)
         return rows
 
+    asked = 0
     with httpx.Client(timeout=LOOKUP_TIMEOUT, transport=transport) as client:
-        us: list[RatingSnapshot] = list(today.filter(storefront="us")) if "us" in done else []
-        if "us" not in done:
-            try:
-                us = ask("us", client)
-                written += len(us)
-            except LookupFailed as error:
-                log.warning("rating snapshot: %s", error)
-                failures = 1
-        before = _us_prices(day)
-        repriced = [
-            s.app.name for s in us
-            if s.price is not None and before.get(s.app_id, s.price) != s.price
-        ]  # fmt: skip
-        if repriced and len(due) < len(candidates):
-            log.info("US price changed for %s; asking every storefront", repriced)
-            due = candidates
-        asked = 0
-        for front in due:
-            if front == "us" or front in done:
+        # the US first: its listing is the one the app's icon and category come from
+        for front in ["us", *(f for f in due if f != "us")]:
+            if front in done:
                 continue
-            if pause:
+            if asked + failures and pause:
                 time.sleep(pause)
             try:
                 written += len(ask(front, client))
@@ -253,26 +230,9 @@ def snapshot(
             _store_listing(apps[apple_id], listing)
     log.info(
         "rating snapshots: asked %d of %d due storefronts (%d already saved today)",
-        asked + ("us" not in done), len(due), len(done),
+        asked, len(due), len(done),
     )  # fmt: skip
     return written
-
-
-def _us_prices(day: date) -> dict[int, Decimal]:
-    """{app pk: its last known US price before ``day``}."""
-    prices = {}
-    for app_id, price in (
-        RatingSnapshot.objects.filter(
-            storefront="us",
-            date__lt=day,
-            date__gte=day - timedelta(days=ACTIVE_DAYS),
-            price__isnull=False,
-        )
-        .order_by("date")
-        .values_list("app_id", "price")
-    ):
-        prices[app_id] = price
-    return prices
 
 
 def _store_listing(app: App, r: dict) -> None:
@@ -570,3 +530,4 @@ def recent_activity(apps: list[App], end: date, days: int, limit: int = 8) -> di
         "new_total": sum(c.new_ratings for c in changes),
         "reviews": reviews,
     }
+
