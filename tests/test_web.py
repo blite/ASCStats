@@ -250,6 +250,7 @@ def test_review_queue_works_the_unanswered_worst_first(client, apps):
     assert b"3</span> reviews need a reply" in page.content
     asc = f"appstoreconnect.apple.com/apps/{snake.apple_id}/distribution/activity/ios/"
     assert f"{asc}ratingsResponses".encode() in page.content
+    assert f"apps.apple.com/us/app/id{snake.apple_id}".encode() in page.content
     assert titles("/reviews/replied/")[0] == ["e", "d"]  # newest first, pending counts
     assert b"Pending publication" in titles("/reviews/replied/")[1].content
     assert titles("/reviews/all/")[0] == ["e", "d", "c", "b", "a"]
@@ -279,3 +280,11 @@ def test_a_new_reply_refreshes_cached_pages(client, apps):
     page = client.get("/reviews/all/").content
     assert b"Sorry, fixed" in page
     assert b'class="badge needs"' not in page
+
+
+def test_store_page_uses_the_review_storefront():
+    from ascstats.stats.territories import store_page
+
+    assert store_page(42, "CAN") == "https://apps.apple.com/ca/app/id42"
+    assert store_page(42, "GBR") == "https://apps.apple.com/gb/app/id42"
+    assert store_page(42, "") == "https://apps.apple.com/us/app/id42"

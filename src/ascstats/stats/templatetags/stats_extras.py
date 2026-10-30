@@ -3,6 +3,7 @@ from django.urls import reverse
 
 from ascstats.stats.charts import ALL, DEFAULT_PERIOD
 from ascstats.stats.revenue import money as _money
+from ascstats.stats.territories import store_page
 
 register = template.Library()
 
@@ -28,6 +29,12 @@ def asc_reviews_href(app):
         f"https://appstoreconnect.apple.com/apps/{app.apple_id}"
         "/distribution/activity/ios/ratingsResponses"
     )
+
+
+@register.filter
+def store_href(review):
+    """The app's public App Store page in the storefront the review was written in."""
+    return store_page(review.app.apple_id, review.territory)
 
 
 @register.simple_tag
