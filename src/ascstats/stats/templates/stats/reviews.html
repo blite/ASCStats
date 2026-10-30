@@ -29,7 +29,7 @@
       <div>
         <span aria-label="{{ rv.rating }} of 5 stars" class="stars">{% for i in "12345" %}{% if forloop.counter <= rv.rating %}★{% else %}<span class="muted">☆</span>{% endif %}{% endfor %}</span>
         <strong>{{ rv.title|default:"(no title)" }}</strong>
-        <div class="muted meta">{% if not app %}<a href="{% url 'app' rv.app.apple_id %}">{{ rv.app.name }}</a> · {% endif %}{% if rv.reviewer_nickname %}{{ rv.reviewer_nickname }} · {% endif %}{{ rv.created|date:"M j, Y" }} · {{ rv.territory }}{% if rv.version %} · v{{ rv.version }}{% endif %}</div>
+        <div class="muted meta">{% if not app %}<a href="{% url 'app' rv.app.apple_id %}">{{ rv.app.name }}</a> · {% endif %}{% if rv.reviewer_nickname %}{{ rv.reviewer_nickname }} · {% endif %}{{ rv.created|date:"M j, Y" }} · {{ rv.territory }}{% if rv.version %} · v{{ rv.version }}{% endif %} · <a href="{{ rv.app|asc_reviews_href }}" target="_blank" rel="noopener">{% if rv.response_body %}Edit reply{% else %}Reply{% endif %} in App Store Connect ↗</a></div>
         {% if rv.body %}<p class="review-body">{{ rv.body|linebreaksbr }}</p>{% endif %}
         {% if rv.response_body %}<div class="reply"><span class="muted meta">Your reply{% if rv.responded_at %} · {{ rv.responded_at|date:"M j, Y" }}{% endif %}</span><br>{{ rv.response_body|linebreaksbr }}</div>{% endif %}
       </div>

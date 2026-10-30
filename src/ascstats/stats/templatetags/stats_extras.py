@@ -20,6 +20,16 @@ def reviews_url(state="", app=None):
     return reverse("reviews_app", args=[app.apple_id])
 
 
+@register.filter
+def asc_reviews_href(app):
+    """The app's Ratings and Reviews page in App Store Connect, where replies are
+    written. Apple has no link to a single review."""
+    return (
+        f"https://appstoreconnect.apple.com/apps/{app.apple_id}"
+        "/distribution/activity/ios/ratingsResponses"
+    )
+
+
 @register.simple_tag
 def period_url(page, days):
     """A page for a period: /7d/, /revenue/1d/, /all/. The default period is the page's own
