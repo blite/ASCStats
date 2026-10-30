@@ -1,8 +1,8 @@
 """Pages are cached until the data changes, which happens a few times a day at most.
 
 The cache key includes a data version: one query reading the latest import, metric rebuild,
-rating snapshot, review, summary, FX, version-dating and hand-entered event marks plus the set
-of active apps.
+rating snapshot, review, review reply, summary, FX, version-dating and hand-entered event marks
+plus the set of active apps.
 Every write the pipeline (or an admin toggling an app) makes moves one of them, so a cached
 page can never outlive the data it was built from, with no invalidation calls to forget.
 """
@@ -42,6 +42,8 @@ def data_version() -> str:
           (SELECT MAX(computed_at) FROM {_t(ConversionMetric)}),
           (SELECT COUNT(*) FROM {_t(RatingSnapshot)}), (SELECT MAX(date) FROM {_t(RatingSnapshot)}),
           (SELECT COUNT(*) FROM {_t(CustomerReview)}), (SELECT COUNT(*) FROM {_t(ReviewSummary)}),
+          (SELECT COUNT(*) FROM {_t(CustomerReview)} WHERE response_body <> ''),
+          (SELECT MAX(responded_at) FROM {_t(CustomerReview)}),
           (SELECT MAX(date) FROM {_t(FxDay)}),
           (SELECT COUNT(*) FROM {_t(AppVersion)}), (SELECT MAX(first_seen) FROM {_t(AppVersion)}),
           (SELECT COUNT(*) FROM {_t(AppEvent)}), (SELECT MAX(created_at) FROM {_t(AppEvent)}),

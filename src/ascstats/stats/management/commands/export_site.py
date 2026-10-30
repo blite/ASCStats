@@ -59,7 +59,7 @@ class Command(BaseCommand):
 
     def _render(self, out: Path, client: Client) -> set[str]:
         """Write every page and fragment; returns their paths (relative, '' for the root)."""
-        paths = ["funnel/"]
+        paths = ["funnel/", "reviews/", "reviews/replied/", "reviews/all/"]
         for page in ("", "revenue/"):
             paths += [page, f"{page}all/"] + [
                 f"{page}{n}d/" for n in PERIODS if n != DEFAULT_PERIOD
@@ -68,6 +68,7 @@ class Command(BaseCommand):
             paths.append(f"app/{app.apple_id}/")
             paths += [f"chart/{app.apple_id}/{w}/" for w in WINDOWS]
             paths.append(f"funnel/app/{app.apple_id}/")
+            paths += [f"reviews/{s}app/{app.apple_id}/" for s in ("", "replied/", "all/")]
         if out.exists():
             shutil.rmtree(out)
         for path in paths:

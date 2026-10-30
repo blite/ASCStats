@@ -10,6 +10,17 @@ PERIOD_PAGES = {"overview": "dashboard", "revenue": "revenue"}
 
 
 @register.simple_tag
+def reviews_url(state="", app=None):
+    """The review queue in one reply state, for every app or one: /reviews/,
+    /reviews/replied/, /reviews/all/app/<id>/."""
+    if app is None:
+        return reverse("reviews_state", args=[state]) if state else reverse("reviews")
+    if state:
+        return reverse("reviews_state_app", args=[state, app.apple_id])
+    return reverse("reviews_app", args=[app.apple_id])
+
+
+@register.simple_tag
 def period_url(page, days):
     """A page for a period: /7d/, /revenue/1d/, /all/. The default period is the page's own
     URL, so each view has one address."""

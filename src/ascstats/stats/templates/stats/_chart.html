@@ -68,7 +68,7 @@
     {% if rating.summary %}<blockquote style="margin:10px 0 0;padding:10px 14px;border-left:3px solid var(--series-1);background:var(--raised);border-radius:8px;font-size:14px">{{ rating.summary.text }}<div class="muted" style="font-size:12px;margin-top:4px">Apple's review summary · {{ rating.summary.territory|default:"all" }}</div></blockquote>{% endif %}
   </div>
   <div>
-    <h3 style="margin: 0 0 4px; font-size: 16px">Latest written reviews{% if rating.unanswered %} <span class="muted" style="font-size:13px;font-weight:400">· {{ rating.unanswered|intcomma }} unanswered</span>{% endif %}</h3>
+    <h3 style="margin: 0 0 4px; font-size: 16px">Latest written reviews{% if rating.unanswered %} <a class="muted" style="font-size:13px;font-weight:400" href="{% reviews_url '' app %}">· {{ rating.unanswered|intcomma }} unanswered</a>{% endif %}</h3>
     {% for rv in rating.recent %}
     <div style="padding:8px 0;border-bottom:1px solid var(--grid);font-size:13px">
       <div><span aria-label="{{ rv.rating }} of 5 stars" style="letter-spacing:1px">{% for i in "12345" %}{% if forloop.counter <= rv.rating %}★{% else %}<span class="muted">☆</span>{% endif %}{% endfor %}</span>

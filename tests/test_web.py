@@ -218,3 +218,62 @@ def test_events_show_on_the_app_charts(client, seeded):
     assert 'class="rel event"' in chart
     assert "Price $1.99 → $3.99" in chart
     assert "first raise" in chart
+
+
+@pytest.mark.django_db
+def test_review_queue_works_the_unanswered_worst_first(client, apps):
+    from datetime import UTC, datetime
+
+    from ascstats.stats.models import App, CustomerReview
+
+    snake, sudoku, _ = App.objects.order_by("apple_id")
+    made = datetime(2026, 10, 1, tzinfo=UTC)
+    rows = [  # (app, id, rating, day, reply, state)
+        (snake, "a", 4, 1, "", ""), (snake, "b", 1, 2, "", ""), (sudoku, "c", 2, 3, "", ""),
+        (snake, "d", 1, 4, "Fixed in 2.4", "PUBLISHED"),
+        (sudoku, "e", 5, 5, "Thanks!", "PENDING_PUBLISH"),
+    ]  # fmt: skip
+    for app, asc_id, rating, day, reply, state in rows:
+        CustomerReview.objects.create(
+            app=app, asc_id=asc_id, rating=rating, title=f"T-{asc_id}", body=f"B-{asc_id}",
+            territory="USA", created=made.replace(day=day), response_body=reply,
+            response_state=state,
+        )  # fmt: skip
+
+    def titles(path):
+        response = client.get(path)
+        assert response.status_code == 200
+        return re.findall(r"<strong>T-(\w)</strong>", response.content.decode()), response
+
+    order, page = titles("/reviews/")
+    assert order == ["b", "c", "a"]  # unanswered only, lowest rating first, then newest
+    assert b"3</span> reviews need a reply" in page.content
+    assert titles("/reviews/replied/")[0] == ["e", "d"]  # newest first, pending counts
+    assert b"Pending publication" in titles("/reviews/replied/")[1].content
+    assert titles("/reviews/all/")[0] == ["e", "d", "c", "b", "a"]
+    assert titles(f"/reviews/app/{snake.apple_id}/")[0] == ["b", "a"]
+    assert titles(f"/reviews/replied/app/{sudoku.apple_id}/")[0] == ["e"]
+    assert client.get("/reviews/nonsense/").status_code == 404
+    assert client.get("/reviews/app/42/").status_code == 404
+    snake.is_active = False
+    snake.save()
+    assert titles("/reviews/all/")[0] == ["e", "c"]  # inactive apps are left out
+
+
+@pytest.mark.django_db
+def test_a_new_reply_refreshes_cached_pages(client, apps):
+    from datetime import UTC, datetime
+
+    from ascstats.stats.models import App, CustomerReview
+
+    review = CustomerReview.objects.create(
+        app=App.objects.first(), asc_id="r", rating=1, title="Bad", territory="USA",
+        created=datetime(2026, 10, 1, tzinfo=UTC),
+    )  # fmt: skip
+    assert b'class="badge needs"' in client.get("/reviews/all/").content
+    review.response_body = "Sorry, fixed"
+    review.response_state = "PUBLISHED"
+    review.save()  # same number of reviews: only the reply moved the data version
+    page = client.get("/reviews/all/").content
+    assert b"Sorry, fixed" in page
+    assert b'class="badge needs"' not in page

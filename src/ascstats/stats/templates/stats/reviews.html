@@ -1,0 +1,58 @@
+{% extends "stats/base.html" %}{% load stats_extras %}
+{% block title %}Reviews{% if app %} · {{ app.name }}{% endif %} · ASCStats{% endblock %}
+{% block content %}
+<section class="hero fade">
+  <p class="eyebrow">Reviews{% if app %} · <a href="{% url 'app' app.apple_id %}">{{ app.name }}</a>{% endif %}</p>
+  {% with needs=states.0.2 %}
+  <h1>{% if needs %}<span class="num">{{ needs }}</span> review{{ needs|pluralize }} need{{ needs|pluralize:"s," }} a reply.{% else %}Every review has a reply.{% endif %}</h1>
+  {% endwith %}
+  <p>Written reviews from every storefront, as App Store Connect files them. Replies are written in App Store Connect; one shows here after the next daily import, and Apple can take up to a day to publish it.</p>
+</section>
+
+<section class="card fade">
+  <div class="card-head">
+    <div class="filters">
+      <nav class="seg" aria-label="Reply state">
+        {% for key, label, count in states %}<a href="{% reviews_url key app %}"{% if key == state %} aria-current="page"{% endif %}>{{ label }} <span class="muted">{{ count }}</span></a>{% endfor %}
+      </nav>
+      <nav class="seg app-pick" aria-label="App">
+        <a href="{% reviews_url state %}"{% if not app %} aria-current="page"{% endif %}>All apps</a>
+        {% for a in apps %}<a href="{% reviews_url state a %}"{% if app and a.pk == app.pk %} aria-current="page"{% endif %}>{{ a.name|truncatechars:22 }}</a>{% endfor %}
+      </nav>
+    </div>
+  </div>
+  <p class="sub">{% if state == "" %}Lowest rating first, then newest.{% else %}Newest first.{% endif %}</p>
+  {% for rv in reviews %}
+  <article class="review">
+    <div class="review-head">
+      {% if rv.app.icon_url %}<img src="{{ rv.app.icon_url }}" alt="" width="28" height="28">{% endif %}
+      <div>
+        <span aria-label="{{ rv.rating }} of 5 stars" class="stars">{% for i in "12345" %}{% if forloop.counter <= rv.rating %}★{% else %}<span class="muted">☆</span>{% endif %}{% endfor %}</span>
+        <strong>{{ rv.title|default:"(no title)" }}</strong>
+        <div class="muted meta">{% if not app %}<a href="{% url 'app' rv.app.apple_id %}">{{ rv.app.name }}</a> · {% endif %}{% if rv.reviewer_nickname %}{{ rv.reviewer_nickname }} · {% endif %}{{ rv.created|date:"M j, Y" }} · {{ rv.territory }}{% if rv.version %} · v{{ rv.version }}{% endif %}</div>
+        {% if rv.body %}<p class="review-body">{{ rv.body|linebreaksbr }}</p>{% endif %}
+        {% if rv.response_body %}<div class="reply"><span class="muted meta">Your reply{% if rv.responded_at %} · {{ rv.responded_at|date:"M j, Y" }}{% endif %}</span><br>{{ rv.response_body|linebreaksbr }}</div>{% endif %}
+      </div>
+      <span class="badge {% if not rv.response_body %}needs{% elif rv.response_state and rv.response_state != 'PUBLISHED' %}pending{% else %}done{% endif %}">{% if not rv.response_body %}Needs reply{% elif rv.response_state and rv.response_state != 'PUBLISHED' %}Pending publication{% else %}Replied{% endif %}</span>
+    </div>
+  </article>
+  {% empty %}
+  <p class="muted">{% if state == "" %}Nothing waiting for a reply.{% else %}No reviews here yet.{% endif %}</p>
+  {% endfor %}
+</section>
+<style>
+  .app-pick { flex-wrap: wrap; max-width: 100%; }
+  .seg a .muted { font-weight: 400; }
+  .seg a[aria-current] .muted { color: inherit; opacity: .7; }
+  .review { padding: 14px 0; border-top: 1px solid var(--grid); font-size: 14px; }
+  .review-head { display: flex; gap: 10px; align-items: start; }
+  .review-head > div { flex: 1; min-width: 0; }
+  .review-head img { border-radius: 7px; flex: none; }
+  .stars { letter-spacing: 1px; margin-right: 6px; }
+  .meta { font-size: 12px; }
+  .review-body { margin: 6px 0 0; color: var(--ink-2); max-width: 75ch; }
+  .reply { margin: 8px 0 0; padding-left: 10px; border-left: 2px solid var(--grid); color: var(--ink-2); max-width: 75ch; }
+  .badge { font-size: 12px; font-weight: 600; white-space: nowrap; border-radius: 999px; padding: 2px 9px; border: 1px solid var(--ring); }
+  .badge.needs { color: var(--bad-text); } .badge.pending { color: var(--muted); } .badge.done { color: var(--good-text); }
+</style>
+{% endblock %}

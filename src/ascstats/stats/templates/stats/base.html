@@ -163,6 +163,7 @@
     <nav class="tabs" aria-label="Pages">
       <a href="{% period_url 'overview' period.key %}"{% if page == "overview" %} aria-current="page"{% endif %}>Overview</a>
       <a href="{% url 'funnel' %}"{% if page == "funnel" %} aria-current="page"{% endif %}>Funnel</a>
+      <a href="{% url 'reviews' %}"{% if page == "reviews" %} aria-current="page"{% endif %}>Reviews</a>
       <a href="{% period_url 'revenue' period.key %}"{% if page == "revenue" %} aria-current="page"{% endif %}>Revenue</a>
     </nav>
     <nav>{% if demo %}<a href="{{ source_url }}">Source</a>{% else %}<a href="/api/docs">API</a><a href="/admin/">Admin</a>{% endif %}</nav>

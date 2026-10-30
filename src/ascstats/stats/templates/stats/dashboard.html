@@ -87,6 +87,7 @@
         <h2>Ratings and reviews</h2>
         <p class="sub">{% if act.observed %}<strong>{{ act.new_total }}</strong> new rating{{ act.new_total|pluralize }} in the {{ act.observed }} day{{ act.observed|pluralize }} of daily snapshots to {{ act.latest|date:"M j" }}, and the newest written reviews {{ period.span }}.{% elif act.latest %}Rating changes start with the second daily snapshot (the first was {{ act.latest|date:"M j" }}). Newest written reviews {{ period.span }}.{% else %}No rating snapshots yet. Newest written reviews {{ period.span }}.{% endif %}</p>
       </div>
+      <a href="{% url 'reviews' %}" style="font-size:13px">Review queue →</a>
     </div>
     <div class="two">
       <div class="scroll">

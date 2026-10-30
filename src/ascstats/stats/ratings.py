@@ -27,7 +27,7 @@ from datetime import date, datetime, timedelta
 import httpx
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Avg, Count, Max, Min
+from django.db.models import Avg, Count, Max, Min, Q
 from django.utils import timezone
 
 from ascstats.asc.client import ASCClient, ReportNotReady
@@ -531,3 +531,32 @@ def recent_activity(apps: list[App], end: date, days: int, limit: int = 8) -> di
         "reviews": reviews,
     }
 
+
+# --- the review queue ----------------------------------------------------------------------------
+
+# Path segment -> label. "" (needs a reply) is the default, so the queue's own URL is the queue.
+REVIEW_STATES = {"": "Needs reply", "replied": "Replied", "all": "All"}
+
+
+def review_queue(state: str, app: App | None = None) -> dict:
+    """Written reviews across active apps (or one), in one reply state, with the count in
+    each state. Needs a reply is worked worst first: lowest rating, then newest; the other
+    states read newest first. A reply Apple has not published yet counts as replied."""
+    reviews = CustomerReview.objects.filter(app__is_active=True).select_related("app")
+    if app is not None:
+        reviews = reviews.filter(app=app)
+    unanswered = Q(response_body="")
+    counts = reviews.aggregate(
+        needs=Count("id", filter=unanswered), replied=Count("id", filter=~unanswered)
+    )
+    counts = {"": counts["needs"], "replied": counts["replied"], "all": sum(counts.values())}
+    if state == "":
+        reviews = reviews.filter(unanswered).order_by("rating", "-created")
+    elif state == "replied":
+        reviews = reviews.exclude(unanswered).order_by("-created")
+    else:
+        reviews = reviews.order_by("-created")
+    return {
+        "reviews": list(reviews),
+        "states": [(key, label, counts[key]) for key, label in REVIEW_STATES.items()],
+    }
