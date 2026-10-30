@@ -50,7 +50,12 @@ from .models import (
 log = logging.getLogger(__name__)
 
 LOOKUP = "https://itunes.apple.com/lookup"
-LOOKUP_PAUSE = 3.0  # seconds between storefronts: the public endpoint allows ~20 calls/min
+# The public endpoint informally tolerates ~20 calls a minute per IP;
+# 5 seconds keeps this at 12.
+LOOKUP_PAUSE = 5.0  # seconds between storefronts, and before asking one again
+LOOKUP_TIMEOUT = 15.0
+MISSING_RETRIES = 2  # re-asks when an app answered in that storefront last week is missing
+FAILURES_TO_STOP = 2  # storefronts failing in a row before the run stops for the day
 ACTIVE_DAYS = 30  # a storefront whose ratings moved within this many days is asked daily
 WEEK = 7
 
@@ -94,15 +99,31 @@ def due_storefronts(day: date, candidates: list[str]) -> list[str]:
     ]
 
 
+class LookupFailed(Exception):
+    pass
+
+
 def _lookup(ids: list[int], storefront: str, client: httpx.Client) -> list[dict]:
+    """One storefront's answer for every app in ``ids``; raises ``LookupFailed`` once Apple
+    keeps refusing or the connection keeps failing."""
     for attempt in range(4):
-        response = client.get(LOOKUP, params={"id": ",".join(map(str, ids)), "country": storefront})
-        if response.status_code in (403, 429, 500, 502, 503) and attempt < 3:
-            time.sleep(LOOKUP_PAUSE * 2 ** (attempt + 1))
-            continue
-        response.raise_for_status()
-        return response.json().get("results", [])
-    return []
+        last = attempt == 3
+        try:
+            response = client.get(
+                LOOKUP, params={"id": ",".join(map(str, ids)), "country": storefront}
+            )
+        except httpx.TransportError as error:
+            if last:
+                raise LookupFailed(f"{storefront}: {error!r}") from error
+        else:
+            if response.status_code not in (403, 429, 500, 502, 503):
+                if response.is_error:
+                    raise LookupFailed(f"{storefront}: HTTP {response.status_code}")
+                return response.json().get("results", [])
+            if last:
+                raise LookupFailed(f"{storefront}: HTTP {response.status_code}")
+        time.sleep(LOOKUP_PAUSE * 2 ** (attempt + 1))
+    raise AssertionError("unreachable")
 
 
 def snapshot(
@@ -113,15 +134,19 @@ def snapshot(
     every_storefront: bool = False,
 ) -> int:
     """Record today's public rating totals and prices for every active app in the storefronts
-    due today, or in all of them with ``every_storefront``. The US goes first: when an app's
-    US price changed, every storefront is asked, since Apple moves the other storefronts'
-    prices on the same day. Idempotent per day."""
+    due today, or in all of them with ``every_storefront``, and return the rows written.
+
+    The US goes first: when an app's US price changed, every storefront is asked, since Apple
+    moves the other storefronts' prices on the same day. Each storefront is saved as soon as it
+    answers and one already saved today is not asked again, so a rerun after a failure only
+    asks what is missing. Two storefronts failing in a row stop the run for the day rather
+    than keep asking a server that is refusing."""
     day = day or timezone.localdate()
     source = source or settings.ASC_SOURCE
     apps = {a.apple_id: a for a in App.objects.active()}
-    rows = []
     listings: dict[int, dict] = {}  # apple_id -> Lookup result, the US one when there is one
     if source == "synthetic":
+        rows = []
         for apple_id, app in apps.items():
             try:
                 syn = synthetic.app_by_apple_id(apple_id)
@@ -135,52 +160,102 @@ def snapshot(
                                            star_sum=stars, version=version,
                                            price=Decimal(syn.price) if us else None,
                                            currency="USD" if us else ""))  # fmt: skip
-    else:
-        candidates = storefronts(day)
-        due = candidates if every_storefront else due_storefronts(day, candidates)
+        with transaction.atomic():
+            RatingSnapshot.objects.filter(date=day, app__in=apps.values()).delete()
+            RatingSnapshot.objects.bulk_create(rows)
+            for apple_id, listing in listings.items():
+                _store_listing(apps[apple_id], listing)
+        return len(rows)
+
+    today = RatingSnapshot.objects.filter(date=day, app__in=apps.values())
+    done = set() if every_storefront else set(today.values_list("storefront", flat=True))
+    recent: dict[str, set[int]] = defaultdict(set)  # storefront -> apps it answered last week
+    for front, app_id in (
+        RatingSnapshot.objects.filter(
+            app__in=apps.values(), date__gte=day - timedelta(days=WEEK), date__lt=day
+        )
+        .values_list("storefront", "app_id")
+        .distinct()
+    ):
+        recent[front].add(app_id)
+    candidates = storefronts(day)
+    due = candidates if every_storefront else due_storefronts(day, candidates)
+    written = failures = 0
+
+    def ask(front: str, client: httpx.Client) -> list[RatingSnapshot]:
+        """Ask one storefront, again while an app it answered for last week is missing (an
+        empty answer is more often a hiccup than a delisting), and save what it said."""
+        answers: dict[int, tuple[App, dict]] = {}
+        for attempt in range(MISSING_RETRIES + 1):
+            if attempt and pause:
+                time.sleep(pause)
+            for r in _lookup(list(apps), front, client):
+                if (app := apps.get(r.get("trackId"))) is not None:
+                    answers[app.pk] = (app, r)
+            if not recent[front] - answers.keys():
+                break
+        rows = []
+        for app, r in answers.values():
+            # the US listing, or the first one for an app the US store does not sell
+            if front == "us" or (app.apple_id not in listings and app.pk not in recent["us"]):
+                listings[app.apple_id] = r
+            count, price = r.get("userRatingCount") or 0, r.get("price")
+            rows.append(RatingSnapshot(
+                app=app, date=day, storefront=front, count=count,
+                star_sum=round(count * (r.get("averageUserRating") or 0)),
+                version=r.get("version") or "",
+                price=Decimal(str(price)) if price is not None else None,
+                currency=r.get("currency") or "",
+            ))  # fmt: skip
+        with transaction.atomic():
+            today.filter(storefront=front).delete()
+            RatingSnapshot.objects.bulk_create(rows)
+        return rows
+
+    with httpx.Client(timeout=LOOKUP_TIMEOUT, transport=transport) as client:
+        us: list[RatingSnapshot] = list(today.filter(storefront="us")) if "us" in done else []
+        if "us" not in done:
+            try:
+                us = ask("us", client)
+                written += len(us)
+            except LookupFailed as error:
+                log.warning("rating snapshot: %s", error)
+                failures = 1
         before = _us_prices(day)
-        with httpx.Client(timeout=30, transport=transport) as client:
-
-            def ask(front: str) -> list[RatingSnapshot]:
-                found = []
-                for r in _lookup(list(apps), front, client):
-                    app = apps.get(r.get("trackId"))
-                    count = r.get("userRatingCount") or 0
-                    if app is None:
-                        continue
-                    if front == "us" or app.apple_id not in listings:
-                        listings[app.apple_id] = r
-                    price = r.get("price")
-                    found.append(RatingSnapshot(
-                        app=app, date=day, storefront=front, count=count,
-                        star_sum=round(count * (r.get("averageUserRating") or 0)),
-                        version=r.get("version") or "",
-                        price=Decimal(str(price)) if price is not None else None,
-                        currency=r.get("currency") or "",
-                    ))  # fmt: skip
-                return found
-
-            rows += ask("us")
-            repriced = [
-                s.app.name for s in rows
-                if s.price is not None and before.get(s.app_id, s.price) != s.price
-            ]  # fmt: skip
-            if repriced and len(due) < len(candidates):
-                log.info("US price changed for %s; asking every storefront", repriced)
-                due = candidates
-            for front in due:
-                if front == "us":
-                    continue
-                if pause:
-                    time.sleep(pause)
-                rows += ask(front)
-        log.info("rating snapshots: %d of %d storefronts", len(due), len(candidates))
+        repriced = [
+            s.app.name for s in us
+            if s.price is not None and before.get(s.app_id, s.price) != s.price
+        ]  # fmt: skip
+        if repriced and len(due) < len(candidates):
+            log.info("US price changed for %s; asking every storefront", repriced)
+            due = candidates
+        asked = 0
+        for front in due:
+            if front == "us" or front in done:
+                continue
+            if pause:
+                time.sleep(pause)
+            try:
+                written += len(ask(front, client))
+                asked += 1
+                failures = 0
+            except LookupFailed as error:
+                log.warning("rating snapshot: %s", error)
+                failures += 1
+                if failures >= FAILURES_TO_STOP:
+                    log.error(
+                        "rating snapshot stopped: %d storefronts failed in a row; the rest "
+                        "wait for tomorrow's run", failures,
+                    )  # fmt: skip
+                    break
     with transaction.atomic():
-        RatingSnapshot.objects.filter(date=day, app__in=apps.values()).delete()
-        RatingSnapshot.objects.bulk_create(rows)
         for apple_id, listing in listings.items():
             _store_listing(apps[apple_id], listing)
-    return len(rows)
+    log.info(
+        "rating snapshots: asked %d of %d due storefronts (%d already saved today)",
+        asked + ("us" not in done), len(due), len(done),
+    )  # fmt: skip
+    return written
 
 
 def _us_prices(day: date) -> dict[int, Decimal]:

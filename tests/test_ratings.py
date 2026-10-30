@@ -54,7 +54,13 @@ def test_public_lookup_snapshot_is_exact_and_idempotent(apps, settings, monkeypa
     }  # fmt: skip
     calls = []
     assert snapshot(DAY, transport=lookup_transport(results, calls), pause=0) == 2
-    assert snapshot(DAY, transport=lookup_transport(results, calls), pause=0) == 2
+    first = [c.url.params["country"] for c in calls]
+    # a rerun (the CronJob retrying) asks only storefronts with nothing saved today
+    assert snapshot(DAY, transport=lookup_transport(results, calls), pause=0) == 0
+    again = [c.url.params["country"] for c in calls[len(first) :]]
+    assert again  # storefronts that answered without these apps are asked again
+    assert not {"us", "gb"} & set(again)
+    assert RatingSnapshot.objects.filter(date=DAY).count() == 2
     us = RatingSnapshot.objects.get(app=snake, storefront="us")
     assert (us.count, us.star_sum, us.version) == (84, 375, "2.3")  # 84 x 4.46429 = 375
     assert RatingSnapshot.objects.get(app=snake, storefront="gb").star_sum == 11
@@ -247,3 +253,57 @@ def test_a_us_price_change_asks_every_storefront(apps, settings, monkeypatch, us
     if every:
         abroad = RatingSnapshot.objects.get(app=snake, date=DAY, storefront=quiet)
         assert (abroad.price, abroad.currency) == (Decimal("1.09"), "EUR")
+
+
+def _scripted(answers: dict[str, list], calls: list) -> httpx.MockTransport:
+    """Each storefront answers from its list in turn (an int is an HTTP status, a list the
+    results); the last answer repeats."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        front = request.url.params["country"]
+        seen = sum(1 for c in calls if c.url.params["country"] == front)
+        answer = answers.get(front, [[]])[min(seen, len(answers.get(front, [[]]))) - 1]
+        if isinstance(answer, int):
+            return httpx.Response(answer)
+        return httpx.Response(200, json={"results": answer})
+
+    return httpx.MockTransport(handler)
+
+
+def _rated(count: int) -> dict:
+    return {"trackId": SNAKE, "userRatingCount": count, "averageUserRating": 4.0}
+
+
+@pytest.mark.django_db
+def test_two_refusing_storefronts_in_a_row_stop_the_run_and_keep_what_landed(
+    apps, settings, monkeypatch
+):
+    settings.ASC_SOURCE = "asc"
+    monkeypatch.setattr("ascstats.stats.ratings.time.sleep", lambda _: None)
+    monkeypatch.setattr("ascstats.stats.ratings.storefronts", lambda _: ["ca", "de", "fr", "us"])
+    calls = []
+    answers = {"us": [[_rated(5)]], "ca": [429], "de": [503], "fr": [[_rated(1)]]}
+    assert snapshot(DAY, transport=_scripted(answers, calls), pause=0) == 1  # US only
+    asked = [c.url.params["country"] for c in calls]
+    assert asked == ["us"] + ["ca"] * 4 + ["de"] * 4  # fr never asked
+    assert list(RatingSnapshot.objects.values_list("storefront", flat=True)) == ["us"]
+
+
+@pytest.mark.django_db
+def test_an_app_missing_from_a_storefront_it_was_in_last_week_is_asked_again(
+    apps, settings, monkeypatch
+):
+    settings.ASC_SOURCE = "asc"
+    monkeypatch.setattr("ascstats.stats.ratings.storefronts", lambda _: ["us"])
+    snake = App.objects.get(apple_id=SNAKE)
+    RatingSnapshot.objects.create(
+        app=snake, date=DAY - timedelta(days=1), storefront="us", count=5, star_sum=20
+    )
+    calls = []
+    assert snapshot(DAY, transport=_scripted({"us": [[], [_rated(6)]]}, calls), pause=0) == 1
+    assert len(calls) == 2  # the empty answer was a hiccup
+    calls = []
+    RatingSnapshot.objects.filter(date=DAY).delete()
+    assert snapshot(DAY, transport=_scripted({"us": [[]]}, calls), pause=0) == 0
+    assert len(calls) == 3  # asked twice more, then believed
