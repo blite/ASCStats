@@ -30,6 +30,9 @@ def test_fx_load_is_idempotent_and_converts_as_of():
     assert fx.load(date(2026, 10, 9), date(2026, 10, 12), transport()) == 2  # published days
     assert fx.load(date(2026, 10, 9), date(2026, 10, 12), transport()) == 2
     assert FxDay.objects.count() == 2
+    # a window starting on Saturday gets Friday too, which is already stored
+    assert fx.load(date(2026, 10, 10), date(2026, 10, 12), transport()) == 2
+    assert FxDay.objects.count() == 2
     friday = FxDay.objects.get(date=date(2026, 10, 9)).rates
     assert friday["USD"] == 1.0
     assert friday["GBP"] == 1.25  # 0.8 GBP per USD, stored as USD per GBP

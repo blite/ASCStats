@@ -22,7 +22,8 @@ API = "https://api.frankfurter.dev/v1"
 
 
 def fetch(start: date, end: date, transport: httpx.BaseTransport | None = None) -> dict:
-    """{date: {currency: units per USD}} for working days in [start, end]."""
+    """{date: {currency: units per USD}} for working days in [start, end]. A start on a
+    weekend or holiday also brings the last working day before it."""
     with httpx.Client(timeout=30, transport=transport) as client:
         response = client.get(
             f"{API}/{start.isoformat()}..{end.isoformat()}", params={"base": "USD"}
@@ -38,8 +39,9 @@ def load(start: date, end: date, transport: httpx.BaseTransport | None = None) -
         FxDay(date=day, rates={"USD": 1.0} | {cur: 1 / per_usd for cur, per_usd in rates.items()})
         for day, rates in fetch(start, end, transport).items()
     ]
+    first = min([start, *(r.date for r in rows)])  # the working day before a weekend start
     with transaction.atomic():
-        FxDay.objects.filter(date__range=(start, end)).delete()
+        FxDay.objects.filter(date__range=(first, end)).delete()
         FxDay.objects.bulk_create(rows)
     return len(rows)
 
