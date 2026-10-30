@@ -32,6 +32,10 @@ class App(models.Model):
     sku = models.CharField(max_length=100, blank=True)
     bundle_id = models.CharField(max_length=255, blank=True)
     is_active = models.BooleanField(default=True, help_text="Include in daily imports")
+    # From the public store listing (iTunes Lookup), refreshed by every rating snapshot.
+    released_on = models.DateField(null=True, blank=True, help_text="First App Store release")
+    icon_url = models.URLField(max_length=500, blank=True)
+    primary_genre = models.CharField(max_length=100, blank=True, help_text="Store category")
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = AppQuerySet.as_manager()
@@ -267,8 +271,10 @@ class RatingSnapshot(models.Model):
     """The App Store's public rating totals for one app in one storefront on one day.
 
     Apple only publishes the current totals (iTunes Lookup), not history, so history is built
-    by snapshotting daily. The average comes unrounded, so ``star_sum`` is exact and two
-    consecutive snapshots give the exact count and average of the ratings in between.
+    by snapshotting. The average comes unrounded, so ``star_sum`` is exact and two consecutive
+    snapshots give the exact count and average of the ratings in between. Busy storefronts are
+    snapshotted daily, quiet ones weekly (``ratings.due_storefronts``), so consecutive means the
+    storefront's previous snapshot, not necessarily the day before.
     """
 
     app = models.ForeignKey(
@@ -279,6 +285,10 @@ class RatingSnapshot(models.Model):
     count = models.IntegerField()
     star_sum = models.IntegerField(help_text="count x average, rounded: total stars given")
     version = models.CharField(max_length=50, blank=True, help_text="version on sale that day")
+    price = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True, help_text="the app's own price"
+    )
+    currency = models.CharField(max_length=3, blank=True, help_text="the storefront's currency")
 
     class Meta:
         constraints = [
@@ -305,6 +315,11 @@ class CustomerReview(models.Model):
     created = models.DateTimeField()
     version = models.CharField(max_length=50, blank=True)
     platform = models.CharField(max_length=20, blank=True)
+    reviewer_nickname = models.CharField(max_length=255, blank=True)
+    # The developer's reply, if any (customerReviewResponses). Read only: never posted from here.
+    response_body = models.TextField(blank=True)
+    responded_at = models.DateTimeField(null=True, blank=True, help_text="last modified")
+    response_state = models.CharField(max_length=30, blank=True, help_text="e.g. PUBLISHED")
 
     class Meta:
         ordering = ["-created"]

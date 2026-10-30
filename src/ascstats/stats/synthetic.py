@@ -33,6 +33,7 @@ class SyntheticApp:
     price: str  # USD customer price of the app itself
     base_units: float  # typical daily downloads at launch
     iap: tuple[int, str, str, str] | None  # (apple_id, sku, title, price)
+    genre: str = "Games"  # primary App Store category
 
 
 # Apple IDs in a range no real app uses, all prefixed "Synthetic".
@@ -63,6 +64,7 @@ APPS = [
         "0",
         35,
         (1000000103, "SYN-STARS-PRO", "Stargazer Pro", "4.99"),
+        "Education",
     ),
 ]
 EPOCH = date(2025, 1, 1)
@@ -366,8 +368,30 @@ def reviews(app: SyntheticApp, day: date) -> list[dict]:
         out.append({
             "id": f"syn-{app.apple_id}-{day.isoformat()}-{k}", "rating": rating, "title": title,
             "body": body, "territory": "USA", "created": day, "version": version,
+            "nickname": "", "reply": "", "replied": None,
         })  # fmt: skip
+    # Nicknames and replies come from a stream of their own, so the reviews stay unchanged.
+    replies = _rng("replies", app.apple_id, day)
+    for review in out:
+        review["nickname"] = f"player{replies.randrange(1000, 10000)}"
+        if replies.random() < (0.7 if review["rating"] <= 2 else 0.2):
+            review["reply"] = REPLY_TEXT[review["rating"] <= 2]
+            review["replied"] = day + timedelta(days=replies.randrange(0, 2))
     return out
+
+
+REPLY_TEXT = {
+    True: "Sorry about that. A fix is on the way; please email us if it keeps happening.",
+    False: "Thank you for the kind review!",
+}
+
+
+def lookup_listing(app: SyntheticApp) -> dict:
+    """The store-listing fields of an iTunes Lookup result."""
+    return {
+        "releaseDate": f"{RELEASES[app.apple_id][0].day.isoformat()}T08:00:00Z",
+        "primaryGenreName": app.genre,
+    }
 
 
 def review_summary(app: SyntheticApp) -> str:

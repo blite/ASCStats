@@ -109,14 +109,19 @@ class ASCClient:
             raise ASCError(response.status_code, _error_detail(response))
         return response.json()
 
-    def paginate(self, path: str, params: dict | None = None) -> Iterator[dict[str, Any]]:
-        """Yield every resource in ``data`` across pages, following ``links.next``."""
+    def pages(self, path: str, params: dict | None = None) -> Iterator[dict[str, Any]]:
+        """Yield every page of a list endpoint, following ``links.next``."""
         url: str | None = path
         while url:
             page = self.get_json(url, params)
-            yield from page.get("data", [])
+            yield page
             url = page.get("links", {}).get("next")
             params = None  # the next link already carries the query string
+
+    def paginate(self, path: str, params: dict | None = None) -> Iterator[dict[str, Any]]:
+        """Yield every resource in ``data`` across pages."""
+        for page in self.pages(path, params):
+            yield from page.get("data", [])
 
     # --- Sales & Trends ------------------------------------------------------------------
 
@@ -158,12 +163,28 @@ class ASCClient:
     # --- Ratings and reviews -------------------------------------------------------------
 
     def customer_reviews(self, app_apple_id: int) -> list[dict[str, Any]]:
-        return list(
-            self.paginate(
-                f"/v1/apps/{app_apple_id}/customerReviews",
-                {"limit": 200, "sort": "-createdDate"},
-            )
-        )
+        """Written reviews, newest first, each with the developer's reply under ``response``
+        (the included customerReviewResponses resource, or None when unanswered)."""
+        reviews = []
+        for page in self.pages(
+            f"/v1/apps/{app_apple_id}/customerReviews",
+            {
+                "limit": 200,
+                "sort": "-createdDate",
+                "include": "response",
+                "fields[customerReviewResponses]": "responseBody,lastModifiedDate,state",
+            },
+        ):
+            replies = {
+                r["id"]: r
+                for r in page.get("included", [])
+                if r.get("type") == "customerReviewResponses"
+            }
+            for review in page.get("data", []):
+                ref = ((review.get("relationships") or {}).get("response") or {}).get("data")
+                review["response"] = replies.get(ref["id"]) if ref else None
+                reviews.append(review)
+        return reviews
 
     def version_review_ids(self, version_id: str) -> list[str]:
         """IDs of the written reviews App Store Connect files under one appStoreVersion."""

@@ -106,7 +106,7 @@
         <div style="padding:8px 0;border-bottom:1px solid var(--grid);font-size:13px">
           <div><span aria-label="{{ rv.rating }} of 5 stars" style="letter-spacing:1px">{% for i in "12345" %}{% if forloop.counter <= rv.rating %}★{% else %}<span class="muted">☆</span>{% endif %}{% endfor %}</span>
             <strong style="margin-left:6px">{{ rv.title|truncatechars:60 }}</strong></div>
-          <div class="muted" style="font-size:12px"><a href="{% url 'app' rv.app.apple_id %}">{{ rv.app.name }}</a> · {{ rv.created|date:"M j" }} · {{ rv.territory }}{% if rv.version %} · v{{ rv.version }}{% endif %}</div>
+          <div class="muted" style="font-size:12px"><a href="{% url 'app' rv.app.apple_id %}">{{ rv.app.name }}</a> · {{ rv.created|date:"M j" }} · {{ rv.territory }}{% if rv.version %} · v{{ rv.version }}{% endif %} · {% if rv.response_body %}replied{% else %}<strong>no reply</strong>{% endif %}</div>
           {% if rv.body %}<div style="color:var(--ink-2);margin-top:2px">{{ rv.body|truncatechars:180 }}</div>{% endif %}
         </div>
         {% empty %}<p class="muted">No new written reviews.</p>{% endfor %}

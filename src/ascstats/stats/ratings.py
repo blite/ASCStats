@@ -7,6 +7,8 @@ Three sources:
   reports today's totals, so ``snapshot`` runs daily and history starts on the first run.
   The average is unrounded, so each snapshot's star sum is exact and the difference of two
   consecutive snapshots is the exact count and average of the ratings given in between.
+  One request covers every app in one storefront; quiet storefronts are only asked weekly
+  (``due_storefronts``). The same answer carries each app's price in that storefront.
 - **Written reviews**: App Store Connect (GET only), filed under the version Apple says they
   were written for (``/appStoreVersions/{id}/customerReviews``).
 - **Review summaries**: App Store Connect's AI-written summary per territory, when Apple has
@@ -17,14 +19,16 @@ from __future__ import annotations
 
 import logging
 import time
+import zlib
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 import httpx
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Avg, Count, Max, Sum
+from django.db.models import Avg, Count, Max, Min
 from django.utils import timezone
 
 from ascstats.asc.client import ASCClient, ReportNotReady
@@ -47,6 +51,8 @@ log = logging.getLogger(__name__)
 
 LOOKUP = "https://itunes.apple.com/lookup"
 LOOKUP_PAUSE = 3.0  # seconds between storefronts: the public endpoint allows ~20 calls/min
+ACTIVE_DAYS = 30  # a storefront whose ratings moved within this many days is asked daily
+WEEK = 7
 
 
 # --- star-rating snapshots ---------------------------------------------------------------------
@@ -60,6 +66,32 @@ def storefronts(end: date) -> list[str]:
         .distinct()
     )
     return sorted({c.lower() for c in codes if len(c) == 2} | {"us"})
+
+
+def due_storefronts(day: date, candidates: list[str]) -> list[str]:
+    """The storefronts to ask on ``day``: the US every day, any storefront whose ratings moved
+    in the last ``ACTIVE_DAYS``, and the rest once a week, each on a weekday of its own so the
+    load stays even. A storefront with no snapshot in over a week (new, or a missed run) is
+    asked at once."""
+    moved, last = set(), {}
+    for r in (
+        RatingSnapshot.objects.filter(date__gte=day - timedelta(days=ACTIVE_DAYS), date__lt=day)
+        .values("app", "storefront")
+        .annotate(lo=Min("count"), hi=Max("count"), last=Max("date"))
+    ):
+        front = r["storefront"]
+        if r["hi"] != r["lo"]:
+            moved.add(front)
+        last[front] = max(last.get(front, r["last"]), r["last"])
+    return [
+        front
+        for front in candidates
+        if front == "us"
+        or front in moved
+        or zlib.crc32(front.encode()) % WEEK == day.toordinal() % WEEK
+        or front not in last
+        or (day - last[front]).days > WEEK
+    ]
 
 
 def _lookup(ids: list[int], storefront: str, client: httpx.Client) -> list[dict]:
@@ -78,41 +110,110 @@ def snapshot(
     source: str | None = None,
     transport: httpx.BaseTransport | None = None,
     pause: float = LOOKUP_PAUSE,
+    every_storefront: bool = False,
 ) -> int:
-    """Record today's public rating totals for every active app. Idempotent per day."""
+    """Record today's public rating totals and prices for every active app in the storefronts
+    due today, or in all of them with ``every_storefront``. The US goes first: when an app's
+    US price changed, every storefront is asked, since Apple moves the other storefronts'
+    prices on the same day. Idempotent per day."""
     day = day or timezone.localdate()
     source = source or settings.ASC_SOURCE
     apps = {a.apple_id: a for a in App.objects.active()}
     rows = []
+    listings: dict[int, dict] = {}  # apple_id -> Lookup result, the US one when there is one
     if source == "synthetic":
         for apple_id, app in apps.items():
             try:
                 syn = synthetic.app_by_apple_id(apple_id)
             except KeyError:
                 continue
+            listings[apple_id] = synthetic.lookup_listing(syn)
             version = synthetic.version_on(syn, day)[0]
             for front, (count, stars) in synthetic.rating_snapshot(syn, day).items():
+                us = front == "us"  # synthetic prices are US-only
                 rows.append(RatingSnapshot(app=app, date=day, storefront=front, count=count,
-                                           star_sum=stars, version=version))  # fmt: skip
+                                           star_sum=stars, version=version,
+                                           price=Decimal(syn.price) if us else None,
+                                           currency="USD" if us else ""))  # fmt: skip
     else:
+        candidates = storefronts(day)
+        due = candidates if every_storefront else due_storefronts(day, candidates)
+        before = _us_prices(day)
         with httpx.Client(timeout=30, transport=transport) as client:
-            for n, front in enumerate(storefronts(day)):
-                if n and pause:
-                    time.sleep(pause)
+
+            def ask(front: str) -> list[RatingSnapshot]:
+                found = []
                 for r in _lookup(list(apps), front, client):
                     app = apps.get(r.get("trackId"))
                     count = r.get("userRatingCount") or 0
                     if app is None:
                         continue
-                    rows.append(RatingSnapshot(
+                    if front == "us" or app.apple_id not in listings:
+                        listings[app.apple_id] = r
+                    price = r.get("price")
+                    found.append(RatingSnapshot(
                         app=app, date=day, storefront=front, count=count,
                         star_sum=round(count * (r.get("averageUserRating") or 0)),
                         version=r.get("version") or "",
+                        price=Decimal(str(price)) if price is not None else None,
+                        currency=r.get("currency") or "",
                     ))  # fmt: skip
+                return found
+
+            rows += ask("us")
+            repriced = [
+                s.app.name for s in rows
+                if s.price is not None and before.get(s.app_id, s.price) != s.price
+            ]  # fmt: skip
+            if repriced and len(due) < len(candidates):
+                log.info("US price changed for %s; asking every storefront", repriced)
+                due = candidates
+            for front in due:
+                if front == "us":
+                    continue
+                if pause:
+                    time.sleep(pause)
+                rows += ask(front)
+        log.info("rating snapshots: %d of %d storefronts", len(due), len(candidates))
     with transaction.atomic():
         RatingSnapshot.objects.filter(date=day, app__in=apps.values()).delete()
         RatingSnapshot.objects.bulk_create(rows)
+        for apple_id, listing in listings.items():
+            _store_listing(apps[apple_id], listing)
     return len(rows)
+
+
+def _us_prices(day: date) -> dict[int, Decimal]:
+    """{app pk: its last known US price before ``day``}."""
+    prices = {}
+    for app_id, price in (
+        RatingSnapshot.objects.filter(
+            storefront="us",
+            date__lt=day,
+            date__gte=day - timedelta(days=ACTIVE_DAYS),
+            price__isnull=False,
+        )
+        .order_by("date")
+        .values_list("app_id", "price")
+    ):
+        prices[app_id] = price
+    return prices
+
+
+def _store_listing(app: App, r: dict) -> None:
+    """Copy the release date, icon and category from a Lookup result onto the app. A field
+    the result leaves out keeps its last value."""
+    released = r.get("releaseDate")
+    found = {
+        "released_on": datetime.fromisoformat(released).date() if released else None,
+        "icon_url": r.get("artworkUrl512") or r.get("artworkUrl100") or "",
+        "primary_genre": r.get("primaryGenreName") or "",
+    }
+    changed = [f for f, v in found.items() if v and getattr(app, f) != v]
+    for f in changed:
+        setattr(app, f, found[f])
+    if changed:
+        app.save(update_fields=changed)
 
 
 # --- written reviews and summaries -------------------------------------------------------------
@@ -129,12 +230,15 @@ def import_reviews(app: App, client: ASCClient | None, day: date | None = None) 
         syn = synthetic.app_by_apple_id(app.apple_id)
         found = synthetic.reviews(syn, day or timezone.localdate())
         for r in found:
+            replied = r["replied"]
             CustomerReview.objects.update_or_create(
                 asc_id=r["id"],
                 defaults={
                     "app": app, "rating": r["rating"], "title": r["title"], "body": r["body"],
                     "territory": r["territory"], "platform": IOS, "version": r["version"],
-                    "created": _midnight(r["created"]),
+                    "created": _midnight(r["created"]), "reviewer_nickname": r["nickname"],
+                    "response_body": r["reply"], "response_state": "PUBLISHED" if replied else "",
+                    "responded_at": _midnight(replied) if replied else None,
                 },
             )  # fmt: skip
         return len(found)
@@ -151,6 +255,8 @@ def import_reviews(app: App, client: ASCClient | None, day: date | None = None) 
         for r in reviews:
             attrs = r["attributes"]
             version, platform = version_of.get(r["id"], ("", ""))
+            reply = (r.get("response") or {}).get("attributes") or {}
+            replied = reply.get("lastModifiedDate")
             CustomerReview.objects.update_or_create(
                 asc_id=r["id"],
                 defaults={
@@ -158,6 +264,10 @@ def import_reviews(app: App, client: ASCClient | None, day: date | None = None) 
                     "body": attrs.get("body") or "", "territory": attrs.get("territory") or "",
                     "created": datetime.fromisoformat(attrs["createdDate"]),
                     "version": version, "platform": platform,
+                    "reviewer_nickname": attrs.get("reviewerNickname") or "",
+                    "response_body": reply.get("responseBody") or "",
+                    "responded_at": datetime.fromisoformat(replied) if replied else None,
+                    "response_state": reply.get("state") or "",
                 },
             )  # fmt: skip
     return len(reviews)
@@ -201,21 +311,42 @@ def import_summaries(app: App, client: ASCClient | None) -> int:
 
 
 def daily_new_ratings(app: App) -> dict[date, tuple[int, int]]:
-    """{day: (new ratings, their total stars)} from consecutive snapshots, per storefront and
-    then summed, so a storefront appearing for the first time does not count as new ratings."""
-    by_front = defaultdict(dict)
-    for front, day, count, stars in RatingSnapshot.objects.filter(app=app).values_list(
-        "storefront", "date", "count", "star_sum"
-    ):
-        by_front[front][day] = (count, stars)
+    """{day: (new ratings, their total stars)}: each snapshot minus the storefront's previous
+    one, summed over storefronts. A storefront asked weekly lands its week on the day it was
+    asked; one appearing for the first time does not count as new ratings."""
     out: dict[date, list[int]] = defaultdict(lambda: [0, 0])
-    for days in by_front.values():
-        for day, (count, stars) in days.items():
-            prev = days.get(day - timedelta(days=1))
-            if prev is not None:
-                out[day][0] += count - prev[0]
-                out[day][1] += stars - prev[1]
+    prev: dict[str, tuple[int, int]] = {}
+    for front, day, count, stars in (
+        RatingSnapshot.objects.filter(app=app)
+        .order_by("date")
+        .values_list("storefront", "date", "count", "star_sum")
+    ):
+        if front in prev:
+            out[day][0] += count - prev[front][0]
+            out[day][1] += stars - prev[front][1]
+        prev[front] = (count, stars)
     return {d: (c, s) for d, (c, s) in out.items()}
+
+
+def latest_totals(apps: list[App]) -> dict[int, tuple[int, int]]:
+    """{app pk: (ratings, stars)} summed over each storefront's latest snapshot, since quiet
+    storefronts are not asked every day. Looks back two weeks, so a storefront that stopped
+    answering (the app left it) drops out."""
+    latest = RatingSnapshot.objects.filter(app__in=apps).aggregate(d=Max("date"))["d"]
+    if latest is None:
+        return {}
+    last: dict[tuple[int, str], tuple[int, int]] = {}
+    for app_id, front, count, stars in (
+        RatingSnapshot.objects.filter(app__in=apps, date__gt=latest - timedelta(days=2 * WEEK))
+        .order_by("date")
+        .values_list("app_id", "storefront", "count", "star_sum")
+    ):
+        last[app_id, front] = (count, stars)
+    totals: dict[int, list[int]] = defaultdict(lambda: [0, 0])
+    for (app_id, _), (count, stars) in last.items():
+        totals[app_id][0] += count
+        totals[app_id][1] += stars
+    return {a: (c, s) for a, (c, s) in totals.items()}
 
 
 @dataclass
@@ -294,16 +425,16 @@ def current(app: App, daily: dict[date, tuple[int, int]] | None = None) -> dict 
     recent = list(CustomerReview.objects.filter(app=app)[:5])
     if latest is None and not recent and summary is None:
         return None
-    out = {"date": latest, "summary": summary, "recent": recent}
+    unanswered = CustomerReview.objects.filter(app=app, response_body="").count()
+    out = {"date": latest, "summary": summary, "recent": recent, "unanswered": unanswered}
     if latest:
-        snaps = RatingSnapshot.objects.filter(app=app, date=latest)
-        agg = snaps.aggregate(count=Sum("count"), stars=Sum("star_sum"))
-        us = snaps.filter(storefront="us").first()
+        count, stars = latest_totals([app]).get(app.pk, (0, 0))
+        us = RatingSnapshot.objects.filter(app=app, storefront="us").order_by("date").last()
         daily = daily_new_ratings(app) if daily is None else daily
         week = [daily[d] for d in daily if d > latest - timedelta(days=7)]
         out |= {
-            "count": agg["count"] or 0,
-            "average": (agg["stars"] / agg["count"]) if agg["count"] else None,
+            "count": count,
+            "average": stars / count if count else None,
             "us_count": us.count if us else None,
             "us_average": us.average if us else None,
             "week_new": sum(c for c, _ in week) if week else None,
@@ -330,12 +461,7 @@ def recent_activity(apps: list[App], end: date, days: int, limit: int = 8) -> di
     changes, observed = [], 0
     if latest is not None:
         since = latest - timedelta(days=days)
-        totals = {
-            r["app"]: (r["count"], r["stars"])
-            for r in RatingSnapshot.objects.filter(app__in=apps, date=latest)
-            .values("app")
-            .annotate(count=Sum("count"), stars=Sum("star_sum"))
-        }
+        totals = latest_totals(apps)
         for app in apps:
             count, stars = totals.get(app.pk, (0, 0))
             if not count:

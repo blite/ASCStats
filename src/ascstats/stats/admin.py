@@ -15,8 +15,10 @@ from .models import (
 
 @admin.register(App)
 class AppAdmin(admin.ModelAdmin):
-    list_display = ["name", "apple_id", "sku", "bundle_id", "is_active"]
-    list_filter = ["is_active"]
+    list_display = [
+        "name", "apple_id", "sku", "bundle_id", "primary_genre", "released_on", "is_active",
+    ]  # fmt: skip
+    list_filter = ["is_active", "primary_genre"]
     search_fields = ["name", "sku", "bundle_id"]
 
 

@@ -20,6 +20,9 @@ class AppOut(Schema):
     sku: str
     bundle_id: str
     is_active: bool
+    released_on: date | None  # first App Store release, from the public listing
+    icon_url: str
+    primary_genre: str
 
 
 class DailySales(Schema):
@@ -80,6 +83,9 @@ class ReviewOut(Schema):
     territory: str
     created: datetime
     version: str
+    reviewer_nickname: str
+    response_body: str  # the developer's reply; empty when unanswered
+    responded_at: datetime | None
 
 
 class RatingsOut(Schema):
@@ -89,6 +95,7 @@ class RatingsOut(Schema):
     us_count: int | None
     us_average: float | None
     new_last_7_days: int | None
+    unanswered_reviews: int  # written reviews with no developer reply
     summary: str | None  # Apple's AI-written review summary (US first)
     versions: list[VersionRatingsOut]
     recent_reviews: list[ReviewOut]
@@ -185,6 +192,7 @@ def ratings(request, apple_id: int):
         "us_count": now.get("us_count"),
         "us_average": now.get("us_average"),
         "new_last_7_days": now.get("week_new"),
+        "unanswered_reviews": now.get("unanswered", 0),
         "summary": now["summary"].text if now.get("summary") else None,
         "versions": version_ratings(app),
         "recent_reviews": now.get("recent", []),

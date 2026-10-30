@@ -1,4 +1,6 @@
+import zlib
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 
 import httpx
 import pytest
@@ -9,8 +11,10 @@ from ascstats.stats.models import App, AppVersion, CustomerReview, RatingSnapsho
 from ascstats.stats.ratings import (
     current,
     daily_new_ratings,
+    due_storefronts,
     import_reviews,
     import_summaries,
+    latest_totals,
     snapshot,
     version_ratings,
 )
@@ -42,8 +46,11 @@ def test_public_lookup_snapshot_is_exact_and_idempotent(apps, settings, monkeypa
     RatingSnapshot.objects.all().delete()
     results = {
         "us": [{"trackId": SNAKE, "userRatingCount": 84, "averageUserRating": 4.46429,
-                "version": "2.3"}],
-        "gb": [{"trackId": SNAKE, "userRatingCount": 3, "averageUserRating": 3.66667}],
+                "version": "2.3", "releaseDate": "2025-01-01T08:00:00Z",
+                "artworkUrl512": "https://is1-ssl.mzstatic.com/snake/512x512bb.jpg",
+                "primaryGenreName": "Games"}],
+        "gb": [{"trackId": SNAKE, "userRatingCount": 3, "averageUserRating": 3.66667,
+                "primaryGenreName": "Spiele"}],
     }  # fmt: skip
     calls = []
     assert snapshot(DAY, transport=lookup_transport(results, calls), pause=0) == 2
@@ -51,6 +58,9 @@ def test_public_lookup_snapshot_is_exact_and_idempotent(apps, settings, monkeypa
     us = RatingSnapshot.objects.get(app=snake, storefront="us")
     assert (us.count, us.star_sum, us.version) == (84, 375, "2.3")  # 84 x 4.46429 = 375
     assert RatingSnapshot.objects.get(app=snake, storefront="gb").star_sum == 11
+    snake.refresh_from_db()  # the US listing wins over other storefronts
+    assert (snake.released_on, snake.primary_genre) == (date(2025, 1, 1), "Games")
+    assert snake.icon_url.endswith("/512x512bb.jpg")
     expected = {str(a.apple_id) for a in apps}
     assert all(set(c.url.params["id"].split(",")) == expected for c in calls)
 
@@ -107,7 +117,15 @@ def test_reviews_are_filed_under_apples_version_with_get_only(apps):
     assert import_reviews(snake, client) == 2  # idempotent
     crash = CustomerReview.objects.get(asc_id="rev-2")
     assert (crash.rating, crash.version, crash.territory) == (1, "2.3", "GBR")
-    assert CustomerReview.objects.get(asc_id="rev-1").version == ""  # Apple filed it nowhere
+    reply = (crash.reviewer_nickname, crash.response_body, crash.response_state)
+    assert reply == ("someone", "Fixed in 2.4, sorry!", "PUBLISHED")
+    assert crash.responded_at == datetime(2026, 10, 7, 16, 30, tzinfo=UTC)
+    lovely = CustomerReview.objects.get(asc_id="rev-1")
+    assert lovely.version == ""  # Apple filed it nowhere
+    assert (lovely.response_body, lovely.responded_at) == ("", None)  # unanswered
+    params = next(r.url.params for r in fake.requests if r.url.path.endswith("/customerReviews")
+                  and "/apps/" in r.url.path)  # fmt: skip
+    assert params["include"] == "response"
     assert import_summaries(snake, client) == 2  # one per platform in the fixture
     assert ReviewSummary.objects.filter(app=snake, territory="USA").exists()
     assert {r.method for r in fake.requests} == {"GET"}
@@ -122,8 +140,14 @@ def test_synthetic_ratings_flow_into_api_and_dashboard(client, apps):
     assert now["count"] > 0
     assert 1 <= now["average"] <= 5
     assert now["week_new"] > 0
+    snake.refresh_from_db()
+    assert (snake.released_on, snake.primary_genre) == (date(2025, 1, 1), "Games")
+    replied = CustomerReview.objects.filter(app=snake).exclude(response_body="")
+    assert 0 < replied.count() < CustomerReview.objects.filter(app=snake).count()
+    assert now["unanswered"] == CustomerReview.objects.filter(app=snake, response_body="").count()
     body = client.get(f"/api/apps/{SNAKE}/ratings").json()
     assert body["summary"]
+    assert body["unanswered_reviews"] == now["unanswered"]
     assert any(v["ratings_per_day"] for v in body["versions"])
     chart = client.get(f"/chart/{SNAKE}/90/")
     assert b"Latest written reviews" in chart.content
@@ -150,3 +174,76 @@ def test_import_skips_apps_the_key_cannot_see_but_fails_if_none_readable(
         fake.queue(f"/v1/apps/{SNAKE}/customerReviews", forbidden)
     with pytest.raises(CommandError, match="role"):
         call_command("import_reviews")
+
+
+CODES = ["fr", "de", "it", "es", "nl", "se", "ar", "br", "cl", "co", "pe", "mx", "au", "nz"]
+
+
+def _turn(front: str) -> int:
+    """Days after ``DAY`` until the storefront's weekly turn (0: on ``DAY``)."""
+    return (zlib.crc32(front.encode()) - DAY.toordinal()) % 7
+
+
+@pytest.mark.django_db
+def test_quiet_storefronts_are_asked_weekly_busy_ones_daily(apps):
+    snake = App.objects.get(apple_id=SNAKE)
+    quiet, stale = [f for f in CODES if _turn(f)][:2]
+    today = next(f for f in CODES if not _turn(f))
+    snaps = [
+        (DAY - timedelta(days=20), "gb", 50), (DAY - timedelta(days=1), "gb", 51),  # moved
+        (DAY - timedelta(days=20), quiet, 9), (DAY - timedelta(days=1), quiet, 9),  # did not
+        (DAY - timedelta(days=9), stale, 4),  # missed its turn
+        (DAY - timedelta(days=7), today, 3),  # its turn is today
+    ]  # fmt: skip
+    RatingSnapshot.objects.bulk_create(
+        RatingSnapshot(app=snake, date=d, storefront=f, count=c, star_sum=c * 4)
+        for d, f, c in snaps
+    )
+    candidates = ["us", "gb", quiet, stale, today, "jp"]
+    assert due_storefronts(DAY, candidates) == ["us", "gb", stale, today, "jp"]  # jp: never asked
+    assert quiet in due_storefronts(DAY + timedelta(days=_turn(quiet)), candidates)
+
+
+@pytest.mark.django_db
+def test_weekly_storefront_lands_its_week_and_still_counts_in_totals(apps):
+    snake = App.objects.get(apple_id=SNAKE)
+    snaps = [(DAY + timedelta(days=n), "us", 100 + n, 4 * (100 + n)) for n in range(8)]
+    snaps += [(DAY, "fr", 10, 40), (DAY + timedelta(days=7), "fr", 13, 55)]
+    RatingSnapshot.objects.bulk_create(
+        RatingSnapshot(app=snake, date=d, storefront=f, count=c, star_sum=s) for d, f, c, s in snaps
+    )
+    daily = daily_new_ratings(snake)
+    assert daily[DAY + timedelta(days=3)] == (1, 4)  # US only
+    assert daily[DAY + timedelta(days=7)] == (1 + 3, 4 + 15)  # fr's whole week lands here
+    assert latest_totals([snake]) == {snake.pk: (107 + 13, 428 + 55)}
+    RatingSnapshot.objects.filter(storefront="fr", date=DAY + timedelta(days=7)).delete()
+    assert current(snake)["count"] == 107 + 10  # fr not asked on the latest day: still counted
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(("us_before", "every"), [("0.99", False), ("1.99", True)])
+def test_a_us_price_change_asks_every_storefront(apps, settings, monkeypatch, us_before, every):
+    settings.ASC_SOURCE = "asc"
+    snake = App.objects.get(apple_id=SNAKE)
+    quiet = next(f for f in CODES if _turn(f))
+    monkeypatch.setattr("ascstats.stats.ratings.storefronts", lambda _: ["us", quiet])
+    yesterday = DAY - timedelta(days=1)
+    RatingSnapshot.objects.bulk_create([
+        RatingSnapshot(app=snake, date=yesterday, storefront="us", count=5, star_sum=20,
+                       price=Decimal(us_before), currency="USD"),
+        RatingSnapshot(app=snake, date=yesterday, storefront=quiet, count=2, star_sum=8),
+    ])  # fmt: skip
+    results = {
+        "us": [{"trackId": SNAKE, "userRatingCount": 5, "averageUserRating": 4.0,
+                "price": 0.99, "currency": "USD"}],
+        quiet: [{"trackId": SNAKE, "userRatingCount": 2, "averageUserRating": 4.0,
+                 "price": 1.09, "currency": "EUR"}],
+    }  # fmt: skip
+    calls = []
+    snapshot(DAY, transport=lookup_transport(results, calls), pause=0)
+    assert [c.url.params["country"] for c in calls] == (["us", quiet] if every else ["us"])
+    us = RatingSnapshot.objects.get(app=snake, date=DAY, storefront="us")
+    assert (us.price, us.currency) == (Decimal("0.99"), "USD")
+    if every:
+        abroad = RatingSnapshot.objects.get(app=snake, date=DAY, storefront=quiet)
+        assert (abroad.price, abroad.currency) == (Decimal("1.09"), "EUR")
