@@ -21,13 +21,18 @@ def reviews_url(state="", app=None):
     return reverse("reviews_app", args=[app.apple_id])
 
 
+# App Store Connect's name for each platform in its page addresses
+ASC_PLATFORM_PATHS = {"IOS": "ios", "MAC_OS": "macos", "VISION_OS": "visionos"}
+
+
 @register.filter
-def asc_reviews_href(app):
-    """The app's Ratings and Reviews page in App Store Connect, where replies are
-    written. Apple has no link to a single review."""
+def asc_reviews_href(review):
+    """The Ratings and Reviews page in App Store Connect for the app and platform the review
+    was written for, where replies are written. Apple has no link to a single review."""
+    platform = ASC_PLATFORM_PATHS.get(review.platform, "ios")
     return (
-        f"https://appstoreconnect.apple.com/apps/{app.apple_id}"
-        "/distribution/activity/ios/ratingsResponses"
+        f"https://appstoreconnect.apple.com/apps/{review.app.apple_id}"
+        f"/distribution/activity/{platform}/ratingsResponses"
     )
 
 

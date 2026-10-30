@@ -239,6 +239,7 @@ def test_review_queue_works_the_unanswered_worst_first(client, apps):
             territory="USA", created=made.replace(day=day), response_body=reply,
             response_state=state,
         )  # fmt: skip
+    CustomerReview.objects.filter(asc_id="c").update(platform="MAC_OS")
 
     def titles(path):
         response = client.get(path)
@@ -251,6 +252,8 @@ def test_review_queue_works_the_unanswered_worst_first(client, apps):
     asc = f"appstoreconnect.apple.com/apps/{snake.apple_id}/distribution/activity/ios/"
     assert f"{asc}ratingsResponses".encode() in page.content
     assert f"apps.apple.com/us/app/id{snake.apple_id}".encode() in page.content
+    mac = f"appstoreconnect.apple.com/apps/{sudoku.apple_id}/distribution/activity/macos/"
+    assert f"{mac}ratingsResponses".encode() in page.content  # a Mac review opens the Mac page
     assert titles("/reviews/replied/")[0] == ["e", "d"]  # newest first, pending counts
     assert b"Pending publication" in titles("/reviews/replied/")[1].content
     assert titles("/reviews/all/")[0] == ["e", "d", "c", "b", "a"]
