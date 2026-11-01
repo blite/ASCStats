@@ -7,6 +7,7 @@ run on local Docker Compose and on Cloud Composer.
 from __future__ import annotations
 
 import os
+from datetime import timedelta
 
 import pendulum
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
@@ -26,10 +27,12 @@ SALES_ASSET = Asset("ascstats://postgres/stats_salesrow", group="ascstats")
 ANALYTICS_ASSET = Asset("ascstats://postgres/analytics_rollups", group="ascstats")
 CONVERSION_ASSET = Asset("ascstats://postgres/stats_conversionmetric", group="ascstats")
 
+# A failed task tries again 2 hours later, up to three times. "Not published yet" is not a
+# failure: the sensors wait for that.
 DEFAULT_ARGS = {
     "owner": "ascstats",
-    "retries": 2,
-    "retry_exponential_backoff": True,
+    "retries": 3,
+    "retry_delay": timedelta(hours=2),
 }
 
 _ENV_FROM = [

@@ -9,6 +9,7 @@ name: ascstats-airflow
 
 x-airflow: &airflow
   image: apache/airflow:3.3.2-python3.13
+  restart: unless-stopped  # the stack is the scheduler: it comes back with Docker Desktop
   user: "50000:0"
   env_file:
     - defaults.env  # synthetic asc_default connection: the sensor never calls Apple
@@ -33,7 +34,7 @@ x-airflow: &airflow
     ASCSTATS_IMAGE: ascstats:dev
     ASCSTATS_K8S_NAMESPACE: ascstats
     ASCSTATS_K8S_CONN_ID: kubernetes_default
-    ASCSTATS_START_DATE: "2026-10-15"  # small catchup locally; use backfill for older days
+    ASCSTATS_START_DATE: "2026-10-29"  # small catchup locally; use backfill for older days
     AIRFLOW_CONN_KUBERNETES_DEFAULT: '{"conn_type": "kubernetes", "extra": {"kube_config_path": "/opt/airflow/kube/config", "namespace": "ascstats", "in_cluster": false}}'
   volumes:
     - ./dags:/opt/airflow/dags:ro
@@ -45,6 +46,7 @@ x-airflow: &airflow
 services:
   airflow-postgres:
     image: postgres:18-alpine
+    restart: unless-stopped
     environment: {POSTGRES_USER: airflow, POSTGRES_PASSWORD: airflow, POSTGRES_DB: airflow}
     volumes: [airflow-pg:/var/lib/postgresql]
     healthcheck:
@@ -54,6 +56,7 @@ services:
 
   airflow-init:
     <<: *airflow
+    restart: "no"  # one-shot: migrate and exit
     depends_on: {airflow-postgres: {condition: service_healthy}}
     entrypoint: ["bash", "-c"]
     command:

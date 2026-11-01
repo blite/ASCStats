@@ -257,6 +257,9 @@ the ascstats image's management command on the cluster above.
 
 - **Deferrable sensor**: `wait_for_report` hands off to the triggerer, which polls Apple with
   read-only GETs until the report exists, without holding a worker slot.
+- **Retries**: a failed task tries again 2 hours later, up to three times. A report that is not published yet is not a failure: the
+  sensor waits for it (up to 36 hours). This is why Airflow, not the CronJobs in
+  `k8s/cronjobs.yaml` (now suspended), schedules the imports.
 - **Pool**: every task that calls App Store Connect runs in the `asc_api` pool (2 slots),
   across all DAGs, including backfills.
 - **Connection**: the key is the `asc_default` Airflow connection;
@@ -271,7 +274,9 @@ the ascstats image's management command on the cluster above.
 cd airflow
 ./scripts/kubeconfig.sh                                    # kubeconfig for the containers
 docker compose up -d                                       # UI: http://localhost:8080
-for d in ascstats_daily_sales ascstats_daily_analytics ascstats_conversion_metrics; do
+./scripts/asc-conn-from-k8s.sh                             # real data: asc_default from the cluster Secret
+for d in ascstats_daily_sales ascstats_daily_analytics ascstats_conversion_metrics \
+         ascstats_daily_ratings ascstats_weekly_restatement; do
   docker compose exec airflow-scheduler airflow dags unpause $d; done
 docker compose exec airflow-scheduler \
   airflow backfill create --dag-id ascstats_daily_sales --from-date 2026-09-01 --to-date 2026-09-07

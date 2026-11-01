@@ -2,14 +2,12 @@
 
 - ``snapshot_ratings``: today's public App Store rating totals (iTunes Lookup, no App Store
   Connect key). Apple publishes no rating history, so a missed day is a gap forever: no
-  catchup, and retries matter more than anywhere else.
+  catchup; the three 2-hour retries all land the same UTC day.
 - ``build_versions`` then ``import_reviews``, and ``check_report_requests``: App Store
   Connect (GET only, ``asc_api`` pool).
   Versions first, so each written review can be filed under the version Apple says it is
   about.
 """
-
-from datetime import timedelta
 
 from airflow.sdk import dag
 
@@ -21,7 +19,7 @@ from ascstats_lib.pods import DEFAULT_ARGS, START_DATE, manage_py
     schedule="0 17 * * *",
     start_date=START_DATE,
     catchup=False,  # the public lookup only knows "now"; there is nothing to catch up on
-    default_args=DEFAULT_ARGS | {"retries": 4, "retry_delay": timedelta(minutes=20)},
+    default_args=DEFAULT_ARGS,
     tags=["ascstats", "ratings"],
     doc_md=__doc__,
 )

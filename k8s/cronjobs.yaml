@@ -1,3 +1,6 @@
+# Suspended: Airflow (airflow/) schedules these imports now, retrying a failed task 2 hours
+# later, which a CronJob cannot. Kept so a run can still be started by hand:
+#   kubectl -n ascstats create job --from=cronjob/import-sales import-sales-now
 # A daily import is a CronJob, not a queue. concurrencyPolicy: Forbid means a slow run is
 # never overlapped by the next one; the per-day delete+insert makes reruns safe anyway.
 # Exit code 3 ("not published yet") fails the Job, and backoffLimit retries it later.
@@ -10,6 +13,7 @@ metadata:
 spec:
   schedule: "30 14 * * *" # UTC; Apple publishes the previous day's sales in the morning PT
   timeZone: Etc/UTC
+  suspend: true
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 3600
   successfulJobsHistoryLimit: 3
@@ -56,6 +60,7 @@ metadata:
 spec:
   schedule: "0 16 * * *"
   timeZone: Etc/UTC
+  suspend: true
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 3600
   successfulJobsHistoryLimit: 3
@@ -101,6 +106,7 @@ metadata:
 spec:
   schedule: "0 17 * * *"
   timeZone: Etc/UTC
+  suspend: true
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 3600
   successfulJobsHistoryLimit: 3

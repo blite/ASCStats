@@ -2,6 +2,7 @@
 
 import itertools
 import time
+from datetime import timedelta
 
 import pytest
 from airflow.dag_processing.dagbag import DagBag
@@ -43,6 +44,7 @@ def test_common_conventions(dagbag):
         assert dag.doc_md
         assert all(t.owner == "ascstats" for t in dag.tasks)
         assert all(t.retries >= 1 for t in dag.tasks), dag.dag_id
+        assert all(t.retry_delay == timedelta(hours=2) for t in dag.tasks), dag.dag_id
 
 
 @pytest.mark.parametrize("dag_id", ["ascstats_daily_sales", "ascstats_daily_analytics"])
