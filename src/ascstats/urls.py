@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
-from django.urls import path
+from django.urls import include, path
 
 from ascstats.api import api
 from ascstats.stats import views
@@ -21,13 +21,6 @@ urlpatterns = [
     ),
     path("app/<int:apple_id>/reviews/", views.app_reviews, name="app_reviews"),
     path("app/<int:apple_id>/reviews/<slug:state>/", views.app_reviews, name="app_reviews_state"),
-    path("app/<int:apple_id>/keywords/", views.app_soon, {"tab": "keywords"}, name="app_keywords"),
-    path(
-        "app/<int:apple_id>/competitors/",
-        views.app_soon,
-        {"tab": "competitors"},
-        name="app_competitors",
-    ),
     path("chart/<int:apple_id>/<int:days>/", views.chart, name="chart"),
     path("revenue/", views.revenue, name="revenue"),
     path("revenue/<int:days>d/", views.revenue, name="revenue_period"),
@@ -42,6 +35,7 @@ urlpatterns = [
         name="login",
     ),
     path("logout/", views.sign_out, name="logout"),
+    path("", include("ascstats.aso.urls")),  # each app's Competitors and Keywords tabs
     path("admin/", admin.site.urls),
     path("api/", api.urls),
 ]

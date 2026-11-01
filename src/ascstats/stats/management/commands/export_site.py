@@ -16,7 +16,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.test import Client, override_settings
 from django.urls import get_script_prefix, set_script_prefix
 
-from ascstats.stats import fx, rating_trends
+from ascstats.stats import extensions, fx, rating_trends
 from ascstats.stats.charts import DEFAULT_PERIOD, PERIODS
 from ascstats.stats.models import App
 from ascstats.stats.views import WINDOWS
@@ -68,9 +68,7 @@ class Command(BaseCommand):
             paths.append(f"app/{app.apple_id}/")
             paths += [f"chart/{app.apple_id}/{w}/" for w in WINDOWS]
             paths.append(f"app/{app.apple_id}/funnel/")
-            paths += [
-                f"app/{app.apple_id}/{tab}/" for tab in ("ratings", "keywords", "competitors")
-            ]
+            paths.append(f"app/{app.apple_id}/ratings/")
             paths += [f"app/{app.apple_id}/reviews/{s}" for s in ("", "replied/", "all/")]
             ratings = rating_trends.countries(app)
             fronts = (
@@ -81,6 +79,8 @@ class Command(BaseCommand):
                 for c in fronts
                 for w in rating_trends.WINDOWS
             ]
+            for more in extensions.export_paths:  # competitors, keywords
+                paths += more(app)
         if out.exists():
             shutil.rmtree(out)
         for path in paths:

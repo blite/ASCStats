@@ -6,6 +6,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
+from ascstats.aso import synthetic as aso_synthetic
 from ascstats.stats.models import App, AppVersion, CustomerReview, RatingSnapshot, ReviewSummary
 from ascstats.stats.ratings import (
     current,
@@ -66,7 +67,8 @@ def test_public_lookup_snapshot_is_exact_and_idempotent(apps, settings, monkeypa
     snake.refresh_from_db()  # the US listing wins over other storefronts
     assert (snake.released_on, snake.primary_genre) == (date(2025, 1, 1), "Games")
     assert snake.icon_url.endswith("/512x512bb.jpg")
-    expected = {str(a.apple_id) for a in apps}
+    # the competitors seeding follows ride in the same requests: no extra calls for them
+    expected = {str(a.apple_id) for a in apps} | {str(r.apple_id) for r in aso_synthetic.RIVALS}
     assert all(set(c.url.params["id"].split(",")) == expected for c in calls)
 
 

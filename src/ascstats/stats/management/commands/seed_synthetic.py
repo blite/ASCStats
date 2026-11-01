@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from django.core.management.base import BaseCommand
 
-from ascstats.stats import synthetic
+from ascstats.stats import extensions, synthetic
 from ascstats.stats.metrics import build_conversion_metrics
 from ascstats.stats.models import App, Report
 from ascstats.stats.pipeline import Pipeline
@@ -28,6 +28,8 @@ class Command(BaseCommand):
                 apple_id=s.apple_id,
                 defaults={"name": s.name, "sku": s.sku, "bundle_id": s.bundle_id},
             )
+        for setup in extensions.synthetic_setup:  # competitors, keywords
+            setup()
         pipeline = Pipeline(source="synthetic")
         end = end or datetime.now(UTC).date() - timedelta(days=1)
         start = end - timedelta(days=days - 1)
@@ -36,6 +38,8 @@ class Command(BaseCommand):
             for report in Report.values:
                 pipeline.run(report, day)
             snapshot(day, source="synthetic")
+            for seed_day in extensions.synthetic_day:
+                seed_day(day)
             for app in App.objects.active():
                 import_reviews(app, None, day)
             day += timedelta(days=1)

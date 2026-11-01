@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from itertools import groupby
 
-from django.db.models import Max
+from django.db.models import Max, QuerySet
 
 from .charts import days, fmt_day, month_ticks, nice_axis, nice_step
 from .models import App, RatingSnapshot
@@ -28,7 +28,7 @@ FRESH_DAYS = 14  # a storefront with no snapshot this long before the latest has
 W, H, PAD_L, PAD_R, PAD_T, PAD_B = 640, 240, 8, 48, 12, 24
 
 
-def _grade(average: float | None) -> str:
+def grade(average: float | None) -> str:
     """The star's color class: green from 4, amber from 3, red below."""
     if average is None:
         return "none"
@@ -52,21 +52,24 @@ class CountryRow:
 
     @property
     def grade(self) -> str:
-        return _grade(self.average)
+        return grade(self.average)
 
 
 def countries(app: App) -> dict | None:
     """Each storefront's latest totals, most ratings first, with the app's totals across
     them and the ratings given on the latest day. None before the first snapshot."""
-    latest = RatingSnapshot.objects.filter(app=app).aggregate(d=Max("date"))["d"]
+    return countries_of(RatingSnapshot.objects.filter(app=app))
+
+
+def countries_of(snaps: QuerySet) -> dict | None:
+    """``countries`` for any one app's snapshots (yours or a competitor's)."""
+    latest = snaps.aggregate(d=Max("date"))["d"]
     if latest is None:
         return None
     last: dict[str, tuple[date, int, int]] = {}
     new: dict[str, int] = {}
-    for front, day, count, stars in (
-        RatingSnapshot.objects.filter(app=app)
-        .order_by("date")
-        .values_list("storefront", "date", "count", "star_sum")
+    for front, day, count, stars in snaps.order_by("date").values_list(
+        "storefront", "date", "count", "star_sum"
     ):
         if front in last:
             new[front] = count - last[front][1]
@@ -89,7 +92,7 @@ def countries(app: App) -> dict | None:
         "rows": rows,
         "count": count,
         "average": average,
-        "grade": _grade(average),
+        "grade": grade(average),
         "new": sum(r.new for r in rows),
         "date": latest,
     }
@@ -108,8 +111,10 @@ class Point:
         return self.stars / self.count if self.count else None
 
 
-def _points(app: App, country: str) -> list[Point]:
-    snaps = RatingSnapshot.objects.filter(app=app).order_by("date", "storefront")
+def snapshot_points(snaps: QuerySet, country: str = "all") -> list[Point]:
+    """One app's snapshots (yours or a competitor's) as a point per snapshot day, oldest
+    first, in one storefront or all of them."""
+    snaps = snaps.order_by("date", "storefront")
     if country != ALL_COUNTRIES:
         snaps = snaps.filter(storefront=country)
     current: dict[str, tuple[int, int]] = {}
@@ -187,7 +192,7 @@ def _short(n: float) -> str:
 def history(app: App, country: str, window: str) -> dict:
     """Ratings to date and their average over a time frame, in one storefront or all of
     them: two charts, the table under them, and the ratings given in the time frame."""
-    points = _points(app, country)
+    points = snapshot_points(RatingSnapshot.objects.filter(app=app), country)
     if WINDOWS[window] and points:
         start = points[-1].day - timedelta(days=WINDOWS[window] - 1)
         points = [p for p in points if p.day >= start]
@@ -224,7 +229,7 @@ def history(app: App, country: str, window: str) -> dict:
     out |= {
         "new": None if all(p.new is None for p in points) else new,
         "new_average": new_stars / new if new > 0 else None,
-        "new_grade": _grade(new_stars / new if new > 0 else None),
+        "new_grade": grade(new_stars / new if new > 0 else None),
         "first": points[0].day,
         "last": points[-1].day,
     }

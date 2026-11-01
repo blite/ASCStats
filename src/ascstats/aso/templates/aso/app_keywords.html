@@ -1,0 +1,59 @@
+{% extends "stats/app_base.html" %}{% load humanize stats_extras %}
+{% block tab_title %}Keywords{% endblock %}
+{% block tab %}
+<section class="card fade">
+  <div class="card-head">
+    <div>
+      <h2>Search ranks</h2>
+      <p class="sub">Where {{ app.name }} comes up in App Store search for each term, among the top {{ limit }}{% if date %}, as of {{ date|date:"M j, Y" }}{% endif %}. ▲ is a climb since a week before. Ranks come from iTunes Search, which follows the App Store's order closely but not exactly.</p>
+    </div>
+    {% if not demo %}<a class="btn outline sm" href="{% url 'app_keywords_manage' app.apple_id %}">{% icon "keywords" %}Manage keywords</a>{% endif %}
+  </div>
+  {% if not rows %}
+  <div class="empty">
+    <p><strong>{{ app.name }} doesn't track any keywords yet.</strong><br>Add up to {{ max }} search terms, each searched once a day.</p>
+    {% if not demo %}<a class="btn" href="{% url 'app_keywords_manage' app.apple_id %}">Add keywords</a>{% endif %}
+  </div>
+  {% else %}
+  <form class="kw" hx-get="{% url_pattern 'app_keyword' 'app' 'keyword' %}" hx-params="none" hx-target="#keyword" hx-trigger="load, change">
+    <input type="hidden" name="app" value="{{ app.apple_id }}">
+    <div class="scroll">
+    <div class="kwt" role="radiogroup" aria-label="Keyword">
+      <div class="kwh"><span>Keyword</span><span class="num">Rank</span><span class="num">7 days</span><span>Last 30 days</span><span>Best competitor</span><span>Top result</span></div>
+      {% for r in rows %}
+      <label class="kwr"><input type="radio" name="keyword" value="{{ r.keyword.pk }}"{% if forloop.first %} checked{% endif %}>
+        <span class="term"><span class="flag" title="{{ r.country }}" aria-label="{{ r.country }}">{{ r.flag }}</span>{{ r.keyword.term }}</span>
+        <span class="num rank">{% if r.rank %}#{{ r.rank }}{% elif r.date %}<span class="muted">{{ limit }}+</span>{% else %}<span class="muted">next search</span>{% endif %}</span>
+        <span class="num">{% if r.change %}<span class="chip {% if r.change > 0 %}up{% else %}down{% endif %}">{% if r.change > 0 %}▲ {{ r.change }}{% else %}▼ {{ r.change|stringformat:"d"|cut:"-" }}{% endif %}</span>{% elif r.change == 0 %}<span class="muted">–</span>{% endif %}</span>
+        <span>{% if r.spark %}<svg viewBox="0 0 100 24" width="100" height="24" aria-label="Rank over the last 30 days{% if r.best %}, best #{{ r.best }}{% endif %}">{% for l in r.spark %}<polyline points="{{ l }}" fill="none" stroke="var(--chart-1)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>{% endfor %}</svg>{% endif %}</span>
+        <span class="ellip">{% if r.rival %}{{ r.rival.0 }} <strong>#{{ r.rival.1 }}</strong>{% else %}<span class="muted">–</span>{% endif %}</span>
+        <span class="ellip muted">{{ r.leader }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    </div>
+  </form>
+  {% endif %}
+</section>
+{% if rows %}
+<section class="card fade"><div id="keyword"><p class="muted">Loading…</p></div></section>
+{% endif %}
+<style>
+  .kwt { min-width: 760px; }
+  .kwh, .kwr { display: grid; grid-template-columns: minmax(160px, 1.4fr) 64px 72px 112px minmax(140px, 1fr) minmax(140px, 1fr); gap: 10px; align-items: center; padding: 0 10px; }
+  .kwh { height: 34px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); border-bottom: 1px solid var(--border); }
+  .kwr { position: relative; min-height: 40px; border-radius: calc(var(--radius) - 4px); font-size: 14px; cursor: pointer; font-variant-numeric: tabular-nums; }
+  .kwr:hover { background: var(--accent); }
+  .kwr:has(input:checked) { background: color-mix(in oklch, var(--primary) 12%, transparent); }
+  .kwr:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
+  .kwr input { position: absolute; opacity: 0; pointer-events: none; }
+  .kwr .term { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+  .kwr .rank { font-weight: 650; }
+  .kwr .flag { font-size: 15px; }
+  .kwr svg { display: block; }
+  .num { text-align: right; white-space: nowrap; }
+  .ellip { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+  .empty { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 18px; border: 1px dashed var(--border); border-radius: var(--radius); }
+  .empty p { margin: 0; font-size: 14px; color: var(--muted-foreground); } .empty strong { color: var(--foreground); }
+</style>
+{% endblock %}

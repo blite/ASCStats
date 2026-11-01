@@ -1,0 +1,45 @@
+{% extends "stats/app_base.html" %}{% load stats_extras %}
+{% block tab_title %}Manage competitors{% endblock %}
+{% block tab %}
+<section class="card fade manage">
+  <div class="card-head">
+    <div>
+      <h2>Manage competitors</h2>
+      <p class="sub">Follow up to {{ max }} apps for {{ app.name }}. They're snapshotted with your apps every day in the same App Store requests; ratings history starts with the next snapshot.</p>
+    </div>
+    <a class="btn outline sm" href="{% url 'app_competitors' app.apple_id %}">Done</a>
+  </div>
+  {% for m in messages %}<div class="alert{% if m.level_tag == 'error' %} destructive{% endif %}" role="{% if m.level_tag == 'error' %}alert{% else %}status{% endif %}">{% if m.level_tag == 'error' %}{% icon "alert" %}{% endif %}<div>{{ m }}</div></div>{% endfor %}
+  {% if rivals|length < max %}
+  <form method="post" class="add">
+    {% csrf_token %}
+    <label class="label" for="add-app">App Store link or ID</label>
+    <div class="add-row">
+      <input class="input" id="add-app" name="app" value="{{ typed }}" placeholder="https://apps.apple.com/us/app/…/id123456789" autocomplete="off" required autofocus>
+      <button class="btn" type="submit">Follow</button>
+    </div>
+  </form>
+  {% endif %}
+  <h3 class="list-h">Following {{ rivals|length }} of {{ max }}</h3>
+  {% for c in rivals %}
+  <div class="rival">
+    {% if c.icon_url %}<img src="{{ c.icon_url }}" alt="" width="36" height="36">{% else %}<span class="noicon">{% icon "app" %}</span>{% endif %}
+    <div class="ellip"><strong>{{ c.name }}</strong><div class="muted">{{ c.seller|default:"–" }} · {{ c.apple_id }}{% if c.version %} · v{{ c.version }}{% endif %}</div></div>
+    <form method="post">{% csrf_token %}<button class="btn ghost sm" type="submit" name="remove" value="{{ c.apple_id }}">Remove</button></form>
+  </div>
+  {% empty %}
+  <p class="muted">None yet.</p>
+  {% endfor %}
+</section>
+<style>
+  .manage .alert { margin-bottom: 12px; }
+  .add { display: grid; gap: 8px; margin: 4px 0 18px; max-width: 640px; }
+  .add-row { display: flex; gap: 8px; }
+  .list-h { font-size: 14px; margin: 0 0 6px; color: var(--muted-foreground); font-weight: 500; }
+  .rival { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); font-size: 14px; }
+  .rival img, .rival .noicon { width: 36px; height: 36px; border-radius: 8px; flex: none; }
+  .rival .noicon { display: grid; place-items: center; background: var(--muted); }
+  .rival .ellip { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rival .muted { font-size: 12px; }
+</style>
+{% endblock %}

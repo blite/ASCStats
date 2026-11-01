@@ -1,0 +1,46 @@
+{% extends "stats/app_base.html" %}{% load stats_extras %}
+{% block tab_title %}Manage keywords{% endblock %}
+{% block tab %}
+<section class="card fade manage">
+  <div class="card-head">
+    <div>
+      <h2>Manage keywords</h2>
+      <p class="sub">Track up to {{ max }} search terms for {{ app.name }}. Each is searched once a day in its storefront, and the whole result order is kept, so your competitors' ranks come from the same searches.</p>
+    </div>
+    <a class="btn outline sm" href="{% url 'app_keywords' app.apple_id %}">Done</a>
+  </div>
+  {% for m in messages %}<div class="alert{% if m.level_tag == 'error' %} destructive{% endif %}" role="{% if m.level_tag == 'error' %}alert{% else %}status{% endif %}">{% if m.level_tag == 'error' %}{% icon "alert" %}{% endif %}<div>{{ m }}</div></div>{% endfor %}
+  {% if keywords|length < max %}
+  <form method="post" class="add">
+    {% csrf_token %}
+    <label class="label" for="add-terms">Search terms, one per line</label>
+    <textarea class="input" id="add-terms" name="terms" rows="3" placeholder="snake game&#10;classic snake" required autofocus>{{ typed }}</textarea>
+    <div class="add-row">
+      <label class="label" for="add-front">Storefront</label>
+      <select id="add-front" name="storefront">{% for code, label in storefronts %}<option value="{{ code }}"{% if code == picked %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      <button class="btn" type="submit">Track</button>
+    </div>
+  </form>
+  {% endif %}
+  <h3 class="list-h">Tracking {{ keywords|length }} of {{ max }}</h3>
+  {% for k in keywords %}
+  <div class="kwitem">
+    <span class="term">{{ k.term }}</span><span class="muted">{{ k.storefront|upper }}</span>
+    <form method="post">{% csrf_token %}<button class="btn ghost sm" type="submit" name="remove" value="{{ k.pk }}">Remove</button></form>
+  </div>
+  {% empty %}
+  <p class="muted">None yet.</p>
+  {% endfor %}
+</section>
+<style>
+  .manage .alert { margin-bottom: 12px; }
+  .add { display: grid; gap: 8px; margin: 4px 0 18px; max-width: 640px; }
+  .add textarea.input { height: auto; padding: 8px 12px; resize: vertical; }
+  .add-row { display: flex; align-items: center; gap: 10px; }
+  .add-row .btn { margin-left: auto; }
+  .list-h { font-size: 14px; margin: 0 0 6px; color: var(--muted-foreground); font-weight: 500; }
+  .kwitem { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 14px; }
+  .kwitem .term { font-weight: 500; }
+  .kwitem form { margin-left: auto; }
+</style>
+{% endblock %}

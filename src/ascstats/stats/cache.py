@@ -2,7 +2,8 @@
 
 The cache key includes a data version: one query reading the latest import, metric rebuild,
 rating snapshot, review, review reply, summary, FX, version-dating and hand-entered event marks
-plus the set of active apps.
+plus the set of active apps, and the row count and newest row of each table another app
+registers (``extensions.data_models``: competitors, keywords and who follows them).
 Every write the pipeline (or an admin toggling an app) makes moves one of them, so a cached
 page can never outlive the data it was built from, with no invalidation calls to forget.
 """
@@ -16,6 +17,7 @@ from django.core.cache import cache
 from django.db import connection
 from django.http import HttpResponse
 
+from . import extensions
 from .models import (
     App,
     AppEvent,
@@ -48,6 +50,12 @@ def data_version() -> str:
           (SELECT COUNT(*) FROM {_t(AppVersion)}), (SELECT MAX(first_seen) FROM {_t(AppVersion)}),
           (SELECT COUNT(*) FROM {_t(AppEvent)}), (SELECT MAX(created_at) FROM {_t(AppEvent)}),
           (SELECT SUM(CASE WHEN is_active THEN id ELSE 0 END) FROM {_t(App)})
+          {
+        "".join(
+            f", (SELECT COUNT(*) FROM {_t(m)}), (SELECT MAX(id) FROM {_t(m)})"
+            for m in extensions.data_models
+        )
+    }
     """  # table names come from model metadata, never from input
     with connection.cursor() as cursor:
         cursor.execute(sql)

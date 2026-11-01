@@ -1,0 +1,66 @@
+{% load humanize %}
+<div class="card-head">
+  <div>
+    <h2 class="kd-title"><span aria-hidden="true">{{ flag }}</span>“{{ keyword.term }}”</h2>
+    <p class="sub">{{ country }} store{% if date %} · {{ results }} result{{ results|pluralize }} on {{ date|date:"M j, Y" }}{% endif %}. Rank 1 is the first result; a gap means the app was not in the top {{ limit }} that day.</p>
+  </div>
+</div>
+{% if not date %}
+<p class="muted">Not searched yet: ranks start with the next daily search.</p>
+{% else %}
+{% if series %}
+<div class="split legend">{% for s in series %}<span class="key"><span class="sw" style="background:{{ s.player.color }}"></span>{% if s.player.you %}<strong>{{ s.player.name }}</strong>{% else %}{{ s.player.name }}{% endif %}</span>{% endfor %}</div>
+<div class="scroll">
+  <svg viewBox="0 0 {{ width }} {{ height }}" style="min-width:640px" role="img" aria-label="Rank over time for “{{ keyword.term }}”">
+    {% for g in grid %}<line class="{% if forloop.last %}axis{% else %}hair{% endif %}" x1="{{ pad_l }}" y1="{{ g.y }}" x2="{{ plot_r }}" y2="{{ g.y }}"/><text class="tick" x="{{ pad_l|add:'-8' }}" y="{{ g.y }}" dy="4" text-anchor="end">{{ g.label }}</text>{% endfor %}
+    {% for t in xticks %}<text class="tick" x="{{ t.x }}" y="{{ height|add:'-4' }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
+    {% for s in series %}{% for l in s.lines %}<polyline points="{{ l }}" fill="none" stroke="{{ s.player.color }}" stroke-width="{% if s.player.you %}3{% else %}2{% endif %}" stroke-linejoin="round" stroke-linecap="round"/>{% endfor %}
+    {% for d in s.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="{% if s.player.you %}3.5{% else %}2.5{% endif %}" fill="{{ s.player.color }}" stroke="var(--card)" stroke-width="1" data-tip="{{ d.tip }}"/>{% endfor %}{% endfor %}
+  </svg>
+</div>
+{% else %}
+<p class="muted">Neither {{ standings.0.player.name }} nor its competitors were in the top {{ limit }} in the last 90 days.</p>
+{% endif %}
+<div class="two kd">
+  <div>
+    <h3>Top {{ top|length }} on {{ date|date:"M j" }}</h3>
+    <ol class="toplist">
+      {% for r in top %}<li class="{% if r.player.you %}you{% elif r.player %}rival{% endif %}">
+        <span class="pos">{{ r.rank }}</span>
+        {% if r.icon %}<img src="{{ r.icon }}" alt="" width="28" height="28">{% else %}<span class="noicon"></span>{% endif %}
+        <span class="ellip"><a href="https://apps.apple.com/{{ keyword.storefront }}/app/id{{ r.id }}" target="_blank" rel="noopener">{{ r.name }}</a><small>{{ r.seller }}{% if r.ratings %} · {{ r.ratings|intcomma }} ratings{% if r.average %}, {{ r.average|floatformat:1 }}★{% endif %}{% endif %}</small></span>
+        {% if r.player %}<span class="sw" style="background:{{ r.player.color }}" title="{% if r.player.you %}You{% else %}Competitor{% endif %}"></span>{% endif %}
+      </li>{% endfor %}
+    </ol>
+  </div>
+  <div>
+    <h3>You and your competitors</h3>
+    <table>
+      <tr><th>App</th><th class="num">Today</th><th class="num">7 days</th><th class="num">Best, 90 days</th></tr>
+      {% for s in standings %}<tr{% if s.player.you %} class="you"{% endif %}>
+        <td><span class="sw" style="background:{{ s.player.color }}"></span> {{ s.player.name }}</td>
+        <td class="num">{% if s.rank %}<strong>#{{ s.rank }}</strong>{% else %}<span class="muted">{{ limit }}+</span>{% endif %}</td>
+        <td class="num">{% if s.change %}<span class="chip {% if s.change > 0 %}up{% else %}down{% endif %}">{% if s.change > 0 %}▲ {{ s.change }}{% else %}▼ {{ s.change|stringformat:"d"|cut:"-" }}{% endif %}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
+        <td class="num">{% if s.best %}#{{ s.best }}{% else %}<span class="muted">–</span>{% endif %}</td>
+      </tr>{% endfor %}
+    </table>
+  </div>
+</div>
+{% endif %}
+<style>
+  .kd-title { display: flex; align-items: center; gap: 8px; }
+  .legend { margin: 0 0 6px; }
+  .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; }
+  .kd { margin-top: 14px; grid-template-columns: 1fr 1fr; }
+  .kd h3 { font-size: 15px; margin: 0 0 8px; }
+  .toplist { list-style: none; margin: 0; padding: 0; }
+  .toplist li { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: calc(var(--radius) - 4px); font-size: 14px; }
+  .toplist li.you { background: color-mix(in oklch, var(--primary) 12%, transparent); }
+  .toplist li.rival { background: var(--muted); }
+  .toplist .pos { width: 22px; text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+  .toplist img, .toplist .noicon { width: 28px; height: 28px; border-radius: 7px; flex: none; background: var(--muted); }
+  .toplist .ellip { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toplist a { font-weight: 500; text-decoration: none; } .toplist a:hover { text-decoration: underline; }
+  .toplist small { display: block; font-size: 12px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; }
+  .kd tr.you td { background: color-mix(in oklch, var(--primary) 7%, transparent); }
+</style>

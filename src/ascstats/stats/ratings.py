@@ -30,9 +30,10 @@ from django.db import transaction
 from django.db.models import Avg, Count, Max, Min, Q
 from django.utils import timezone
 
+from ascstats import store
 from ascstats.asc.client import ASCClient, ReportNotReady
 
-from . import synthetic
+from . import extensions, synthetic
 from .models import (
     ACTIVE_ROWS,
     IOS,
@@ -48,11 +49,6 @@ from .models import (
 
 log = logging.getLogger(__name__)
 
-LOOKUP = "https://itunes.apple.com/lookup"
-# The public endpoint informally tolerates ~20 calls a minute per IP;
-# 5 seconds keeps this at 12.
-LOOKUP_PAUSE = 5.0  # seconds between storefronts, and before asking one again
-LOOKUP_TIMEOUT = 15.0
 MISSING_RETRIES = 2  # re-asks when an app answered in that storefront last week is missing
 FAILURES_TO_STOP = 2  # storefronts failing in a row before the run stops for the day
 ACTIVE_DAYS = 30  # a storefront whose ratings moved within this many days is asked daily
@@ -98,42 +94,16 @@ def due_storefronts(day: date, candidates: list[str]) -> list[str]:
     ]
 
 
-class LookupFailed(Exception):
-    pass
-
-
-def _lookup(ids: list[int], storefront: str, client: httpx.Client) -> list[dict]:
-    """One storefront's answer for every app in ``ids``; raises ``LookupFailed`` once Apple
-    keeps refusing or the connection keeps failing."""
-    for attempt in range(4):
-        last = attempt == 3
-        try:
-            response = client.get(
-                LOOKUP, params={"id": ",".join(map(str, ids)), "country": storefront}
-            )
-        except httpx.TransportError as error:
-            if last:
-                raise LookupFailed(f"{storefront}: {error!r}") from error
-        else:
-            if response.status_code not in (403, 429, 500, 502, 503):
-                if response.is_error:
-                    raise LookupFailed(f"{storefront}: HTTP {response.status_code}")
-                return response.json().get("results", [])
-            if last:
-                raise LookupFailed(f"{storefront}: HTTP {response.status_code}")
-        time.sleep(LOOKUP_PAUSE * 2 ** (attempt + 1))
-    raise AssertionError("unreachable")
-
-
 def snapshot(
     day: date | None = None,
     source: str | None = None,
     transport: httpx.BaseTransport | None = None,
-    pause: float = LOOKUP_PAUSE,
+    pause: float = store.PAUSE,
     every_storefront: bool = False,
 ) -> int:
     """Record today's public rating totals for every active app in the storefronts due today,
-    or in all of them with ``every_storefront``, and return the rows written.
+    or in all of them with ``every_storefront``, and return the rows written. Registered riders
+    (``extensions.snapshot_riders``: competitors) are asked in the same requests.
 
     Each storefront is saved as soon as it answers and one already saved today is not asked
     again, so a rerun after a failure only asks what is missing. Two storefronts failing in a
@@ -141,6 +111,7 @@ def snapshot(
     day = day or timezone.localdate()
     source = source or settings.ASC_SOURCE
     apps = {a.apple_id: a for a in App.objects.active()}
+    riders = [make() for make in extensions.snapshot_riders]
     listings: dict[int, dict] = {}  # apple_id -> Lookup result, the US one when there is one
     if source == "synthetic":
         rows = []
@@ -159,7 +130,7 @@ def snapshot(
             RatingSnapshot.objects.bulk_create(rows)
             for apple_id, listing in listings.items():
                 _store_listing(apps[apple_id], listing)
-        return len(rows)
+            return len(rows) + sum(rider.synthetic(day) for rider in riders)
 
     today = RatingSnapshot.objects.filter(date=day, app__in=apps.values())
     done = set() if every_storefront else set(today.values_list("storefront", flat=True))
@@ -176,16 +147,22 @@ def snapshot(
     due = candidates if every_storefront else due_storefronts(day, candidates)
     written = failures = 0
 
-    def ask(front: str, client: httpx.Client) -> list[RatingSnapshot]:
-        """Ask one storefront, again while an app it answered for last week is missing (an
-        empty answer is more often a hiccup than a delisting), and save what it said."""
+    rider_ids = {apple_id: rider for rider in riders for apple_id in rider.ids()}
+
+    def ask(front: str, client: httpx.Client) -> int:
+        """Ask one storefront for your apps and the riders', again while one of your apps it
+        answered for last week is missing (an empty answer is more often a hiccup than a
+        delisting), and save what it said."""
         answers: dict[int, tuple[App, dict]] = {}
+        ridden: dict[int, dict] = {}
         for attempt in range(MISSING_RETRIES + 1):
             if attempt and pause:
                 time.sleep(pause)
-            for r in _lookup(list(apps), front, client):
+            for r in store.lookup_all([*apps, *rider_ids], front, client, pause):
                 if (app := apps.get(r.get("trackId"))) is not None:
                     answers[app.pk] = (app, r)
+                elif r.get("trackId") in rider_ids:
+                    ridden[r["trackId"]] = r
             if not recent[front] - answers.keys():
                 break
         rows = []
@@ -202,10 +179,13 @@ def snapshot(
         with transaction.atomic():
             today.filter(storefront=front).delete()
             RatingSnapshot.objects.bulk_create(rows)
-        return rows
+            return len(rows) + sum(
+                rider.save(day, front, {i: r for i, r in ridden.items() if rider_ids[i] is rider})
+                for rider in riders
+            )
 
     asked = 0
-    with httpx.Client(timeout=LOOKUP_TIMEOUT, transport=transport) as client:
+    with store.client(transport) as client:
         # the US first: its listing is the one the app's icon and category come from
         for front in ["us", *(f for f in due if f != "us")]:
             if front in done:
@@ -213,10 +193,10 @@ def snapshot(
             if asked + failures and pause:
                 time.sleep(pause)
             try:
-                written += len(ask(front, client))
+                written += ask(front, client)
                 asked += 1
                 failures = 0
-            except LookupFailed as error:
+            except store.StoreError as error:
                 log.warning("rating snapshot: %s", error)
                 failures += 1
                 if failures >= FAILURES_TO_STOP:
@@ -228,6 +208,8 @@ def snapshot(
     with transaction.atomic():
         for apple_id, listing in listings.items():
             _store_listing(apps[apple_id], listing)
+        for rider in riders:
+            rider.finish(day)
     log.info(
         "rating snapshots: asked %d of %d due storefronts (%d already saved today)",
         asked, len(due), len(done),

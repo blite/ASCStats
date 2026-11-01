@@ -1,0 +1,100 @@
+{% extends "stats/app_base.html" %}{% load humanize stats_extras %}
+{% block tab_title %}Competitors{% endblock %}
+{% block tab %}
+<section class="card fade">
+  <div class="card-head">
+    <div>
+      <h2>Side by side</h2>
+      <p class="sub">Ratings across the storefronts your apps are snapshotted in{% if end %}, as of {{ end|date:"M j, Y" }}{% endif %}; new ratings are the last {{ recent }} days. Competitors are snapshotted with your apps every day, in the same requests.</p>
+    </div>
+    {% if not demo %}<a class="btn outline sm" href="{% url 'app_competitors_manage' app.apple_id %}">{% icon "competitors" %}Manage competitors</a>{% endif %}
+  </div>
+  {% if members|length == 1 %}
+  <div class="empty">
+    <p><strong>{{ app.name }} doesn't follow any competitors yet.</strong><br>Add up to {{ max }} by App Store link or ID to compare ratings and releases.</p>
+    {% if not demo %}<a class="btn" href="{% url 'app_competitors_manage' app.apple_id %}">Add a competitor</a>{% endif %}
+  </div>
+  {% else %}
+  <div class="scroll">
+  <table class="cmp" style="min-width: 820px">
+    <tr><th>App</th><th class="num">Ratings</th><th class="num">Average</th><th class="num">New, {{ recent }} days</th><th class="num">Per day</th><th class="num">Their average</th><th>Version</th><th class="num">Price</th></tr>
+    {% for m in members %}
+    <tr{% if m.you %} class="you"{% endif %}>
+      <td><div class="who">
+        <span class="sw" style="background:{{ m.color }}"></span>
+        {% if m.icon_url %}<img src="{{ m.icon_url }}" alt="" width="28" height="28">{% else %}<span class="noicon">{% icon "app" %}</span>{% endif %}
+        <div class="ellip"><a href="{{ m.store_url }}" target="_blank" rel="noopener">{{ m.name }}</a><div class="seller">{{ m.seller }}</div></div>
+      </div></td>
+      {% if m.count is None %}
+      <td class="num muted" colspan="5">From the next daily snapshot</td>
+      {% else %}
+      <td class="num">{{ m.count|intcomma }}</td>
+      <td class="num">{% if m.average is not None %}{{ m.average|floatformat:2 }}<span class="star {{ m.grade }}">★</span>{% else %}–{% endif %}</td>
+      <td class="num">{% if m.new is not None %}{{ m.new|intcomma }}{% else %}–{% endif %}</td>
+      <td class="num">{% if m.per_day is not None %}{{ m.per_day|floatformat:1 }}{% else %}–{% endif %}</td>
+      <td class="num">{% if m.new_average is not None %}{{ m.new_average|floatformat:2 }}<span class="star {{ m.new_grade }}">★</span>{% else %}–{% endif %}</td>
+      {% endif %}
+      <td>{% if m.version %}{{ m.version }} <span class="muted">· {{ m.version_on|date:"M j" }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td class="num">{{ m.price|default:"–" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% endif %}
+</section>
+
+{% if weekly.series and members|length > 1 %}
+<section class="card fade">
+  <div class="card-head">
+    <div>
+      <h2>New ratings per week</h2>
+      <p class="sub">The last {{ weeks }} weeks, every app on one scale. Gaps are weeks with no two snapshots to compare.</p>
+    </div>
+  </div>
+  <div class="split legend">{% for s in weekly.series %}<span class="key"><span class="sw" style="background:{{ s.member.color }}"></span>{% if s.member.you %}<strong>{{ s.member.name }}</strong>{% else %}{{ s.member.name }}{% endif %}</span>{% endfor %}</div>
+  <div class="scroll">
+    <svg viewBox="0 0 {{ weekly.width }} {{ weekly.height }}" style="min-width:640px" role="img" aria-label="New ratings per week, each app">
+      {% for g in weekly.grid %}<line class="{% if forloop.first %}axis{% else %}hair{% endif %}" x1="{{ weekly.pad_l }}" y1="{{ g.y }}" x2="{{ weekly.plot_r }}" y2="{{ g.y }}"/><text class="tick" x="{{ weekly.pad_l|add:'-8' }}" y="{{ g.y }}" dy="4" text-anchor="end">{{ g.label }}</text>{% endfor %}
+      {% for t in weekly.xticks %}<text class="tick" x="{{ t.x }}" y="{{ weekly.height|add:'-4' }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
+      {% for s in weekly.series %}<polyline class="reveal" points="{{ s.line }}" fill="none" stroke="{{ s.member.color }}" stroke-width="{% if s.member.you %}3{% else %}2{% endif %}" stroke-linejoin="round" stroke-linecap="round"/>
+      {% for d in s.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="{% if s.member.you %}4{% else %}3{% endif %}" fill="{{ s.member.color }}" stroke="var(--card)" stroke-width="1.5" data-tip="{{ d.tip }}"/>{% endfor %}{% endfor %}
+    </svg>
+  </div>
+</section>
+
+<section class="card fade">
+  <div class="card-head">
+    <div>
+      <h2>Releases</h2>
+      <p class="sub">The last half year. Yours are dated by the first day they show in sales; competitors' by the release date their listing gives, with its notes. A competitor's history starts when you begin following it.</p>
+    </div>
+  </div>
+  <div class="scroll">
+    <svg viewBox="0 0 {{ timeline.width }} {{ timeline.height }}" style="min-width:640px" role="img" aria-label="Releases over the last half year">
+      {% for t in timeline.ticks %}<line class="hair" x1="{{ t.x }}" y1="6" x2="{{ t.x }}" y2="{{ timeline.height|add:'-20' }}"/><text class="tick" x="{{ t.x }}" y="{{ timeline.height|add:'-4' }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
+      {% for l in timeline.lanes %}
+      <text class="lane-name" x="0" y="{{ l.y }}" dy="4"{% if l.member.you %} font-weight="650"{% endif %}>{{ l.member.name|truncatechars:28 }}</text>
+      <line class="axis" x1="{{ timeline.x0 }}" y1="{{ l.y }}" x2="{{ timeline.x1 }}" y2="{{ l.y }}"/>
+      {% for d in l.dots %}<g data-tip="{{ d.tip }}" tabindex="0"><circle cx="{{ d.x }}" cy="{{ l.y }}" r="6" fill="{{ l.member.color }}" stroke="var(--card)" stroke-width="2"/><text class="tick" x="{{ d.x }}" y="{{ l.y }}" dy="-10" text-anchor="middle">{{ d.label }}</text></g>{% endfor %}
+      {% endfor %}
+    </svg>
+  </div>
+</section>
+{% endif %}
+<style>
+  .cmp td { vertical-align: middle; }
+  .cmp tr.you td { background: color-mix(in oklch, var(--primary) 7%, transparent); }
+  .who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .who img, .who .noicon { width: 28px; height: 28px; border-radius: 7px; flex: none; }
+  .who .noicon { display: grid; place-items: center; background: var(--muted); }
+  .who a { font-weight: 500; text-decoration: none; } .who a:hover { text-decoration: underline; }
+  .who .seller { font-size: 12px; color: var(--muted-foreground); }
+  .ellip { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .star { margin-left: 3px; }
+  .star.good { color: var(--good-text); } .star.fair { color: var(--chart-4); } .star.poor { color: var(--bad-text); }
+  .legend { margin: 0 0 6px; }
+  .empty { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 18px; border: 1px dashed var(--border); border-radius: var(--radius); }
+  .empty p { margin: 0; font-size: 14px; color: var(--muted-foreground); } .empty strong { color: var(--foreground); }
+</style>
+{% endblock %}

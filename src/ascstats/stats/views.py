@@ -121,14 +121,6 @@ def app_reviews(request, apple_id, state=""):
 
 
 @cached_page
-def app_soon(request, apple_id, tab):
-    """Keywords and Competitors: tabs that are coming."""
-    app = _app(apple_id)
-    context = {"page": "app", "tab": tab, "end": d.last_day(), "app": app}
-    return render(request, "stats/app_soon.html", context)
-
-
-@cached_page
 def chart(request, apple_id, days):
     if days not in WINDOWS:
         raise Http404("no such window")

@@ -9,8 +9,8 @@
   <a href="{% url 'app' app.apple_id %}"{% if tab == "stats" %} aria-current="page"{% endif %}>{% icon "stats" %}Stats</a>
   <a href="{% url 'app_ratings' app.apple_id %}"{% if tab == "ratings" %} aria-current="page"{% endif %}>{% icon "ratings" %}Ratings</a>
   <a href="{% url 'app_reviews' app.apple_id %}"{% if tab == "reviews" %} aria-current="page"{% endif %}>{% icon "reviews" %}Reviews</a>
-  <a href="{% url 'app_keywords' app.apple_id %}"{% if tab == "keywords" %} aria-current="page"{% endif %}>{% icon "keywords" %}Keywords<span class="soon">Soon</span></a>
-  <a href="{% url 'app_competitors' app.apple_id %}"{% if tab == "competitors" %} aria-current="page"{% endif %}>{% icon "competitors" %}Competitors<span class="soon">Soon</span></a>
+  <a href="{% url 'app_keywords' app.apple_id %}"{% if tab == "keywords" %} aria-current="page"{% endif %}>{% icon "keywords" %}Keywords</a>
+  <a href="{% url 'app_competitors' app.apple_id %}"{% if tab == "competitors" %} aria-current="page"{% endif %}>{% icon "competitors" %}Competitors</a>
 </nav>
 {% block tab %}{% endblock %}
 <style>

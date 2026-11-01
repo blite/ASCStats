@@ -104,3 +104,7 @@ def test_ratings_snapshot_never_catches_up_and_reviews_follow_versions(dagbag):
     assert dag.get_task("import_reviews").pool == ASC_POOL
     assert "import_reviews" in _all_downstream(dag, "build_versions")
     assert dag.get_task("snapshot_ratings").pool != ASC_POOL  # public endpoint, not ASC
+    # keywords search the same public store: after the ratings, never alongside them
+    assert "snapshot_keywords" in _all_downstream(dag, "snapshot_ratings")
+    assert dag.get_task("snapshot_keywords").trigger_rule == "all_done"
+    assert dag.get_task("snapshot_keywords").pool != ASC_POOL
