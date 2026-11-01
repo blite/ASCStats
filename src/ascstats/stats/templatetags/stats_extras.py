@@ -87,8 +87,6 @@ ICONS = {
     '<rect width="7" height="5" x="14" y="3" rx="1"/>'
     '<rect width="7" height="9" x="14" y="12" rx="1"/>'
     '<rect width="7" height="5" x="3" y="16" rx="1"/>',
-    "funnel": '<path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341'
-    'L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z"/>',
     "reviews": '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     "revenue": '<circle cx="12" cy="12" r="10"/>'
     '<path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/>',

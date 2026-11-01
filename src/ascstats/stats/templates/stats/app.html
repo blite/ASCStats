@@ -85,4 +85,64 @@
   {% if rv.unconverted %}<p class="muted" style="font-size:12px;margin:8px 0 0">Not converted (no ECB rate): {% for c, v in rv.unconverted %}{{ v }} {{ c }}{% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
   {% endwith %}{% else %}<p class="muted">No proceeds in the past year: this app has earned nothing from paid downloads or in-app purchases.</p>{% endif %}
 </section>
+{% if funnel %}{% with cv=funnel.conversion lk=funnel.leak %}
+<section class="card fade">
+  <div class="card-head">
+    <div>
+      <h2>Store funnel</h2>
+      <p class="sub">{{ funnel.start|date:"M j" }} – {{ funnel.end|date:"M j, Y" }}, unique devices. Many downloads come straight from search results without a page view, so page view → download can top 100%.</p>
+    </div>
+  </div>
+  {% if cv %}
+  <div class="flow">
+    <div><div class="label">Impressions</div><div class="big">{{ cv.impressions|intcomma }}</div></div>
+    <div class="arrow" data-tip="{{ cv.cells.tap.count }}"><span class="{% if cv.cells.tap.thin %}muted{% endif %}">{{ cv.cells.tap.value }}</span>→</div>
+    <div><div class="label">Page views</div><div class="big">{{ cv.page_views|intcomma }}</div></div>
+    <div class="arrow" data-tip="{{ cv.cells.page.count }}"><span class="{% if cv.cells.page.thin %}muted{% endif %}">{{ cv.cells.page.value }}</span>→</div>
+    <div><div class="label">Downloads</div><div class="big">{{ cv.downloads|intcomma }}</div><div class="note">{{ cv.cells.install.value }} of impressions</div></div>
+  </div>
+  {% endif %}
+  {% if lk %}
+  <h3 class="fh">Against its usual rate</h3>
+  <p class="sub">{% if lk.lost >= 1 %}About <strong>{{ lk.lost|floatformat:0 }} downloads a month</strong> below its usual install rate.{% else %}Converting at or above its usual install rate.{% endif %} Usual is this app's previous 90 days (or all your apps when it has too little history); rates are shrunk toward all your apps, with 90% intervals.</p>
+  <div class="leaks">
+    {% for c in lk.cells.values %}
+    <div class="leak-cell">
+      <div class="label">{{ c.step.label }}{% if c.step.key == "iap" %} <span class="muted">per 100</span>{% endif %}</div>
+      {% if c.verdict != "none" %}<svg viewBox="0 0 {{ funnel.cell_w }} 22" width="{{ funnel.cell_w }}" height="22" style="max-width:100%" role="img" aria-label="{{ c.view.tip }}" data-tip="{{ c.view.tip }}">
+        <line x1="{{ c.view.lo }}" y1="11" x2="{{ c.view.hi }}" y2="11" stroke="var(--axis)" stroke-width="3" stroke-linecap="round"/>
+        <line x1="{{ c.view.ref }}" y1="3" x2="{{ c.view.ref }}" y2="19" stroke="var(--ink-2)" stroke-width="2"/>
+        <circle cx="{{ c.view.dot }}" cy="11" r="5" {% if c.verdict == "thin" %}fill="var(--card)" stroke="var(--ink-2)" stroke-width="1.5"{% elif c.verdict == "below" %}fill="var(--down)" stroke="var(--card)" stroke-width="2"{% else %}fill="var(--foreground)" stroke="var(--card)" stroke-width="2"{% endif %}/>
+      </svg>{% endif %}
+      <div class="leak-val">{% if c.verdict == "none" %}<span class="muted">no purchases</span>{% elif c.verdict == "thin" %}<span class="muted">{{ c.view.count }} · too few to judge</span>{% else %}<strong>{{ c.view.value }}</strong> <span class="muted">vs usual {{ c.view.usual }}</span>{% if c.verdict == "below" %} <span class="chip down">▼</span>{% elif c.verdict == "above" %} <span class="chip up">▲</span>{% endif %}{% endif %}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endwith %}
+
+<section class="card fade">
+  <div class="card-head">
+    <div>
+      <h2>Funnel over time</h2>
+      <p class="sub">Weekly rates with 90% intervals and releases, then where the traffic comes from.</p>
+    </div>
+  </div>
+  <div hx-get="{% url 'app_funnel' app.apple_id %}" hx-trigger="load" hx-swap="innerHTML"><p class="muted">Loading…</p></div>
+</section>
+<style>
+  .flow { display: flex; align-items: center; gap: 12px 18px; flex-wrap: wrap; margin: 4px 0 6px; }
+  .flow .label, .leak-cell .label { font-size: 13px; color: var(--ink-2); }
+  .flow .big { font-size: 26px; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .flow .note { font-size: 12px; color: var(--muted-foreground); }
+  .flow .arrow { display: flex; flex-direction: column; align-items: center; font-size: 12px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  .flow .arrow span { font-weight: 600; color: var(--foreground); }
+  .flow .arrow span.muted { color: var(--muted-foreground); }
+  .fh { font-size: 15px; margin: 18px 0 0; }
+  .leaks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+  .leak-cell { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 6px; }
+  .leak-val { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+</style>
+{% endif %}
 {% endblock %}

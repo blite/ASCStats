@@ -291,6 +291,25 @@ def leak_strip(end: date) -> dict:
     }
 
 
+def app_funnel(app: App, end: date) -> dict | None:
+    """One app's funnel over the last ``WINDOW`` days, for its Stats tab: its conversion row
+    and its leak row. Rates are still shrunk toward all apps and dots share the scale the
+    apps would share side by side, so it reads the same as the ranking did. None when the
+    app had no impressions."""
+    conversion = next((r for r in conversion_table(end)["rows"] if r.app == app), None)
+    strip = leak_strip(end)
+    leak = next((r for r in strip["rows"] if r.app == app), None)
+    if conversion is None and leak is None:
+        return None
+    return {
+        "conversion": conversion,
+        "leak": leak,
+        "start": strip["start"],
+        "end": end,
+        "cell_w": CELL_W,
+    }
+
+
 # --- 3. step rates over time, with releases ---------------------------------------------------
 
 PANEL_W, PANEL_H, PAD_L, PAD_R, PAD_T, PAD_B = 1000, 120, 48, 12, 10, 18

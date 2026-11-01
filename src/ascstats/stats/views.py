@@ -61,7 +61,7 @@ def _app(apple_id) -> App:
 
 @cached_page
 def app_page(request, apple_id):
-    """An app's Stats tab: downloads and revenue together."""
+    """An app's Stats tab: downloads, revenue and the store funnel together."""
     app = _app(apple_id)
     end = d.last_day()
     context = {
@@ -72,6 +72,7 @@ def app_page(request, apple_id):
         "windows": WINDOWS,
         "tiles": d.tiles(end, Period(end, 30), app=app)[:2] if end else [],
         "revenue": r.app_revenue(app, end) if end else None,
+        "funnel": f.app_funnel(app, funnel_end) if (funnel_end := f.last_day()) else None,
     }
     return render(request, "stats/app.html", context)
 
@@ -168,21 +169,8 @@ def revenue(request, days=DEFAULT_PERIOD):
 
 
 @cached_page
-def funnel(request):
-    end = f.last_day()
-    if end is None:
-        return render(request, "stats/funnel.html", {"empty": True, "page": "funnel"})
-    context = {
-        "page": "funnel",
-        "end": end,
-        "conversion": f.conversion_table(end),
-        "strip": f.leak_strip(end),
-    }
-    return render(request, "stats/funnel.html", context)
-
-
-@cached_page
-def funnel_app(request, apple_id):
+def app_funnel(request, apple_id):
+    """The Stats tab's funnel over time: weekly step rates and the traffic sources."""
     app = App.objects.active().filter(apple_id=apple_id).first()
     end = f.last_day()
     if app is None or end is None:

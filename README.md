@@ -16,12 +16,12 @@ iOS apps into Postgres and serves them through Django.
 - **Revenue**: developer proceeds from every storefront, converted to USD at daily European
   Central Bank reference rates (`import_fx`), on a `/revenue` page: weekly proceeds by app,
   apps at a glance, top sellers and storefronts.
-- **Funnel**: impressions -> page views -> downloads -> in-app purchases on a `/funnel` page:
-  a "where's the leak" strip ranking apps by downloads lost against their own usual rate, weekly
-  step rates with releases, and source mix next to each source's rate. The headline is
-  downloads / unique impressions (search downloads skip the product page, so downloads / page
-  views can pass 100%); every rate is a ratio of sums with a 90% interval, shrunk toward the
-  portfolio for ranking, and gaps stay gaps.
+- **Funnel**: impressions -> page views -> downloads -> in-app purchases at the bottom of each
+  app's Stats tab: the app's conversion, where it leaks against its own usual rate (downloads
+  lost a month), weekly step rates with releases, and source mix next to each source's rate.
+  The headline is downloads / unique impressions (search downloads skip the product page, so
+  downloads / page views can pass 100%); every rate is a ratio of sums with a 90% interval,
+  shrunk toward the portfolio, and gaps stay gaps.
 - **Ratings**: Apple publishes only today's star-rating totals (public iTunes Lookup), so a
   daily snapshot builds the history, and the difference of two snapshots gives the exact count
   and average of the ratings in between. Written reviews and Apple's review summaries come from

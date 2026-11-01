@@ -114,12 +114,14 @@ def test_source_mix_shares_add_up_and_thin_sources_fold(apps):
 
 
 @pytest.mark.django_db
-def test_funnel_pages_render_on_synthetic_data(client, apps):
+def test_funnel_lives_on_each_apps_stats_tab(client, apps):
     call_command("seed_synthetic", "--days", "60")
-    page = client.get("/funnel/")
-    assert page.status_code == 200
-    assert page.content.index(b"Conversion by app") < page.content.index(b"the leak")
-    assert b"Where&#x27;s the leak" in page.content or b"Where's the leak" in page.content
-    detail = client.get("/funnel/app/1000000001/")
-    assert b"step rates by week" in detail.content
+    assert client.get("/funnel/").status_code == 404  # no portfolio funnel page
+    stats = client.get("/app/1000000001/").content.decode()
+    assert stats.index("<h2>Downloads</h2>") < stats.index("<h2>Store funnel</h2>")
+    assert "Against its usual rate" in stats
+    assert 'hx-get="/app/1000000001/funnel/"' in stats
+    assert "Synthetic Sudoku" not in stats.split("</aside>")[1]  # only this app's numbers
+    detail = client.get("/app/1000000001/funnel/")
+    assert b"Step rates by week" in detail.content
     assert b"how each source converts" in detail.content

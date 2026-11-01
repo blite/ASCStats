@@ -12,6 +12,7 @@ urlpatterns = [
     path("<int:days>d/", views.dashboard, name="dashboard_period"),
     path("all/", views.dashboard, {"days": ALL}, name="dashboard_all"),
     path("app/<int:apple_id>/", views.app_page, name="app"),
+    path("app/<int:apple_id>/funnel/", views.app_funnel, name="app_funnel"),
     path("app/<int:apple_id>/ratings/", views.app_ratings, name="app_ratings"),
     path(
         "app/<int:apple_id>/ratings/<slug:country>/<slug:window>/",
@@ -35,8 +36,6 @@ urlpatterns = [
     path("reviews/<slug:state>/", views.reviews, name="reviews_state"),
     path("reviews/app/<int:apple_id>/", views.reviews, name="reviews_app"),
     path("reviews/<slug:state>/app/<int:apple_id>/", views.reviews, name="reviews_state_app"),
-    path("funnel/", views.funnel, name="funnel"),
-    path("funnel/app/<int:apple_id>/", views.funnel_app, name="funnel_app"),
     path(
         "login/",
         auth_views.LoginView.as_view(

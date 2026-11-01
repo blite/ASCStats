@@ -1,5 +1,5 @@
 {% if empty %}<p class="muted">No App Store Analytics for this app yet.</p>{% else %}
-<h3 style="margin:4px 0 2px;font-size:16px">{{ app.name }}: step rates by week</h3>
+<h3 style="margin:4px 0 2px;font-size:16px">Step rates by week</h3>
 <p class="sub">Line = weekly rate, band = 90% interval, hollow points = too few to judge, gaps = weeks Apple published nothing. The last week is dashed while it is still in progress. Release labels compare the install rate in the 28 days before and after; dashed lines are hand-entered events.</p>
 <div class="scroll">
 {% for p in trends.panels %}

@@ -16,8 +16,8 @@ def no_fx(monkeypatch):
 def test_export_writes_every_page_under_the_base_path(tmp_path, no_fx):
     out = tmp_path / "site"
     call_command("export_site", "--out", str(out), "--base-path", "/ASCStats/", "--days", "40")
-    for path in ("", "7d/", "1d/", "all/", "revenue/", "revenue/1d/", "revenue/all/", "funnel/",
-                 "app/1000000001/", "chart/1000000001/365/", "funnel/app/1000000003/",
+    for path in ("", "7d/", "1d/", "all/", "revenue/", "revenue/1d/", "revenue/all/",
+                 "app/1000000001/", "chart/1000000001/365/", "app/1000000003/funnel/",
                  "reviews/", "reviews/all/", "reviews/replied/app/1000000002/"):  # fmt: skip
         assert (out / path / "index.html").is_file(), path
     assert (out / "404.html").is_file()

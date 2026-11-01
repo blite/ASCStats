@@ -29,15 +29,15 @@ def test_api_says_401_but_health_is_open(anon):
 
 def test_login_page_and_sign_in(anon):
     User.objects.create_user("ben", password="pw")
-    page = anon.get("/login/?next=/funnel/")
+    page = anon.get("/login/?next=/revenue/")
     assert page.status_code == 200
-    assert b'name="next" value="/funnel/"' in page.content
+    assert b'name="next" value="/revenue/"' in page.content
     bad = anon.post("/login/", {"username": "ben", "password": "nope"})
     assert bad.status_code == 200
     assert b"didn't match" in bad.content
-    good = anon.post("/login/", {"username": "ben", "password": "pw", "next": "/funnel/"})
+    good = anon.post("/login/", {"username": "ben", "password": "pw", "next": "/revenue/"})
     assert good.status_code == 302
-    assert good.url == "/funnel/"
+    assert good.url == "/revenue/"
     assert anon.get("/login/").url == "/"  # already signed in
 
 
@@ -54,9 +54,9 @@ def test_sidebar_names_the_user_and_signs_out(client):
 
 
 def test_cached_pages_are_per_user(client, db):
-    client.get("/funnel/")
+    client.get("/revenue/")
     other = Client()
     other.force_login(User.objects.create_user("someone", password="pw"))
-    page = other.get("/funnel/").content.decode()
+    page = other.get("/revenue/").content.decode()
     assert ">someone<" in page
     assert ">tester<" not in page
