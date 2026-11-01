@@ -11,7 +11,7 @@
   {% for b in p.bands %}<path d="{{ b }}" fill="var(--series-1)" opacity=".16"/>{% endfor %}
   {% for l in p.lines %}<polyline points="{{ l }}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>{% endfor %}
   {% for l in p.dashed %}<polyline points="{{ l }}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-dasharray="4 3"/>{% endfor %}
-  {% for d in p.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="{% if d.thin %}3.5{% else %}3{% endif %}" {% if d.thin or d.partial %}fill="var(--surface)" stroke="var(--series-1)" stroke-width="1.5"{% else %}fill="var(--series-1)"{% endif %} data-tip="{{ d.tip }}"/>{% endfor %}
+  {% for d in p.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="{% if d.thin %}3.5{% else %}3{% endif %}" {% if d.thin or d.partial %}fill="var(--card)" stroke="var(--series-1)" stroke-width="1.5"{% else %}fill="var(--series-1)"{% endif %} data-tip="{{ d.tip }}"/>{% endfor %}
   {% if forloop.last %}{% for m in trends.months %}<text class="tick" x="{{ m.x }}" y="{{ trends.panel_h|add:'-2' }}" text-anchor="middle">{{ m.label }}</text>{% endfor %}{% endif %}
 </svg>
 {% endfor %}
@@ -22,7 +22,7 @@
 <div class="split" aria-label="Legend" style="margin-bottom:6px">{% for s in mix.lines %}<span class="key"><span class="sw {{ s.cls }}"></span>{{ s.src }} · <strong>{{ s.latest }}</strong>{% if s.latest_thin %} <span class="muted">(thin)</span>{% endif %}</span>{% endfor %}<span class="muted">install rate, last 4 weeks</span></div>
 <div class="two" style="grid-template-columns:1fr 1fr">
   <svg viewBox="0 0 {{ mix.w }} {{ mix.h }}" role="img" aria-label="Share of unique impressions by source">
-    {% for s in mix.stacks %}<path class="{{ s.cls }}" d="{{ s.path }}" stroke="var(--surface)" stroke-width="1" data-tip="{{ s.src }}&#10;{{ s.share|floatformat:0 }}% of impressions, last 4 weeks"/>{% endfor %}
+    {% for s in mix.stacks %}<path class="{{ s.cls }}" d="{{ s.path }}" stroke="var(--card)" stroke-width="1" data-tip="{{ s.src }}&#10;{{ s.share|floatformat:0 }}% of impressions, last 4 weeks"/>{% endfor %}
     <text class="tick" x="0" y="14">100%</text><text class="tick" x="0" y="{{ mix.h|add:'-20' }}">0%</text>
     {% for m in mix.months %}<text class="tick" x="{{ m.x }}" y="{{ mix.h|add:'-2' }}" text-anchor="middle">{{ m.label }}</text>{% endfor %}
   </svg>
@@ -30,7 +30,7 @@
     {% for g in mix.grid %}<line class="{% if forloop.first %}axis{% else %}hair{% endif %}" x1="36" y1="{{ g.y }}" x2="{{ mix.w }}" y2="{{ g.y }}"/><text class="tick" x="30" y="{{ g.y }}" dy="4" text-anchor="end">{{ g.label }}</text>{% endfor %}
     {% for s in mix.lines %}
       {% if s.points %}<polyline points="{{ s.points }}" fill="none" style="stroke: var(--{{ s.cls }})" stroke-width="2" stroke-linejoin="round"/>{% endif %}
-      {% for t in s.thin %}<circle cx="{{ t.x }}" cy="{{ t.y }}" r="3" fill="var(--surface)" style="stroke: var(--{{ s.cls }})" stroke-width="1.5"/>{% endfor %}
+      {% for t in s.thin %}<circle cx="{{ t.x }}" cy="{{ t.y }}" r="3" fill="var(--card)" style="stroke: var(--{{ s.cls }})" stroke-width="1.5"/>{% endfor %}
     {% endfor %}
     {% for m in mix.months %}<text class="tick" x="{{ m.x }}" y="{{ mix.h|add:'-2' }}" text-anchor="middle">{{ m.label }}</text>{% endfor %}
   </svg>

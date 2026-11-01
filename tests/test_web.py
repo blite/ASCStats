@@ -39,8 +39,11 @@ def test_conversion_endpoint(client, seeded):
 def test_dashboard_and_chart(client, seeded):
     home = client.get("/").content
     assert b'href="/app/1000000001/"' in home  # each release lane opens its app page
-    assert b"App deep-dive" not in home  # the deep-dive lives on the app page only
-    assert b"App deep-dive" in client.get("/app/1000000001/").content
+    deep_dive = b'hx-get="/chart/{app}/{days}/"'
+    assert deep_dive not in home  # the deep-dive lives on the app page only
+    stats = client.get("/app/1000000001/").content
+    assert deep_dive in stats
+    assert b"<h2>Revenue</h2>" in stats  # the Stats tab has downloads and revenue together
     assert client.get("/app/999/").status_code == 404
     chart = client.get("/chart/1000000001/30/")
     assert chart.status_code == 200
@@ -93,7 +96,7 @@ def test_pages_are_cached_until_the_data_changes(client, seeded, django_assert_m
     from ascstats.stats.models import App
 
     first = client.get("/")
-    with django_assert_max_num_queries(1):  # only the data-version query
+    with django_assert_max_num_queries(3):  # session, user, then only the data-version query
         again = client.get("/")
     assert again.content == first.content
     sudoku = App.objects.get(apple_id=1000000002)

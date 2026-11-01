@@ -1,0 +1,20 @@
+{% extends "stats/app_base.html" %}{% load stats_extras %}
+{% block tab_title %}{{ tab|capfirst }}{% endblock %}
+{% block tab %}
+<section class="card soon-card fade">
+  <span class="soon-icon">{% icon tab %}</span>
+  {% if tab == "keywords" %}
+  <h2>Keywords are coming</h2>
+  <p>Where {{ app.name }} ranks for the searches that bring its downloads, day by day, in each storefront.</p>
+  {% else %}
+  <h2>Competitors are coming</h2>
+  <p>The apps {{ app.name }} competes with, their ratings, releases and rankings next to its own.</p>
+  {% endif %}
+</section>
+<style>
+  .soon-card { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 56px 20px; border-style: dashed; box-shadow: none; }
+  .soon-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--radius); background: var(--muted); margin-bottom: 14px; }
+  .soon-icon .lucide { width: 20px; height: 20px; }
+  .soon-card p { color: var(--muted-foreground); max-width: 46ch; margin: 6px 0 0; font-size: 14px; }
+</style>
+{% endblock %}

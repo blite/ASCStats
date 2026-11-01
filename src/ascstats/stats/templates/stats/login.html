@@ -1,0 +1,47 @@
+{% extends "stats/auth_base.html" %}{% load stats_extras %}
+{% block width %} wide{% endblock %}
+{% block content %}
+<div class="card panel">
+  <form method="post" action="{% url 'login' %}" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="head">
+      <h1>Welcome back</h1>
+      <p>Sign in to your App Store Connect stats</p>
+    </div>
+    {% if form.errors %}
+    <div class="alert destructive" role="alert">{% icon "alert" %}<div>Your username and password didn't match. Try again.</div></div>
+    {% endif %}
+    <div class="field">
+      <label class="label" for="id_username">Username</label>
+      <input class="input" id="id_username" name="username" type="text" autocomplete="username" autocapitalize="none"
+             required autofocus value="{{ form.username.value|default:'' }}"{% if form.errors %} aria-invalid="true"{% endif %}>
+    </div>
+    <div class="field">
+      <label class="label" for="id_password">Password</label>
+      <input class="input" id="id_password" name="password" type="password" autocomplete="current-password" required{% if form.errors %} aria-invalid="true"{% endif %}>
+    </div>
+    <button class="btn block" type="submit">Sign in</button>
+  </form>
+  <figure class="art" aria-hidden="true">
+    <svg viewBox="0 0 400 420" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <linearGradient id="fill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stop-color="var(--chart-1)" stop-opacity=".28"/>
+          <stop offset="1" stop-color="var(--chart-1)" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <g stroke="var(--border)">
+        <path d="M0 110H400M0 190H400M0 270H400M0 350H400"/>
+      </g>
+      <path d="M0 300 C40 290 60 250 100 258 S160 300 200 236 S260 170 300 182 S360 120 400 96 V420 H0Z" fill="url(#fill)"/>
+      <path d="M0 300 C40 290 60 250 100 258 S160 300 200 236 S260 170 300 182 S360 120 400 96" fill="none" stroke="var(--chart-1)" stroke-width="3" stroke-linecap="round"/>
+      <path d="M0 340 C60 336 90 318 140 322 S220 300 260 292 S340 270 400 250" fill="none" stroke="var(--chart-2)" stroke-width="2" stroke-dasharray="5 6" stroke-linecap="round"/>
+      <circle cx="200" cy="236" r="6" fill="var(--chart-1)" stroke="var(--card)" stroke-width="3"/>
+      <circle cx="300" cy="182" r="6" fill="var(--chart-1)" stroke="var(--card)" stroke-width="3"/>
+    </svg>
+    <figcaption><strong>Downloads, revenue, funnel, reviews</strong>Every release dated and measured against the trend it shipped into.</figcaption>
+  </figure>
+</div>
+<p class="fine">Accounts are added by an admin. Read-only access to App Store Connect.</p>
+{% endblock %}

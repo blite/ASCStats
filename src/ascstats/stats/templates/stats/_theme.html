@@ -1,0 +1,129 @@
+<script>
+  // Before first paint, so a saved theme or a collapsed sidebar never flashes.
+  try {
+    const theme = localStorage.getItem("theme");
+    if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+    if (localStorage.getItem("sidebar") === "collapsed") document.documentElement.dataset.sidebar = "collapsed";
+  } catch (e) {}
+</script>
+<style>
+  /* The shadcn/ui token set (stone base, App Store blue primary), plus the chart tokens the
+     dashboard already used. Components read only the shadcn names; charts read the rest. */
+  :root {
+    color-scheme: light;
+    --radius: 0.75rem;
+    --background: oklch(0.985 0.002 106); --foreground: oklch(0.147 0.004 49);
+    --card: oklch(0.993 0.001 106); --card-foreground: var(--foreground);
+    --popover: oklch(1 0 0); --popover-foreground: var(--foreground);
+    --primary: oklch(0.56 0.16 254); --primary-foreground: oklch(0.985 0.002 250);
+    --secondary: oklch(0.955 0.003 90); --secondary-foreground: oklch(0.216 0.006 56);
+    --muted: oklch(0.955 0.003 90); --muted-foreground: oklch(0.6 0.008 80);
+    --accent: oklch(0.94 0.004 90); --accent-foreground: oklch(0.216 0.006 56);
+    --destructive: oklch(0.577 0.215 27);
+    --border: oklch(0.147 0.004 49 / 10%); --input: oklch(0.147 0.004 49 / 14%);
+    --ring: oklch(0.56 0.16 254 / 55%);
+    --chart-1: #2a78d6; --chart-2: #eb6834; --chart-3: #1baf7a; --chart-4: #eda100; --chart-5: #e87ba4;
+    --sidebar: oklch(0.97 0.003 90); --sidebar-foreground: oklch(0.216 0.006 56);
+    --sidebar-primary: var(--primary); --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: oklch(0.925 0.005 90); --sidebar-accent-foreground: oklch(0.147 0.004 49);
+    --sidebar-border: oklch(0.147 0.004 49 / 9%); --sidebar-ring: var(--ring);
+
+    --ink-2: #52514e; --grid: #e1e0d9; --axis: #c3c2b7;
+    --series-1: var(--chart-1); --series-1-strong: #1c5cab;
+    --up: var(--chart-1); --down: #e34948; --neutral: #898781; --other: #b8b7b1;
+    --good-text: #006300; --bad-text: #d03b3b;
+    --st-good: #0ca30c; --st-empty: #e1e0d9; --st-failed: #d03b3b; --st-none: transparent;
+    --lane-fill: rgba(82,81,78,.10); --lane-line: #52514e;
+    --hero-glow: radial-gradient(1200px 380px at 12% -10%, rgba(42,120,214,.16), transparent 60%),
+                 radial-gradient(900px 320px at 95% 0%, rgba(227,73,72,.08), transparent 60%);
+    --shadow: 0 1px 2px oklch(0 0 0 / 5%);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --background: oklch(0.147 0.004 49); --foreground: oklch(0.95 0.004 90);
+      --card: oklch(0.19 0.005 56); --popover: oklch(0.216 0.006 56);
+      --primary: oklch(0.64 0.15 254); --primary-foreground: oklch(0.147 0.004 49);
+      --secondary: oklch(0.26 0.006 56); --secondary-foreground: var(--foreground);
+      --muted: oklch(0.26 0.006 56); --muted-foreground: oklch(0.66 0.008 80);
+      --accent: oklch(0.28 0.006 56); --accent-foreground: var(--foreground);
+      --destructive: oklch(0.704 0.191 22);
+      --border: oklch(1 0 0 / 10%); --input: oklch(1 0 0 / 15%);
+      --ring: oklch(0.64 0.15 254 / 60%);
+      --chart-1: #3987e5; --chart-2: #d95926; --chart-3: #199e70; --chart-4: #c98500; --chart-5: #d55181;
+      --sidebar: oklch(0.175 0.004 56); --sidebar-foreground: oklch(0.9 0.004 90);
+      --sidebar-accent: oklch(0.26 0.006 56); --sidebar-accent-foreground: var(--foreground);
+      --sidebar-border: oklch(1 0 0 / 8%);
+
+      --ink-2: #c3c2b7; --grid: #2c2c2a; --axis: #383835;
+      --series-1-strong: #6da7ec; --down: #e66767; --other: #5c5b57;
+      --good-text: #0ca30c; --bad-text: #e66767; --st-empty: #2c2c2a;
+      --lane-fill: rgba(195,194,183,.10); --lane-line: #c3c2b7;
+      --hero-glow: radial-gradient(1200px 380px at 12% -10%, rgba(57,135,229,.22), transparent 60%),
+                   radial-gradient(900px 320px at 95% 0%, rgba(230,103,103,.10), transparent 60%);
+      --shadow: 0 1px 2px oklch(0 0 0 / 30%);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --background: oklch(0.147 0.004 49); --foreground: oklch(0.95 0.004 90);
+    --card: oklch(0.19 0.005 56); --popover: oklch(0.216 0.006 56);
+    --primary: oklch(0.64 0.15 254); --primary-foreground: oklch(0.147 0.004 49);
+    --secondary: oklch(0.26 0.006 56); --secondary-foreground: var(--foreground);
+    --muted: oklch(0.26 0.006 56); --muted-foreground: oklch(0.66 0.008 80);
+    --accent: oklch(0.28 0.006 56); --accent-foreground: var(--foreground);
+    --destructive: oklch(0.704 0.191 22);
+    --border: oklch(1 0 0 / 10%); --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.64 0.15 254 / 60%);
+    --chart-1: #3987e5; --chart-2: #d95926; --chart-3: #199e70; --chart-4: #c98500; --chart-5: #d55181;
+    --sidebar: oklch(0.175 0.004 56); --sidebar-foreground: oklch(0.9 0.004 90);
+    --sidebar-accent: oklch(0.26 0.006 56); --sidebar-accent-foreground: var(--foreground);
+    --sidebar-border: oklch(1 0 0 / 8%);
+
+    --ink-2: #c3c2b7; --grid: #2c2c2a; --axis: #383835;
+    --series-1-strong: #6da7ec; --down: #e66767; --other: #5c5b57;
+    --good-text: #0ca30c; --bad-text: #e66767; --st-empty: #2c2c2a;
+    --lane-fill: rgba(195,194,183,.10); --lane-line: #c3c2b7;
+    --hero-glow: radial-gradient(1200px 380px at 12% -10%, rgba(57,135,229,.22), transparent 60%),
+                 radial-gradient(900px 320px at 95% 0%, rgba(230,103,103,.10), transparent 60%);
+    --shadow: 0 1px 2px oklch(0 0 0 / 30%);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+         color: var(--foreground); background: var(--background); }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+  /* Button, input, label, card, alert: shadcn's default variants and sizes */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px;
+         padding: 0 16px; border-radius: calc(var(--radius) - 2px); border: 1px solid transparent;
+         font: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer;
+         text-decoration: none; background: var(--primary); color: var(--primary-foreground);
+         box-shadow: var(--shadow); transition: background-color .15s, color .15s, opacity .15s; }
+  .btn:hover { background: color-mix(in oklch, var(--primary) 90%, transparent); }
+  .btn:disabled { opacity: .5; pointer-events: none; }
+  .btn svg { width: 16px; height: 16px; flex: none; }
+  .btn.outline { background: var(--background); color: var(--foreground); border-color: var(--input); }
+  .btn.outline:hover, .btn.ghost:hover { background: var(--accent); color: var(--accent-foreground); }
+  .btn.ghost { background: transparent; color: inherit; box-shadow: none; }
+  .btn.icon { width: 36px; padding: 0; }
+  .btn.sm { height: 32px; padding: 0 12px; font-size: 13px; } .btn.icon.sm { width: 32px; padding: 0; }
+  .btn.block { width: 100%; }
+  .label { display: block; font-size: 14px; font-weight: 500; line-height: 1; }
+  .input { display: block; width: 100%; height: 36px; padding: 4px 12px; font: inherit; font-size: 14px;
+           color: var(--foreground); background: transparent; border: 1px solid var(--input);
+           border-radius: calc(var(--radius) - 2px); box-shadow: var(--shadow); transition: border-color .15s, box-shadow .15s; }
+  .input::placeholder { color: var(--muted-foreground); }
+  .input:focus-visible { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--ring); }
+  .input[aria-invalid="true"] { border-color: var(--destructive); }
+  .card { background: var(--card); color: var(--card-foreground); border: 1px solid var(--border);
+          border-radius: calc(var(--radius) + 4px); padding: 18px 20px; box-shadow: var(--shadow); }
+  .alert { display: flex; gap: 10px; align-items: start; padding: 10px 14px; font-size: 14px;
+           border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+  .alert.destructive { color: var(--destructive); border-color: color-mix(in oklch, var(--destructive) 35%, transparent); }
+  .alert svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+  .separator { height: 1px; background: var(--border); border: 0; margin: 0; }
+  .lucide { width: 16px; height: 16px; flex: none; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+</style>

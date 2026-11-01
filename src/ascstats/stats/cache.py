@@ -60,7 +60,8 @@ def cached_page(view):
 
     @functools.wraps(view)
     def wrapper(request, *args, **kwargs):
-        key = f"page:{data_version()}:{request.get_full_path()}"
+        # per user: the sidebar names who is signed in
+        key = f"page:{data_version()}:{request.user.pk}:{request.get_full_path()}"
         if (body := cache.get(key)) is not None:
             return HttpResponse(body)
         response = view(request, *args, **kwargs)

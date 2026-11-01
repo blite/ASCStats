@@ -1,0 +1,53 @@
+{% load humanize stats_extras %}
+<h2 class="rc-title">{% if country %}<span aria-hidden="true">{{ country.flag }}</span>{{ country.name }}{% else %}All countries{% endif %}</h2>
+{% if not rows %}
+<p class="muted">No snapshots here yet.</p>
+{% else %}
+{% with c=count_chart %}
+<svg class="m-count rchart" viewBox="0 0 {{ width }} {{ height }}" role="img" aria-label="Ratings to date, {{ window_label }}">
+  <defs><linearGradient id="rg-count" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--chart-1)" stop-opacity=".22"/><stop offset="1" stop-color="var(--chart-1)" stop-opacity="0"/></linearGradient></defs>
+  {% for g in c.grid %}<line class="{% if forloop.first %}axis{% else %}hair{% endif %}" x1="{{ pad_l }}" y1="{{ g.y }}" x2="{{ plot_r }}" y2="{{ g.y }}"/><text class="tick" x="{{ plot_r|add:6 }}" y="{{ g.y }}" dy="4">{{ g.label }}</text>{% endfor %}
+  {% for t in c.xticks %}<text class="tick" x="{{ t.x }}" y="{{ height|add:'-6' }}" text-anchor="{{ t.anchor }}">{{ t.label }}</text>{% endfor %}
+  <path d="{{ c.area }}" fill="url(#rg-count)"/>
+  <polyline class="reveal" points="{{ c.line }}" fill="none" stroke="var(--chart-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  {% for d in c.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="2.2" fill="var(--chart-1)"/>{% endfor %}
+  {% if c.end %}<circle cx="{{ c.end.x }}" cy="{{ c.end.y }}" r="4.5" fill="var(--chart-1)" stroke="var(--card)" stroke-width="2"/>{% endif %}
+  {% for h in c.cols %}<rect class="hit" x="{{ h.x }}" y="0" width="{{ h.w }}" height="{{ height|add:'-24' }}" data-tip="{{ h.tip }}"/>{% endfor %}
+</svg>
+{% endwith %}
+{% with c=average_chart %}{% if c %}
+<svg class="m-average rchart" viewBox="0 0 {{ width }} {{ height }}" role="img" aria-label="Average rating, {{ window_label }}">
+  <defs><linearGradient id="rg-average" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--chart-4)" stop-opacity=".22"/><stop offset="1" stop-color="var(--chart-4)" stop-opacity="0"/></linearGradient></defs>
+  {% for g in c.grid %}<line class="{% if forloop.first %}axis{% else %}hair{% endif %}" x1="{{ pad_l }}" y1="{{ g.y }}" x2="{{ plot_r }}" y2="{{ g.y }}"/><text class="tick" x="{{ plot_r|add:6 }}" y="{{ g.y }}" dy="4">{{ g.label }}</text>{% endfor %}
+  {% for t in c.xticks %}<text class="tick" x="{{ t.x }}" y="{{ height|add:'-6' }}" text-anchor="{{ t.anchor }}">{{ t.label }}</text>{% endfor %}
+  <path d="{{ c.area }}" fill="url(#rg-average)"/>
+  <polyline class="reveal" points="{{ c.line }}" fill="none" stroke="var(--chart-4)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  {% for d in c.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="2.2" fill="var(--chart-4)"/>{% endfor %}
+  {% if c.end %}<circle cx="{{ c.end.x }}" cy="{{ c.end.y }}" r="4.5" fill="var(--chart-4)" stroke="var(--card)" stroke-width="2"/>{% endif %}
+  {% for h in c.cols %}<rect class="hit" x="{{ h.x }}" y="0" width="{{ h.w }}" height="{{ height|add:'-24' }}" data-tip="{{ h.tip }}"/>{% endfor %}
+</svg>
+{% else %}<p class="m-average muted">No average yet: no ratings here.</p>{% endif %}{% endwith %}
+
+<p class="rc-summary">{% if new is None %}One snapshot so far, so no new ratings to count yet.{% else %}<strong>{{ new|intcomma }}</strong> new rating{{ new|pluralize }}{% if new_average is not None %}, averaging <strong>{{ new_average|floatformat:2 }}</strong><span class="star {{ new_grade }}">★</span>,{% endif %} from {{ first|date:"M j" }} to {{ last|date:"M j, Y" }}.{% endif %}</p>
+
+<div class="dtable">
+  <table>
+    <thead><tr><th>Date</th><th class="num">Ratings</th><th class="num">New</th><th class="num">Average</th></tr></thead>
+    <tbody>
+    {% for p in rows %}<tr><td class="nowrap">{{ p.day|date:"D, M j, Y" }}</td><td class="num">{{ p.count|intcomma }}</td><td class="num">{% if p.new %}<span class="new-cell">+{{ p.new|intcomma }}</span>{% elif p.new is None %}<span class="muted">–</span>{% else %}0{% endif %}</td><td class="num">{% if p.average is not None %}{{ p.average|floatformat:2 }}{% else %}–{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+<style>
+  .rc-title { display: flex; align-items: center; gap: 8px; font-size: 17px; margin: 0 0 4px; }
+  .rchart { display: block; width: 100%; height: auto; }
+  .rchart .hit { fill: transparent; }
+  .rchart .hit:hover { fill: color-mix(in oklch, var(--foreground) 6%, transparent); }
+  .rc-summary { margin: 6px 0 12px; font-size: 13px; color: var(--ink-2); }
+  .dtable { max-height: 300px; overflow-y: auto; border-top: 1px solid var(--border); }
+  .dtable thead th { position: sticky; top: 0; background: var(--card); }
+  .new-cell { color: var(--good-text); font-weight: 500; }
+  .nowrap { white-space: nowrap; }
+</style>

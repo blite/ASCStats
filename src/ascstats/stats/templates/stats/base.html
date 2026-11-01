@@ -5,85 +5,84 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}ASCStats{% endblock %}</title>
   <script src="https://unpkg.com/htmx.org@2.0.4" crossorigin="anonymous"></script>
+  {% include "stats/_theme.html" %}
   <style>
-    :root {
-      color-scheme: light;
-      --page: #f9f9f7; --surface: #fcfcfb; --raised: #ffffff;
-      --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
-      --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,.10);
-      --series-1: #2a78d6; --series-1-strong: #1c5cab;
-      --up: #2a78d6; --down: #e34948; --neutral: #898781;
-      --good-text: #006300; --bad-text: #d03b3b;
-      --st-good: #0ca30c; --st-empty: #e1e0d9; --st-failed: #d03b3b; --st-none: transparent;
-      --lane-fill: rgba(82,81,78,.10); --lane-line: #52514e;
-      --c1: #2a78d6; --c2: #eb6834; --c3: #1baf7a; --c4: #eda100; --c5: #e87ba4; --other: #b8b7b1;
-      --hero-glow: radial-gradient(1200px 380px at 12% -10%, rgba(42,120,214,.16), transparent 60%),
-                   radial-gradient(900px 320px at 95% 0%, rgba(227,73,72,.08), transparent 60%);
-    }
-    @media (prefers-color-scheme: dark) {
-      :root:where(:not([data-theme="light"])) {
-        color-scheme: dark;
-        --page: #0d0d0d; --surface: #1a1a19; --raised: #222221;
-        --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
-        --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,.10);
-        --series-1: #3987e5; --series-1-strong: #6da7ec;
-        --up: #3987e5; --down: #e66767; --neutral: #898781;
-        --good-text: #0ca30c; --bad-text: #e66767;
-        --st-empty: #2c2c2a;
-        --lane-fill: rgba(195,194,183,.10); --lane-line: #c3c2b7;
-        --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181; --other: #5c5b57;
-        --hero-glow: radial-gradient(1200px 380px at 12% -10%, rgba(57,135,229,.22), transparent 60%),
-                     radial-gradient(900px 320px at 95% 0%, rgba(230,103,103,.10), transparent 60%);
-      }
-    }
-    :root[data-theme="dark"] {
-      color-scheme: dark;
-      --page: #0d0d0d; --surface: #1a1a19; --raised: #222221;
-      --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
-      --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,.10);
-      --series-1: #3987e5; --series-1-strong: #6da7ec;
-      --up: #3987e5; --down: #e66767; --neutral: #898781;
-      --good-text: #0ca30c; --bad-text: #e66767;
-      --st-empty: #2c2c2a;
-      --lane-fill: rgba(195,194,183,.10); --lane-line: #c3c2b7;
-      --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181; --other: #5c5b57;
-      --hero-glow: radial-gradient(1200px 380px at 12% -10%, rgba(57,135,229,.22), transparent 60%),
-                   radial-gradient(900px 320px at 95% 0%, rgba(230,103,103,.10), transparent 60%);
-    }
-    * { box-sizing: border-box; }
-    body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-           color: var(--ink); background: var(--hero-glow), var(--page); background-repeat: no-repeat; }
-    a { color: inherit; }
+    body { background: var(--hero-glow), var(--background); background-repeat: no-repeat; }
     .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
-    header { display: flex; align-items: center; gap: 12px; padding: 20px 0 8px; flex-wrap: wrap; }
-    .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -.01em; }
-    .brand svg { width: 26px; height: 26px; }
     .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2);
-            border: 1px solid var(--ring); border-radius: 999px; padding: 3px 10px; background: var(--surface); }
+            border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; background: var(--card); }
     .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--st-good); box-shadow: 0 0 0 0 rgba(12,163,12,.5);
              animation: pulse 2.4s infinite; }
-    .tabs { margin-left: 8px !important; background: var(--surface); border: 1px solid var(--ring); border-radius: 999px; padding: 3px; gap: 2px !important; }
-    .tabs a { padding: 3px 12px; border-radius: 999px; }
-    .tabs a[aria-current="page"] { background: var(--ink); color: var(--surface); }
-    header nav:last-of-type { margin-left: auto; }
-    header nav { display: flex; gap: 14px; font-size: 13px; color: var(--ink-2); }
-    header nav a { text-decoration: none; } header nav a:hover { color: var(--ink); }
+    .brand-mark { width: 32px; height: 32px; flex: none; }
+
+    /* Sidebar: shadcn's sidebar-07 shape. Fixed 16rem rail on desktop that collapses to icons
+       (the trigger or Cmd/Ctrl+B); an off-canvas sheet below 768px. */
+    .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 30; width: 16rem; display: flex; flex-direction: column;
+               background: var(--sidebar); color: var(--sidebar-foreground); border-right: 1px solid var(--sidebar-border);
+               transition: width .2s ease, transform .2s ease; }
+    .inset { margin-left: 16rem; min-height: 100vh; transition: margin-left .2s ease; }
+    .sb-head, .sb-foot { padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .sb-body { flex: 1; overflow-y: auto; overflow-x: hidden; }
+    .sb-group { padding: 8px; }
+    .sb-label { height: 32px; display: flex; align-items: center; padding: 0 8px; font-size: 12px; font-weight: 500;
+                color: color-mix(in oklch, var(--sidebar-foreground) 70%, transparent); white-space: nowrap; transition: opacity .2s; }
+    .sb-menu { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+    .sb-btn { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 8px; border: 0;
+              border-radius: calc(var(--radius) - 4px); background: none; color: inherit; font: inherit; font-size: 14px;
+              text-align: left; text-decoration: none; white-space: nowrap; overflow: hidden; cursor: pointer; }
+    .sb-btn:hover { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+    .sb-btn[aria-current] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); font-weight: 500; }
+    .sb-btn span { overflow: hidden; text-overflow: ellipsis; }
+    .sb-btn img { width: 16px; height: 16px; border-radius: 4px; flex: none; }
+    .sb-btn.lg { height: 48px; padding: 8px; }
+    .sb-btn.lg > .lucide:last-child { margin-left: auto; color: var(--muted-foreground); }
+    .sb-btn .stack { display: grid; line-height: 1.25; } .sb-btn .stack small { font-size: 12px; color: var(--muted-foreground); font-weight: 400; }
+    .avatar { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border-radius: calc(var(--radius) - 4px);
+              background: var(--sidebar-primary); color: var(--sidebar-primary-foreground); font-size: 13px; font-weight: 600; }
+    .themes { display: flex; gap: 2px; padding: 2px; margin: 0 8px; border-radius: calc(var(--radius) - 2px); background: var(--sidebar-accent); }
+    .themes button { flex: 1; height: 26px; display: grid; place-items: center; border: 0; border-radius: calc(var(--radius) - 4px);
+                     background: none; color: var(--muted-foreground); cursor: pointer; }
+    .themes button[aria-pressed="true"] { background: var(--sidebar); color: var(--sidebar-foreground); box-shadow: var(--shadow); }
+    .topbar { position: sticky; top: 0; z-index: 20; height: 56px; display: flex; align-items: center; gap: 8px; padding: 0 16px;
+              border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--background) 80%, transparent);
+              backdrop-filter: blur(8px); }
+    .topbar .sep { width: 1px; height: 16px; background: var(--border); margin: 0 4px; }
+    .crumb { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .topbar .pill { margin-left: auto; }
+    .scrim { display: none; }
+
+    html[data-sidebar="collapsed"] .sidebar { width: 3rem; }
+    html[data-sidebar="collapsed"] .inset { margin-left: 3rem; }
+    html[data-sidebar="collapsed"] .sb-label { opacity: 0; height: 0; overflow: hidden; }
+    html[data-sidebar="collapsed"] .sb-btn { width: 32px; padding: 8px; }
+    html[data-sidebar="collapsed"] .sb-btn.lg { width: 32px; height: 32px; padding: 0; }
+    html[data-sidebar="collapsed"] .themes { display: none; }
+    @media (max-width: 767px) {
+      .sidebar, html[data-sidebar="collapsed"] .sidebar { width: 18rem; transform: translateX(-100%); }
+      .inset, html[data-sidebar="collapsed"] .inset { margin-left: 0; }
+      html[data-sidebar="collapsed"] .sb-label { opacity: 1; height: 32px; }
+      html[data-sidebar="collapsed"] .sb-btn { width: 100%; padding: 0 8px; }
+      html[data-sidebar="collapsed"] .sb-btn.lg { width: 100%; height: 48px; padding: 8px; }
+      html[data-sidebar="collapsed"] .themes { display: flex; }
+      html.sb-open .sidebar { transform: none; box-shadow: 0 10px 40px oklch(0 0 0 / 25%); }
+      html.sb-open .scrim { display: block; position: fixed; inset: 0; z-index: 25; background: oklch(0 0 0 / 50%); }
+      .topbar .pill { display: none; }
+    }
     .hero { padding: 36px 0 18px; }
-    .demo-note { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); background: var(--surface);
+    .demo-note { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); background: var(--card);
                  border: 1px dashed var(--axis); border-radius: 10px; padding: 8px 12px; }
-    .eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 8px; }
+    .eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted-foreground); margin: 0 0 8px; }
     .hero h1 { font-size: clamp(30px, 5vw, 52px); line-height: 1.05; letter-spacing: -.03em; margin: 0; font-weight: 700; max-width: 18ch; }
     .hero h1 .num { color: var(--series-1); }
     .hero p { color: var(--ink-2); font-size: 17px; max-width: 62ch; margin: 14px 0 0; }
     .chip { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; font-size: 13px; white-space: nowrap; }
-    .chip.up { color: var(--good-text); } .chip.down { color: var(--bad-text); } .chip.flat { color: var(--muted); }
-    .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 22px 0; }
-    .card { background: var(--surface); border: 1px solid var(--ring); border-radius: 16px; padding: 18px 20px; }
+    .chip.up { color: var(--good-text); } .chip.down { color: var(--bad-text); } .chip.flat { color: var(--muted-foreground); }
+    .grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 12px; margin: 22px 0; }
     .tile .label { font-size: 13px; color: var(--ink-2); }
     .tile .value { font-size: 34px; font-weight: 650; letter-spacing: -.02em; line-height: 1.1; margin: 4px 0 2px; }
     .tile .row { display: flex; align-items: end; justify-content: space-between; gap: 8px; }
     .tile svg { width: 120px; height: 32px; flex: none; }
-    .tile .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .tile .note { font-size: 12px; color: var(--muted-foreground); margin-top: 6px; }
     .split { display: flex; gap: 14px; margin-top: 6px; font-size: 13px; color: var(--ink-2); flex-wrap: wrap; }
     .key { display: inline-flex; align-items: center; gap: 6px; }
     .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
@@ -95,48 +94,48 @@
     .card-head { display: flex; gap: 16px; align-items: start; justify-content: space-between; flex-wrap: wrap; }
     .scroll { overflow-x: auto; }
     svg text { font-family: inherit; }
-    .lane-name { font-size: 12.5px; fill: var(--ink); }
-    .lane-total { font-size: 11px; fill: var(--muted); }
+    .lane-name { font-size: 12.5px; fill: var(--foreground); }
+    .lane-total { font-size: 11px; fill: var(--muted-foreground); }
     .lane-area { fill: var(--lane-fill); }
     .lane-line { fill: none; stroke: var(--lane-line); stroke-width: 1.5; stroke-linejoin: round; }
     .lane { cursor: pointer; } .lane:hover .lane-name, .lane:focus-visible .lane-name { fill: var(--series-1); text-decoration: underline; }
     .lane:hover .lane-area { fill: rgba(42,120,214,.14); }
-    .rel { stroke: var(--surface); stroke-width: 2; cursor: pointer; }
+    .rel { stroke: var(--card); stroke-width: 2; cursor: pointer; }
     .rel.up { fill: var(--up); } .rel.down { fill: var(--down); } .rel.neutral { fill: var(--neutral); }
-    .rel.unknown { fill: var(--surface); stroke: var(--neutral); }
+    .rel.unknown { fill: var(--card); stroke: var(--neutral); }
     .rel.event { fill: var(--ink-2); }
     .rel:hover, .rel:focus { r: 7; outline: none; }
-    .tick { font-size: 11px; fill: var(--muted); }
+    .tick { font-size: 11px; fill: var(--muted-foreground); }
     .hair { stroke: var(--grid); stroke-width: 1; }
     .axis { stroke: var(--axis); stroke-width: 1; }
     .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    select { font: inherit; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--ring); background: var(--raised); color: var(--ink); }
-    .seg { display: inline-flex; border: 1px solid var(--ring); border-radius: 10px; overflow: hidden; background: var(--raised); }
+    select { font: inherit; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--popover); color: var(--foreground); }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--popover); }
     .seg input { position: absolute; opacity: 0; pointer-events: none; }
     .seg label { padding: 6px 12px; font-size: 13px; cursor: pointer; color: var(--ink-2); }
-    .seg input:checked + label { background: var(--ink); color: var(--surface); }
+    .seg input:checked + label { background: var(--foreground); color: var(--card); }
     .seg input:focus-visible + label { outline: 2px solid var(--series-1); outline-offset: -2px; }
     .seg a { padding: 6px 12px; font-size: 13px; color: var(--ink-2); text-decoration: none; }
-    .seg a[aria-current] { background: var(--ink); color: var(--surface); }
+    .seg a[aria-current] { background: var(--foreground); color: var(--card); }
     .period { margin-bottom: 16px; }
     .two { display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px; }
     .cal rect { rx: 2.5; }
     .cal .loaded { fill: var(--st-good); } .cal .empty { fill: var(--st-empty); }
     .cal .failed { fill: var(--st-failed); } .cal .none { fill: none; stroke: var(--grid); }
-    .c1 { fill: var(--c1); background: var(--c1); } .c2 { fill: var(--c2); background: var(--c2); } .c3 { fill: var(--c3); background: var(--c3); }
-    .c4 { fill: var(--c4); background: var(--c4); } .c5 { fill: var(--c5); background: var(--c5); } .other { fill: var(--other); background: var(--other); }
+    .c1 { fill: var(--chart-1); background: var(--chart-1); } .c2 { fill: var(--chart-2); background: var(--chart-2); } .c3 { fill: var(--chart-3); background: var(--chart-3); }
+    .c4 { fill: var(--chart-4); background: var(--chart-4); } .c5 { fill: var(--chart-5); background: var(--chart-5); } .other { fill: var(--other); background: var(--other); }
     .sw { width: 11px; height: 11px; border-radius: 2.5px; display: inline-block; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th { text-align: left; font-weight: 600; color: var(--ink-2); padding: 6px 8px; border-bottom: 1px solid var(--axis); }
     td { padding: 7px 8px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
     td.num, th.num { text-align: right; }
-    .muted { color: var(--muted); }
+    .muted { color: var(--muted-foreground); }
     details summary { cursor: pointer; color: var(--ink-2); font-size: 13px; margin-top: 10px; }
-    #tip { position: fixed; z-index: 10; pointer-events: none; background: var(--raised); color: var(--ink);
-           border: 1px solid var(--ring); border-radius: 10px; padding: 8px 10px; font-size: 12.5px; line-height: 1.45;
+    #tip { position: fixed; z-index: 10; pointer-events: none; background: var(--popover); color: var(--foreground);
+           border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-size: 12.5px; line-height: 1.45;
            box-shadow: 0 8px 28px rgba(0,0,0,.18); max-width: 300px; }
     #tip .t { font-weight: 650; }
-    footer { color: var(--muted); font-size: 12px; margin-top: 28px; }
+    footer { color: var(--muted-foreground); font-size: 12px; margin-top: 28px; }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(12,163,12,.45); } 70% { box-shadow: 0 0 0 7px rgba(12,163,12,0); } 100% { box-shadow: 0 0 0 0 rgba(12,163,12,0); } }
     @keyframes reveal { from { clip-path: inset(0 100% 0 0); } }
     @keyframes rise { from { transform: scaleY(0); } }
@@ -147,34 +146,110 @@
     @media (prefers-reduced-motion: reduce) {
       .reveal, .rise, .fade, .pulse { animation: none; }
     }
-    @media (max-width: 860px) { .grid4 { grid-template-columns: repeat(2, 1fr); } .two { grid-template-columns: 1fr; } }
-    @media (max-width: 480px) { .grid4 { grid-template-columns: 1fr; } .tile .value { font-size: 30px; } }
+    @media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+    @media (max-width: 480px) { .tile .value { font-size: 30px; } }
   </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div class="brand">
-      <svg viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" fill="var(--ink)"/>
-        <path d="M6 18l4.5-5 3.5 3 6-8" fill="none" stroke="var(--surface)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      ASCStats
+{% if demo or user.is_authenticated %}
+<aside class="sidebar" id="sidebar" aria-label="Sidebar">
+  <div class="sb-head">
+    <a class="sb-btn lg" href="{% url 'dashboard' %}" title="ASCStats">
+      <svg class="brand-mark" viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" fill="var(--sidebar-primary)"/>
+        <path d="M6 18l4.5-5 3.5 3 6-8" fill="none" stroke="var(--sidebar-primary-foreground)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="stack"><strong>ASCStats</strong><small>App Store Connect</small></span>
+    </a>
+  </div>
+  <nav class="sb-body">
+    <div class="sb-group">
+      <div class="sb-label">Analytics</div>
+      <ul class="sb-menu">
+        <li><a class="sb-btn" href="{% period_url 'overview' period.key %}" title="Overview"{% if page == "overview" %} aria-current="page"{% endif %}>{% icon "overview" %}<span>Overview</span></a></li>
+        <li><a class="sb-btn" href="{% url 'funnel' %}" title="Funnel"{% if page == "funnel" %} aria-current="page"{% endif %}>{% icon "funnel" %}<span>Funnel</span></a></li>
+        <li><a class="sb-btn" href="{% url 'reviews' %}" title="Reviews"{% if page == "reviews" %} aria-current="page"{% endif %}>{% icon "reviews" %}<span>Reviews</span></a></li>
+        <li><a class="sb-btn" href="{% period_url 'revenue' period.key %}" title="Revenue"{% if page == "revenue" %} aria-current="page"{% endif %}>{% icon "revenue" %}<span>Revenue</span></a></li>
+      </ul>
     </div>
-    {% if end %}<span class="pill"><span class="pulse"></span>App Store Connect · data through {{ end|date:"M j, Y" }}</span>{% endif %}
-    <nav class="tabs" aria-label="Pages">
-      <a href="{% period_url 'overview' period.key %}"{% if page == "overview" %} aria-current="page"{% endif %}>Overview</a>
-      <a href="{% url 'funnel' %}"{% if page == "funnel" %} aria-current="page"{% endif %}>Funnel</a>
-      <a href="{% url 'reviews' %}"{% if page == "reviews" %} aria-current="page"{% endif %}>Reviews</a>
-      <a href="{% period_url 'revenue' period.key %}"{% if page == "revenue" %} aria-current="page"{% endif %}>Revenue</a>
-    </nav>
-    <nav>{% if demo %}<a href="{{ source_url }}">Source</a>{% else %}<a href="/api/docs">API</a><a href="/admin/">Admin</a>{% endif %}</nav>
-  </header>
+    {% if nav_apps %}<div class="sb-group">
+      <div class="sb-label">Apps</div>
+      <ul class="sb-menu">
+        {% for a in nav_apps %}<li><a class="sb-btn" href="{% url 'app' a.apple_id %}" title="{{ a.name }}"{% if page == "app" and app.apple_id == a.apple_id %} aria-current="page"{% endif %}>{% if a.icon_url %}<img src="{{ a.icon_url }}" alt="">{% else %}{% icon "app" %}{% endif %}<span>{{ a.name }}</span></a></li>
+        {% endfor %}
+      </ul>
+    </div>{% endif %}
+    <div class="sb-group">
+      <div class="sb-label">{% if demo %}Project{% else %}Developer{% endif %}</div>
+      <ul class="sb-menu">
+        {% if demo %}<li><a class="sb-btn" href="{{ source_url }}" title="Source">{% icon "source" %}<span>Source</span></a></li>
+        {% else %}<li><a class="sb-btn" href="/api/docs" title="API">{% icon "api" %}<span>API</span></a></li>
+        <li><a class="sb-btn" href="/admin/" title="Admin">{% icon "admin" %}<span>Admin</span></a></li>{% endif %}
+      </ul>
+    </div>
+  </nav>
+  <div class="sb-foot">
+    <div class="themes" role="group" aria-label="Theme">
+      <button type="button" data-set-theme="system" title="System theme">{% icon "system" %}<span class="sr-only">System</span></button>
+      <button type="button" data-set-theme="light" title="Light theme">{% icon "light" %}<span class="sr-only">Light</span></button>
+      <button type="button" data-set-theme="dark" title="Dark theme">{% icon "dark" %}<span class="sr-only">Dark</span></button>
+    </div>
+    {% if user.is_authenticated %}
+    <a class="sb-btn lg" href="{% url 'logout' %}" title="Sign out {{ user.get_username }}">
+      <span class="avatar" aria-hidden="true">{{ user.get_username|slice:":2"|upper }}</span>
+      <span class="stack"><strong>{{ user.get_full_name|default:user.get_username }}</strong><small>Sign out</small></span>
+      {% icon "logout" %}
+    </a>
+    {% endif %}
+  </div>
+</aside>
+<div class="scrim" data-sidebar-close></div>
+<div class="inset">
+  <div class="topbar">
+    <button type="button" class="btn ghost icon sm" data-sidebar-toggle aria-controls="sidebar" title="Toggle sidebar (⌘B)">{% icon "panel" %}<span class="sr-only">Toggle sidebar</span></button>
+    <span class="sep"></span>
+    <span class="crumb">{% block crumb %}{% if page == "app" %}{{ app.name }}{% elif page %}{{ page|capfirst }}{% else %}ASCStats{% endif %}{% endblock %}</span>
+    {% if end %}<span class="pill"><span class="pulse"></span>Data through {{ end|date:"M j, Y" }}</span>{% endif %}
+  </div>
+{% else %}
+<div>
+{% endif %}
+<div class="wrap">
   {% if demo %}<p class="demo-note">A static demo with synthetic data for three made-up apps, frozen on Jun 29, 2026, the iPhone's launch day. The real thing runs on App Store Connect; <a href="{{ source_url }}">see the source</a>.</p>{% endif %}
 
   {% block content %}{% endblock %}
   <footer>ASCStats · read-only App Store Connect pipeline · Django, Postgres, Kubernetes, Airflow</footer>
 </div>
+</div>
 <div id="tip" hidden></div>
 <script>
+  // Sidebar: collapses to icons on desktop, opens as a sheet on phones; both remembered per browser.
+  const root = document.documentElement, phone = matchMedia("(max-width: 767px)");
+  function toggleSidebar() {
+    if (phone.matches) { root.classList.toggle("sb-open"); return; }
+    const collapsed = root.dataset.sidebar !== "collapsed";
+    if (collapsed) root.dataset.sidebar = "collapsed"; else delete root.dataset.sidebar;
+    try { localStorage.setItem("sidebar", collapsed ? "collapsed" : "expanded"); } catch (e) {}
+  }
+  document.querySelector("[data-sidebar-toggle]")?.addEventListener("click", toggleSidebar);
+  document.querySelector("[data-sidebar-close]")?.addEventListener("click", () => root.classList.remove("sb-open"));
+  document.addEventListener("keydown", e => {
+    if (e.key === "b" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); toggleSidebar(); }
+    if (e.key === "Escape") root.classList.remove("sb-open");
+  });
+
+  // Theme: system, light or dark, applied before paint by the script in the head.
+  const themeButtons = document.querySelectorAll("[data-set-theme]");
+  function markTheme() {
+    const current = root.dataset.theme || "system";
+    themeButtons.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.setTheme === current)));
+  }
+  themeButtons.forEach(b => b.addEventListener("click", () => {
+    const theme = b.dataset.setTheme;
+    if (theme === "system") delete root.dataset.theme; else root.dataset.theme = theme;
+    try { localStorage.setItem("theme", theme); } catch (e) {}
+    markTheme();
+  }));
+  markTheme();
+
   // One tooltip for every chart; works for content htmx swaps in later (event delegation).
   const tip = document.getElementById("tip");
   function show(el, x, y) {

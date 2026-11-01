@@ -1,0 +1,17 @@
+{% extends "stats/app_base.html" %}{% load stats_extras %}
+{% block tab_title %}Reviews{% endblock %}
+{% block tab %}
+<section class="card fade">
+  <div class="card-head">
+    <nav class="seg" aria-label="Reply state">
+      {% for key, label, count in states %}<a href="{% if key %}{% url 'app_reviews_state' app.apple_id key %}{% else %}{% url 'app_reviews' app.apple_id %}{% endif %}"{% if key == state %} aria-current="page"{% endif %}>{{ label }} <span class="muted">{{ count }}</span></a>{% endfor %}
+    </nav>
+  </div>
+  <p class="sub">{% if state == "" %}Lowest rating first, then newest. Replies are written in App Store Connect and show here after the next daily import.{% else %}Newest first.{% endif %}</p>
+  {% include "stats/_review_list.html" %}
+</section>
+<style>
+  .seg a .muted { font-weight: 400; }
+  .seg a[aria-current] .muted { color: inherit; opacity: .7; }
+</style>
+{% endblock %}

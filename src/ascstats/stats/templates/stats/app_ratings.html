@@ -1,0 +1,84 @@
+{% extends "stats/app_base.html" %}{% load humanize stats_extras %}
+{% block tab_title %}Ratings{% endblock %}
+{% block tab %}
+{% if not ratings %}
+<section class="card"><p class="muted">No star ratings yet. They start with the first daily snapshot (<code>manage.py snapshot_ratings</code>), since Apple only publishes today's totals.</p></section>
+{% else %}
+<form class="ratings fade" hx-get="{% url_pattern 'app_ratings_chart' 'app' 'country' 'window' %}" hx-params="none"
+      hx-target="#ratings-chart" hx-trigger="load, change[target.name!=='metric']" hx-swap="innerHTML">
+  <input type="hidden" name="app" value="{{ app.apple_id }}">
+  <section class="card countries">
+    <div class="totals">
+      <div>
+        <div class="big">{{ ratings.count|intcomma }}{% if ratings.new %}<small class="new">↑{{ ratings.new|intcomma }}</small>{% endif %}</div>
+        <div class="cap">Ratings</div>
+      </div>
+      <div>
+        <div class="big">{{ ratings.average|floatformat:2 }}<span class="star {{ ratings.grade }}">★</span></div>
+        <div class="cap">Average rating</div>
+      </div>
+    </div>
+    <div class="ctable" role="radiogroup" aria-label="Country">
+      <div class="chead"><span>Country</span><span class="num">Ratings</span><span class="num">Average</span></div>
+      <div class="cbody">
+        <label class="crow"><input type="radio" name="country" value="all" checked>
+          <span class="cname"><span class="flag" aria-hidden="true">🌐</span>All countries</span>
+          <span class="num">{{ ratings.count|intcomma }}</span>
+          <span class="num">{{ ratings.average|floatformat:2 }}<span class="star {{ ratings.grade }}">★</span></span></label>
+        {% for c in ratings.rows %}
+        <label class="crow"><input type="radio" name="country" value="{{ c.code }}">
+          <span class="cname"><span class="flag" aria-hidden="true">{{ c.flag }}</span><span class="ellip">{{ c.name }}</span></span>
+          <span class="num">{{ c.count|intcomma }}{% if c.new %}<small class="new">↑{{ c.new|intcomma }}</small>{% endif %}</span>
+          <span class="num">{% if c.average is not None %}{{ c.average|floatformat:2 }}<span class="star {{ c.grade }}">★</span>{% else %}–{% endif %}</span></label>
+        {% endfor %}
+      </div>
+    </div>
+    <p class="foot"><strong>{{ ratings.rows|length }} countr{{ ratings.rows|length|pluralize:"y,ies" }}</strong><br>Updated {{ ratings.date|date:"M j, Y" }}</p>
+  </section>
+
+  <section class="card chart-card">
+    <div class="card-head">
+      <div class="seg" role="radiogroup" aria-label="Measure">
+        <input type="radio" name="metric" id="m-count" value="count" checked><label for="m-count">Ratings count</label>
+        <input type="radio" name="metric" id="m-average" value="average"><label for="m-average">Average rating</label>
+      </div>
+      <div class="seg" role="radiogroup" aria-label="Time frame">
+        {% for key, label in windows.items %}<input type="radio" name="window" id="tf-{{ key }}" value="{{ key }}"{% if key == default_window %} checked{% endif %}><label for="tf-{{ key }}">{{ label }}</label>{% endfor %}
+      </div>
+    </div>
+    <div id="ratings-chart"><p class="muted">Loading…</p></div>
+  </section>
+</form>
+{% endif %}
+<style>
+  .ratings { display: grid; grid-template-columns: minmax(300px, 380px) 1fr; gap: 14px; align-items: start; }
+  .ratings .card { margin: 0; }
+  .countries { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .totals { display: grid; grid-template-columns: 1fr 1fr; padding: 18px 20px 14px; border-bottom: 1px solid var(--border); text-align: center; }
+  .totals .big { font-size: 30px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .totals .cap { font-size: 12px; color: var(--muted-foreground); }
+  .new { color: var(--good-text); font-size: 11px; font-weight: 600; margin-left: 4px; vertical-align: super; }
+  .star { margin-left: 3px; font-size: .9em; }
+  .star.good { color: var(--good-text); } .star.fair { color: var(--chart-4); } .star.poor { color: var(--bad-text); } .star.none { color: var(--muted-foreground); }
+  .chead, .crow { display: grid; grid-template-columns: 1fr 96px 80px; gap: 8px; align-items: center; padding: 0 12px 0 16px; }
+  .chead { height: 36px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); border-bottom: 1px solid var(--border); }
+  .cbody { max-height: 560px; overflow-y: auto; padding: 4px; }
+  .crow { position: relative; height: 34px; padding: 0 8px 0 12px; border-radius: calc(var(--radius) - 4px); font-size: 14px; cursor: pointer;
+          font-variant-numeric: tabular-nums; }
+  .crow:nth-child(even) { background: color-mix(in oklch, var(--muted) 55%, transparent); }
+  .crow:hover { background: var(--accent); }
+  .crow:has(input:checked) { background: color-mix(in oklch, var(--primary) 14%, transparent); color: var(--foreground); font-weight: 500; }
+  .crow:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
+  .crow input { position: absolute; opacity: 0; pointer-events: none; }
+  .cname { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .flag { font-size: 16px; line-height: 1; }
+  .num { text-align: right; white-space: nowrap; }
+  .foot { margin: 0; padding: 10px; text-align: center; font-size: 12px; color: var(--muted-foreground); border-top: 1px solid var(--border); }
+  .foot strong { color: var(--foreground); font-size: 13px; }
+  .chart-card .card-head { margin-bottom: 8px; }
+  .chart-card .seg label { white-space: nowrap; }
+  .ratings:has(#m-average:checked) .m-count, .ratings:has(#m-count:checked) .m-average { display: none; }
+  @media (max-width: 1180px) { .ratings { grid-template-columns: 1fr; } .cbody { max-height: 360px; } }
+</style>
+{% endblock %}

@@ -1,17 +1,45 @@
-{% extends "stats/base.html" %}{% load humanize stats_extras %}
-{% block title %}{{ app.name }} · ASCStats{% endblock %}
-{% block content %}
-<section class="hero fade">
-  <p class="eyebrow"><a href="{% url 'dashboard' %}" style="text-decoration:none">← Overview</a> · App</p>
-  <h1 style="display:flex;align-items:center;gap:14px">{% if app.icon_url %}<img src="{{ app.icon_url }}" alt="" width="56" height="56" style="border-radius:13px;flex:none">{% endif %}{{ app.name }}</h1>
-  {% if app.primary_genre or app.released_on %}<p class="sub">{{ app.primary_genre }}{% if app.primary_genre and app.released_on %} · {% endif %}{% if app.released_on %}On the App Store since {{ app.released_on|date:"M j, Y" }}{% endif %}</p>{% endif %}
-</section>
+{% extends "stats/app_base.html" %}{% load humanize stats_extras %}
+{% block tab %}
+<div class="grid4" style="margin-top:0">
+  {% for t in tiles %}
+  <div class="card tile fade" style="animation-delay: {{ forloop.counter0 }}00ms">
+    <div class="label">{{ t.label }}</div>
+    <div class="row">
+      <div>
+        <div class="value">{{ t.value|intcomma }}</div>
+        <span class="chip {{ t.direction }}">{% if t.direction == "up" %}▲{% elif t.direction == "down" %}▼{% else %}●{% endif %}
+          {% if t.change_pct is None %}new{% else %}{{ t.change_pct|floatformat:0|cut:"-" }}%{% endif %}</span>
+      </div>
+      <svg viewBox="0 0 120 32" role="img" aria-label="{{ t.label }}, last 90 days, 7-day average"><polyline class="reveal" points="{{ t.spark }}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    </div>
+    <div class="note">Last 30 days vs the 30 before</div>
+  </div>
+  {% endfor %}
+  {% with rv=revenue %}
+  <div class="card tile fade" style="animation-delay: 200ms">
+    <div class="label">Proceeds</div>
+    <div class="row">
+      <div>
+        <div class="value">{% if rv %}{{ rv.recent|money }}{% else %}–{% endif %}</div>
+        {% if rv %}<span class="chip {% if rv.change is None %}flat{% elif rv.change >= 0 %}up{% else %}down{% endif %}">{% if rv.change is None %}● new{% elif rv.change >= 0 %}▲ {{ rv.change|floatformat:0 }}%{% else %}▼ {{ rv.change|floatformat:0|cut:"-" }}%{% endif %}</span>{% endif %}
+      </div>
+      {% if rv %}<svg viewBox="0 0 120 32" role="img" aria-label="Proceeds, last 13 weeks"><polyline class="reveal" points="{{ rv.spark }}" fill="none" stroke="var(--chart-3)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>{% endif %}
+    </div>
+    <div class="note">{% if rv.per_1k %}{{ rv.per_1k|money }} per 1,000 downloads{% else %}Last 30 days, USD{% endif %}</div>
+  </div>
+  <div class="card tile fade" style="animation-delay: 300ms">
+    <div class="label">Proceeds, past 12 months</div>
+    <div class="value">{% if rv %}{{ rv.year|money }}{% else %}–{% endif %}</div>
+    <div class="note">Net of refunds, at each day's ECB rate</div>
+  </div>
+  {% endwith %}
+</div>
 
 <section class="card">
   <form class="card-head" hx-get="{% url_pattern 'chart' 'app' 'days' %}" hx-params="none" hx-target="#chart" hx-trigger="load, change" hx-swap="innerHTML">
     <input type="hidden" name="app" value="{{ app.apple_id }}">
     <div>
-      <h2>App deep-dive</h2>
+      <h2>Downloads</h2>
       <p class="sub">Daily downloads, every release, and the trend each release was measured against.</p>
     </div>
     <div class="filters">
@@ -31,12 +59,6 @@
     </div>
   </div>
   {% if revenue %}{% with rv=revenue %}
-  <div class="grid4" style="margin:4px 0 14px">
-    <div><div class="label muted" style="font-size:13px">Last 30 days</div><div style="font-size:26px;font-weight:650">{{ rv.recent|money }}</div>
-      <span class="chip {% if rv.change is None %}flat{% elif rv.change >= 0 %}up{% else %}down{% endif %}">{% if rv.change is None %}● new{% elif rv.change >= 0 %}▲ {{ rv.change|floatformat:0 }}%{% else %}▼ {{ rv.change|floatformat:0|cut:"-" }}%{% endif %}</span> <span class="muted" style="font-size:12px">vs the 30 days before</span></div>
-    <div><div class="label muted" style="font-size:13px">Past 12 months</div><div style="font-size:26px;font-weight:650">{{ rv.year|money }}</div></div>
-    <div><div class="label muted" style="font-size:13px">Per 1,000 downloads</div><div style="font-size:26px;font-weight:650">{{ rv.per_1k|money }}</div><span class="muted" style="font-size:12px">last 30 days</span></div>
-  </div>
   <div class="scroll">
     <svg viewBox="0 0 {{ rv.width }} {{ rv.height }}" style="min-width: 680px" role="img" aria-label="Weekly proceeds over the past year">
       {% for g in rv.grid %}<line class="{% if forloop.first %}axis{% else %}hair{% endif %}" x1="{{ rv.pad_l }}" y1="{{ g.y }}" x2="{{ rv.plot_r }}" y2="{{ g.y }}"/>

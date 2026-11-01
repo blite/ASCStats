@@ -297,6 +297,7 @@ def app_revenue(app: App, end: date) -> dict | None:
         "change": pct_change(before, now),
         "year": year,
         "per_1k": 1000 * now / downloads if downloads else None,
+        "spark": spark([by_week[i] for i in range(WEEKS - 13, WEEKS)], 120, 32),  # 13 weeks
         "bars": bars,
         "grid": grid,
         "xticks": month_ticks(week_starts, lambda i: round(PAD_L + (i + 0.5) * slot, 1)),

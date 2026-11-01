@@ -3,7 +3,7 @@
   <span><strong>{{ total|intcomma }}</strong> downloads, {{ start|date:"M j" }} – {{ end|date:"M j, Y" }}</span>
   {% if best_day %}<span class="muted">best day {{ best_day.1|date:"M j" }}: {{ best_day.0 }}</span>{% endif %}
   <span class="key" style="margin-left:auto"><span class="sw" style="background: var(--series-1)"></span>Daily downloads</span>
-  <span class="key"><svg width="18" height="10" aria-hidden="true"><line x1="0" y1="5" x2="18" y2="5" stroke="var(--ink)" stroke-width="2"/></svg>7-day average</span>
+  <span class="key"><svg width="18" height="10" aria-hidden="true"><line x1="0" y1="5" x2="18" y2="5" stroke="var(--foreground)" stroke-width="2"/></svg>7-day average</span>
   {% if has_events %}<span class="key"><svg width="10" height="10" aria-hidden="true"><rect x="2" y="2" width="6" height="6" transform="rotate(45 5 5)" fill="var(--ink-2)"/></svg>Event</span>{% endif %}
   {% if projections %}<span class="key"><svg width="18" height="10" aria-hidden="true"><line x1="0" y1="5" x2="18" y2="5" stroke="var(--ink-2)" stroke-width="2" stroke-dasharray="4 3"/></svg>Trend projection after a release</span>{% endif %}
 </div>
@@ -21,7 +21,7 @@
     <rect class="bar rise" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="{% if b.w > 6 %}2{% else %}0.5{% endif %}" fill="var(--series-1)" style="animation-delay: {{ forloop.counter0 }}ms"/>
     <rect x="{{ b.hit_x }}" y="{{ pad_t }}" width="{{ b.hit_w }}" height="{{ plot_h }}" fill="transparent"/>
   </g>{% endfor %}
-  <polyline class="reveal" points="{{ avg_line }}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round" style="pointer-events: none"/>
+  <polyline class="reveal" points="{{ avg_line }}" fill="none" stroke="var(--foreground)" stroke-width="2" stroke-linejoin="round" style="pointer-events: none"/>
   {% for p in projections %}<polyline points="{{ p }}" fill="none" stroke="var(--ink-2)" stroke-width="2" stroke-dasharray="4 3" style="pointer-events: none"/>{% endfor %}
 </svg>
 </div>
@@ -65,7 +65,7 @@
     <p class="sub" style="margin:2px 0">{{ rating.count|intcomma }} ratings across storefronts{% if rating.us_count is not None %} · US {{ rating.us_average|floatformat:2 }}★ from {{ rating.us_count|intcomma }}{% endif %}{% if rating.week_new is not None %} · <strong>{{ rating.week_new }}</strong> new in the last {{ rating.week_days }} day{{ rating.week_days|pluralize }}{% endif %}</p>
     <p class="muted" style="font-size:12px">Apple publishes only current totals, so per-version rating velocity starts with the first daily snapshot ({{ rating.date|date:"M j, Y" }} is the latest).</p>
     {% endif %}
-    {% if rating.summary %}<blockquote style="margin:10px 0 0;padding:10px 14px;border-left:3px solid var(--series-1);background:var(--raised);border-radius:8px;font-size:14px">{{ rating.summary.text }}<div class="muted" style="font-size:12px;margin-top:4px">Apple's review summary · {{ rating.summary.territory|default:"all" }}</div></blockquote>{% endif %}
+    {% if rating.summary %}<blockquote style="margin:10px 0 0;padding:10px 14px;border-left:3px solid var(--series-1);background:var(--popover);border-radius:8px;font-size:14px">{{ rating.summary.text }}<div class="muted" style="font-size:12px;margin-top:4px">Apple's review summary · {{ rating.summary.territory|default:"all" }}</div></blockquote>{% endif %}
   </div>
   <div>
     <h3 style="margin: 0 0 4px; font-size: 16px">Latest written reviews{% if rating.unanswered %} <a class="muted" style="font-size:13px;font-weight:400" href="{% reviews_url '' app %}">· {{ rating.unanswered|intcomma }} unanswered</a>{% endif %}</h3>

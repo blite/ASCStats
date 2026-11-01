@@ -23,7 +23,7 @@ def test_export_writes_every_page_under_the_base_path(tmp_path, no_fx):
     assert (out / "404.html").is_file()
     assert (out / ".nojekyll").is_file()
     home = (out / "index.html").read_text()
-    assert "data through Jun 29, 2026" in home
+    assert "Data through Jun 29, 2026" in home
     assert "A static demo with synthetic data" in home
     assert "/admin/" not in home  # nothing live to link to
     assert "/api/docs" not in home

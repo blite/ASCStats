@@ -1,0 +1,32 @@
+{% extends "stats/base.html" %}{% load stats_extras %}
+{% block title %}{{ app.name }} · {% block tab_title %}Stats{% endblock %} · ASCStats{% endblock %}
+{% block content %}
+<section class="hero app-hero fade">
+  <h1>{% if app.icon_url %}<img src="{{ app.icon_url }}" alt="" width="56" height="56">{% endif %}{{ app.name }}</h1>
+  {% if app.primary_genre or app.released_on %}<p class="sub">{{ app.primary_genre }}{% if app.primary_genre and app.released_on %} · {% endif %}{% if app.released_on %}On the App Store since {{ app.released_on|date:"M j, Y" }}{% endif %}</p>{% endif %}
+</section>
+<nav class="tablist" aria-label="{{ app.name }}">
+  <a href="{% url 'app' app.apple_id %}"{% if tab == "stats" %} aria-current="page"{% endif %}>{% icon "stats" %}Stats</a>
+  <a href="{% url 'app_ratings' app.apple_id %}"{% if tab == "ratings" %} aria-current="page"{% endif %}>{% icon "ratings" %}Ratings</a>
+  <a href="{% url 'app_reviews' app.apple_id %}"{% if tab == "reviews" %} aria-current="page"{% endif %}>{% icon "reviews" %}Reviews</a>
+  <a href="{% url 'app_keywords' app.apple_id %}"{% if tab == "keywords" %} aria-current="page"{% endif %}>{% icon "keywords" %}Keywords<span class="soon">Soon</span></a>
+  <a href="{% url 'app_competitors' app.apple_id %}"{% if tab == "competitors" %} aria-current="page"{% endif %}>{% icon "competitors" %}Competitors<span class="soon">Soon</span></a>
+</nav>
+{% block tab %}{% endblock %}
+<style>
+  .app-hero { padding-bottom: 14px; }
+  .app-hero h1 { display: flex; align-items: center; gap: 14px; font-size: clamp(28px, 4vw, 40px); max-width: none; }
+  .app-hero h1 img { border-radius: 13px; flex: none; }
+  .app-hero .sub { color: var(--muted-foreground); font-size: 14px; margin: 8px 0 0; }
+  /* shadcn Tabs: a muted track with the current tab raised */
+  .tablist { display: flex; width: fit-content; max-width: 100%; overflow-x: auto; gap: 2px; padding: 3px; margin: 0 0 14px;
+             background: var(--muted); border-radius: var(--radius); scrollbar-width: none; }
+  .tablist a { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; flex: none;
+               border-radius: calc(var(--radius) - 3px); font-size: 14px; font-weight: 500; text-decoration: none;
+               color: var(--muted-foreground); white-space: nowrap; transition: color .15s, background-color .15s; }
+  .tablist a:hover { color: var(--foreground); }
+  .tablist a[aria-current] { background: var(--background); color: var(--foreground); box-shadow: var(--shadow); }
+  .tablist .soon { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px;
+                   border-radius: 999px; border: 1px solid var(--border); color: var(--muted-foreground); }
+</style>
+{% endblock %}

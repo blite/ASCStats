@@ -1,5 +1,7 @@
 from django import template
 from django.urls import reverse
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 
 from ascstats.stats.charts import ALL, DEFAULT_PERIOD
 from ascstats.stats.revenue import money as _money
@@ -77,3 +79,49 @@ def signed_pct(value):
     if value is None:
         return "\u2013"
     return "0%" if round(value) == 0 else f"{value:+.0f}%"
+
+
+# Lucide icons (the set shadcn/ui uses), inner SVG only; all share one 24x24 stroked frame
+ICONS = {
+    "overview": '<rect width="7" height="9" x="3" y="3" rx="1"/>'
+    '<rect width="7" height="5" x="14" y="3" rx="1"/>'
+    '<rect width="7" height="9" x="14" y="12" rx="1"/>'
+    '<rect width="7" height="5" x="3" y="16" rx="1"/>',
+    "funnel": '<path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341'
+    'L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z"/>',
+    "reviews": '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    "revenue": '<circle cx="12" cy="12" r="10"/>'
+    '<path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/>',
+    "app": '<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>',
+    "api": '<path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/>'
+    '<path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>',
+    "admin": '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/>'
+    '<path d="M3 12a9 3 0 0 0 18 0"/>',
+    "source": '<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>',
+    "panel": '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>',
+    "logout": '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/>'
+    '<path d="M21 12H9"/>',
+    "light": '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2m-7.07-17.07 1.41 1.41m11.32 '
+    '11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+    "dark": '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+    "system": '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8m-4-4v4"/>',
+    "alert": '<circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>',
+    "stats": '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/>',
+    "ratings": '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 '
+    "1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 "
+    "5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 "
+    "1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 "
+    '.294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
+    "keywords": '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    "competitors": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>'
+    '<circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+}
+
+
+@register.simple_tag
+def icon(name):
+    return format_html(
+        '<svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"'
+        ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{}</svg>',
+        mark_safe(ICONS[name]),  # constant markup from the table above, never from input
+    )

@@ -1,10 +1,13 @@
 """The dashboard: a portfolio page, plus a page per app with an htmx-swapped deep-dive."""
 
+from django.conf import settings
+from django.contrib.auth import logout
 from django.http import Http404
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 
 from . import dashboard as d
 from . import funnel as f
+from . import rating_trends as rtr
 from . import ratings as rt
 from . import revenue as r
 from .cache import cached_page
@@ -49,20 +52,79 @@ def dashboard(request, days=DEFAULT_PERIOD):
     return render(request, "stats/dashboard.html", context)
 
 
-@cached_page
-def app_page(request, apple_id):
+def _app(apple_id) -> App:
     app = App.objects.active().filter(apple_id=apple_id).first()
     if app is None:
         raise Http404("no such app")
+    return app
+
+
+@cached_page
+def app_page(request, apple_id):
+    """An app's Stats tab: downloads and revenue together."""
+    app = _app(apple_id)
     end = d.last_day()
     context = {
         "page": "app",
+        "tab": "stats",
         "end": end,
         "app": app,
         "windows": WINDOWS,
+        "tiles": d.tiles(end, Period(end, 30), app=app)[:2] if end else [],
         "revenue": r.app_revenue(app, end) if end else None,
     }
     return render(request, "stats/app.html", context)
+
+
+@cached_page
+def app_ratings(request, apple_id):
+    """An app's Ratings tab: totals by country, and a chart of one country (or all)."""
+    app = _app(apple_id)
+    context = {
+        "page": "app",
+        "tab": "ratings",
+        "end": d.last_day(),
+        "app": app,
+        "ratings": rtr.countries(app),
+        "windows": rtr.WINDOW_LABELS,
+        "default_window": rtr.DEFAULT_WINDOW,
+    }
+    return render(request, "stats/app_ratings.html", context)
+
+
+@cached_page
+def app_ratings_chart(request, apple_id, country, window):
+    if window not in rtr.WINDOWS:
+        raise Http404("no such time frame")
+    if country != rtr.ALL_COUNTRIES and not (len(country) == 2 and country.isalpha()):
+        raise Http404("no such storefront")
+    app = _app(apple_id)
+    return render(request, "stats/_ratings_chart.html", rtr.history(app, country.lower(), window))
+
+
+@cached_page
+def app_reviews(request, apple_id, state=""):
+    """An app's Reviews tab: the review queue for that app alone."""
+    if state not in rt.REVIEW_STATES:
+        raise Http404("no such review state")
+    app = _app(apple_id)
+    context = {
+        "page": "app",
+        "tab": "reviews",
+        "end": d.last_day(),
+        "app": app,
+        "state": state,
+        **rt.review_queue(state, app),
+    }
+    return render(request, "stats/app_reviews.html", context)
+
+
+@cached_page
+def app_soon(request, apple_id, tab):
+    """Keywords and Competitors: tabs that are coming."""
+    app = _app(apple_id)
+    context = {"page": "app", "tab": tab, "end": d.last_day(), "app": app}
+    return render(request, "stats/app_soon.html", context)
 
 
 @cached_page
@@ -127,3 +189,12 @@ def funnel_app(request, apple_id):
         return render(request, "stats/_funnel_app.html", {"empty": True})
     context = {"app": app, "trends": f.step_trends(app, end), "mix": f.source_mix(app, end)}
     return render(request, "stats/_funnel_app.html", context)
+
+
+def sign_out(request):
+    """GET asks, POST signs out. The sidebar links here instead of posting a form itself,
+    because cached pages cannot carry a per-session CSRF token."""
+    if request.method == "POST":
+        logout(request)
+        return redirect(settings.LOGIN_URL)
+    return render(request, "stats/logout.html")

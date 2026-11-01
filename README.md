@@ -27,7 +27,7 @@ iOS apps into Postgres and serves them through Django.
   and average of the ratings in between. Written reviews and Apple's review summaries come from
   App Store Connect, each filed under the version it was written for; per-version ratings are
   at `/api/apps/{apple_id}/ratings`.
-- **Serve**: Django admin, a JSON API (Django Ninja, OpenAPI at `/api/docs`) and one
+- **Serve**: behind a sign-in (only `/api/health` is open), Django admin, a JSON API (Django Ninja, OpenAPI at `/api/docs`) and one
   server-rendered htmx page with a chart.
 - **Run**: Docker Compose for development, Kustomize manifests for Kubernetes (a CronJob per
   report), and Airflow 3 DAGs that orchestrate the same container as Kubernetes pods.
@@ -137,7 +137,7 @@ a Mac; product types are no guide, since iPhone updates arrive as `F7` too).
 docker compose up --build -d
 docker compose exec web python manage.py seed_synthetic --days 90
 docker compose exec web python manage.py createsuperuser
-open http://localhost:8000          # chart
+open http://localhost:8000          # sign in as that user; every page and API call needs it
 open http://localhost:8000/admin/   # every table, including the run log
 open http://localhost:8000/api/docs # OpenAPI
 curl localhost:8000/api/apps/1000000002/sales/daily

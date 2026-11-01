@@ -67,8 +67,10 @@ class Tile:
         return "up" if self.change_pct > 0 else "down"
 
 
-def tiles(end: date, period: Period | None = None) -> list[Tile]:
+def tiles(end: date, period: Period | None = None, app: App | None = None) -> list[Tile]:
+    """The headline measures for every active app, or for one."""
     period = period or Period(end)
+    only = {"app": app} if app else {}
     start, prev_start = period.start, period.prev_start
     spark_days = _days(end - timedelta(days=89), end)
     out = []
@@ -77,9 +79,9 @@ def tiles(end: date, period: Period | None = None) -> list[Tile]:
         ("In-app purchases", "iap_units"),
         ("Updates installed", "updates"),
     ):
-        daily = _daily(measure, min(spark_days[0], start), end)  # all time reaches further
+        daily = _daily(measure, min(spark_days[0], start), end, **only)  # all time reaches further
         current = sum(v for d, v in daily.items() if d >= start)
-        previous = sum(_daily(measure, prev_start, start - timedelta(days=1)).values())
+        previous = sum(_daily(measure, prev_start, start - timedelta(days=1), **only).values())
         series = smooth([daily.get(d, 0) for d in spark_days])
         note = f"{period.label} {period.versus}"
         out.append(Tile(label, current, previous, spark(series, 120, 32), note))

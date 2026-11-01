@@ -1,0 +1,17 @@
+{% extends "stats/auth_base.html" %}{% load stats_extras %}
+{% block title %}Sign out · ASCStats{% endblock %}
+{% block content %}
+<div class="card panel">
+  <form method="post" action="{% url 'logout' %}">
+    {% csrf_token %}
+    <div class="head">
+      <h1>Sign out?</h1>
+      <p>You're signed in as <strong>{{ user.get_username }}</strong>.</p>
+    </div>
+    <div class="field">
+      <button class="btn block" type="submit">{% icon "logout" %}Sign out</button>
+      <a class="btn outline block" href="{% url 'dashboard' %}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

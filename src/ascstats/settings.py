@@ -56,6 +56,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "ascstats.stats.middleware.LoginRequired",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -78,6 +79,10 @@ TEMPLATES = [
         },
     },
 ]
+
+# Sign-in: every page needs it (see stats/middleware.py); accounts come from createsuperuser
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "dashboard"
 
 DATABASES = {"default": database_from_url(os.environ.get("DATABASE_URL", "sqlite:///:memory:"))}
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

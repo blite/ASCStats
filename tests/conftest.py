@@ -20,6 +20,16 @@ def _raw_store(settings, tmp_path):
 
 
 @pytest.fixture
+def client(db, client):
+    """Every page needs a signed-in user, so the test client is one; anonymous requests use
+    django.test.Client() directly."""
+    from django.contrib.auth.models import User
+
+    client.force_login(User.objects.create_user("tester", password="pw"))
+    return client
+
+
+@pytest.fixture
 def apps(db):
     return [
         App.objects.create(apple_id=s.apple_id, name=s.name, sku=s.sku, bundle_id=s.bundle_id)
