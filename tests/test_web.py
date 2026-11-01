@@ -260,10 +260,12 @@ def test_review_queue_works_the_unanswered_worst_first(client, apps):
     assert titles("/reviews/replied/")[0] == ["e", "d"]  # newest first, pending counts
     assert b"Pending publication" in titles("/reviews/replied/")[1].content
     assert titles("/reviews/all/")[0] == ["e", "d", "c", "b", "a"]
-    assert titles(f"/reviews/app/{snake.apple_id}/")[0] == ["b", "a"]
-    assert titles(f"/reviews/replied/app/{sudoku.apple_id}/")[0] == ["e"]
+    assert b'aria-label="App"' not in page.content  # one app's queue is on its Reviews tab
+    assert titles(f"/app/{snake.apple_id}/reviews/")[0] == ["b", "a"]
+    assert titles(f"/app/{sudoku.apple_id}/reviews/replied/")[0] == ["e"]
     assert client.get("/reviews/nonsense/").status_code == 404
     assert client.get("/reviews/app/42/").status_code == 404
+    assert client.get("/app/42/reviews/").status_code == 404
     snake.is_active = False
     snake.save()
     assert titles("/reviews/all/")[0] == ["e", "c"]  # inactive apps are left out

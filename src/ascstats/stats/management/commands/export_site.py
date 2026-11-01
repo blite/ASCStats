@@ -81,7 +81,6 @@ class Command(BaseCommand):
                 for c in fronts
                 for w in rating_trends.WINDOWS
             ]
-            paths += [f"reviews/{s}app/{app.apple_id}/" for s in ("", "replied/", "all/")]
         if out.exists():
             shutil.rmtree(out)
         for path in paths:

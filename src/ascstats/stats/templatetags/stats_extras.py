@@ -14,13 +14,13 @@ PERIOD_PAGES = {"overview": "dashboard", "revenue": "revenue"}
 
 @register.simple_tag
 def reviews_url(state="", app=None):
-    """The review queue in one reply state, for every app or one: /reviews/,
-    /reviews/replied/, /reviews/all/app/<id>/."""
+    """The review queue in one reply state, for every app (/reviews/, /reviews/replied/) or
+    on one app's Reviews tab (/app/<id>/reviews/all/)."""
     if app is None:
         return reverse("reviews_state", args=[state]) if state else reverse("reviews")
     if state:
-        return reverse("reviews_state_app", args=[state, app.apple_id])
-    return reverse("reviews_app", args=[app.apple_id])
+        return reverse("app_reviews_state", args=[app.apple_id, state])
+    return reverse("app_reviews", args=[app.apple_id])
 
 
 # App Store Connect's name for each platform in its page addresses

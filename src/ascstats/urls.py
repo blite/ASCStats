@@ -34,8 +34,6 @@ urlpatterns = [
     path("revenue/all/", views.revenue, {"days": ALL}, name="revenue_all"),
     path("reviews/", views.reviews, name="reviews"),
     path("reviews/<slug:state>/", views.reviews, name="reviews_state"),
-    path("reviews/app/<int:apple_id>/", views.reviews, name="reviews_app"),
-    path("reviews/<slug:state>/app/<int:apple_id>/", views.reviews, name="reviews_state_app"),
     path(
         "login/",
         auth_views.LoginView.as_view(

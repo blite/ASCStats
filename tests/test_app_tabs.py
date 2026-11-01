@@ -22,6 +22,8 @@ def test_every_tab_links_to_the_others(client, seeded):
         for tab in ("ratings/", "reviews/", "keywords/", "competitors/"):
             assert f'href="/app/{SNAKE}/{tab}"' in html
         assert html.count('aria-current="page"') >= 2  # the app in the sidebar, and its tab
+        tab = path.split("/")[0]
+        assert f'data-app-tab="{tab + "/" if tab else ""}"' in html  # remembered per browser
     assert client.get("/app/999/ratings/").status_code == 404
 
 

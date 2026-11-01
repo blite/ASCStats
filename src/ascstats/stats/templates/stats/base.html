@@ -236,6 +236,22 @@
     if (e.key === "Escape") root.classList.remove("sb-open");
   });
 
+  // App tabs: the last one opened is where every link to an app lands, so moving between
+  // apps keeps you on Ratings (say). Per browser; app pages are plain /app/<id>/ paths.
+  const tabBar = document.querySelector("[data-app-tab]");
+  if (tabBar) try { localStorage.setItem("appTab", tabBar.dataset.appTab); } catch (e) {}
+  function pointAppLinks(root) {
+    let tab = "";
+    try { tab = localStorage.getItem("appTab") || ""; } catch (e) {}
+    if (!/^(ratings|reviews|keywords|competitors)\/$/.test(tab)) return;
+    root.querySelectorAll("a[href]").forEach(a => {
+      if (a.closest(".tablist")) return;  // the tab bar's own Stats link stays Stats
+      if (/\/app\/\d+\/$/.test(a.getAttribute("href"))) a.setAttribute("href", a.getAttribute("href") + tab);
+    });
+  }
+  pointAppLinks(document);
+  document.addEventListener("htmx:afterSwap", e => pointAppLinks(e.detail.target));
+
   // Theme: system, light or dark, applied before paint by the script in the head.
   const themeButtons = document.querySelectorAll("[data-set-theme]");
   function markTheme() {

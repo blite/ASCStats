@@ -140,21 +140,11 @@ def chart(request, apple_id, days):
 
 
 @cached_page
-def reviews(request, state="", apple_id=None):
+def reviews(request, state=""):
+    """Every app's reviews in one queue; one app's are on its Reviews tab."""
     if state not in rt.REVIEW_STATES:
         raise Http404("no such review state")
-    app = None
-    if apple_id is not None:
-        app = App.objects.active().filter(apple_id=apple_id).first()
-        if app is None:
-            raise Http404("no such app")
-    context = {
-        "page": "reviews",
-        "app": app,
-        "state": state,
-        "apps": App.objects.active(),
-        **rt.review_queue(state, app),
-    }
+    context = {"page": "reviews", "state": state, **rt.review_queue(state)}
     return render(request, "stats/reviews.html", context)
 
 

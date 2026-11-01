@@ -1,8 +1,8 @@
 {% extends "stats/base.html" %}{% load stats_extras %}
-{% block title %}Reviews{% if app %} · {{ app.name }}{% endif %} · ASCStats{% endblock %}
+{% block title %}Reviews · ASCStats{% endblock %}
 {% block content %}
 <section class="hero fade">
-  <p class="eyebrow">Reviews{% if app %} · <a href="{% url 'app' app.apple_id %}">{{ app.name }}</a>{% endif %}</p>
+  <p class="eyebrow">Reviews · every app</p>
   {% with needs=states.0.2 %}
   <h1>{% if needs %}<span class="num">{{ needs }}</span> review{{ needs|pluralize }} need{{ needs|pluralize:"s," }} a reply.{% else %}Every review has a reply.{% endif %}</h1>
   {% endwith %}
@@ -11,21 +11,14 @@
 
 <section class="card fade">
   <div class="card-head">
-    <div class="filters">
-      <nav class="seg" aria-label="Reply state">
-        {% for key, label, count in states %}<a href="{% reviews_url key app %}"{% if key == state %} aria-current="page"{% endif %}>{{ label }} <span class="muted">{{ count }}</span></a>{% endfor %}
-      </nav>
-      <nav class="seg app-pick" aria-label="App">
-        <a href="{% reviews_url state %}"{% if not app %} aria-current="page"{% endif %}>All apps</a>
-        {% for a in apps %}<a href="{% reviews_url state a %}"{% if app and a.pk == app.pk %} aria-current="page"{% endif %}>{{ a.name|truncatechars:22 }}</a>{% endfor %}
-      </nav>
-    </div>
+    <nav class="seg" aria-label="Reply state">
+      {% for key, label, count in states %}<a href="{% reviews_url key %}"{% if key == state %} aria-current="page"{% endif %}>{{ label }} <span class="muted">{{ count }}</span></a>{% endfor %}
+    </nav>
   </div>
   <p class="sub">{% if state == "" %}Lowest rating first, then newest.{% else %}Newest first.{% endif %}</p>
   {% include "stats/_review_list.html" %}
 </section>
 <style>
-  .app-pick { flex-wrap: wrap; max-width: 100%; }
   .seg a .muted { font-weight: 400; }
   .seg a[aria-current] .muted { color: inherit; opacity: .7; }
 </style>

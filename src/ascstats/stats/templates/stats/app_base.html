@@ -5,7 +5,7 @@
   <h1>{% if app.icon_url %}<img src="{{ app.icon_url }}" alt="" width="56" height="56">{% endif %}{{ app.name }}</h1>
   {% if app.primary_genre or app.released_on %}<p class="sub">{{ app.primary_genre }}{% if app.primary_genre and app.released_on %} · {% endif %}{% if app.released_on %}On the App Store since {{ app.released_on|date:"M j, Y" }}{% endif %}</p>{% endif %}
 </section>
-<nav class="tablist" aria-label="{{ app.name }}">
+<nav class="tablist" aria-label="{{ app.name }}" data-app-tab="{% if tab != "stats" %}{{ tab }}/{% endif %}">
   <a href="{% url 'app' app.apple_id %}"{% if tab == "stats" %} aria-current="page"{% endif %}>{% icon "stats" %}Stats</a>
   <a href="{% url 'app_ratings' app.apple_id %}"{% if tab == "ratings" %} aria-current="page"{% endif %}>{% icon "ratings" %}Ratings</a>
   <a href="{% url 'app_reviews' app.apple_id %}"{% if tab == "reviews" %} aria-current="page"{% endif %}>{% icon "reviews" %}Reviews</a>
