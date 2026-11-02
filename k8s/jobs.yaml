@@ -1,0 +1,139 @@
+# Background jobs (src/ascstats/stats/jobs.py): queued in Postgres, run by db_worker.
+# One worker per queue, so jobs in a queue never overlap:
+#   worker-store: the public App Store (ratings, keyword searches), rate-limited per IP
+#   worker:       App Store Connect ("asc") and rebuilds ("default")
+# The schedule CronJob queues whatever is due every 15 minutes, judging by the data, so it
+# catches up by itself after the cluster was down. Run a job by hand with, for example:
+#   kubectl -n ascstats exec deploy/worker -- python manage.py import_asc --report sales --date 2026-11-01
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-store
+spec:
+  replicas: 1 # one at a time: Apple's public store limits requests per IP
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: worker-store}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: worker-store}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001}
+      # A job still running when the pod stops is picked up again by the schedule six hours
+      # later; the store jobs resume where they stopped.
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: worker
+          image: ascstats
+          imagePullPolicy: IfNotPresent
+          args: ["python", "manage.py", "db_worker", "--queue-name", "store", "--interval", "2", "--no-reload"]
+          envFrom:
+            - configMapRef: {name: ascstats-config}
+            - secretRef: {name: asc-settings, optional: true} # overrides the ConfigMap
+            - secretRef: {name: ascstats-app}
+          resources:
+            requests: {cpu: 50m, memory: 192Mi}
+            limits: {memory: 512Mi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: worker}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: worker}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001}
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: worker
+          image: ascstats
+          imagePullPolicy: IfNotPresent
+          args: ["python", "manage.py", "db_worker", "--queue-name", "asc,default", "--interval", "2", "--no-reload"]
+          envFrom:
+            - configMapRef: {name: ascstats-config}
+            - secretRef: {name: asc-settings, optional: true}
+            - secretRef: {name: ascstats-app}
+          env:
+            - name: ASC_KEY_ID
+              valueFrom: {secretKeyRef: {name: asc-api-key, key: ASC_KEY_ID, optional: true}}
+            - name: ASC_ISSUER_ID
+              valueFrom: {secretKeyRef: {name: asc-api-key, key: ASC_ISSUER_ID, optional: true}}
+          volumeMounts: [{name: asc-key, mountPath: /var/run/secrets/asc, readOnly: true}]
+          resources:
+            requests: {cpu: 50m, memory: 192Mi}
+            limits: {memory: 512Mi}
+      volumes:
+        - name: asc-key
+          secret:
+            secretName: asc-api-key
+            optional: true # synthetic mode runs without it
+            items: [{key: AuthKey.p8, path: AuthKey.p8}]
+            defaultMode: 0440 # group-readable via fsGroup, nobody else
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: schedule
+spec:
+  schedule: "*/15 * * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0 # the next run is 15 minutes away anyway
+      activeDeadlineSeconds: 300
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext: {runAsNonRoot: true, runAsUser: 10001}
+          containers:
+            - name: schedule
+              image: ascstats
+              imagePullPolicy: IfNotPresent
+              args: ["python", "manage.py", "schedule"]
+              envFrom:
+                - configMapRef: {name: ascstats-config}
+                - secretRef: {name: asc-settings, optional: true}
+                - secretRef: {name: ascstats-app}
+              resources:
+                requests: {cpu: 50m, memory: 128Mi}
+                limits: {memory: 256Mi}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: prune-jobs
+spec:
+  schedule: "30 4 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext: {runAsNonRoot: true, runAsUser: 10001}
+          containers:
+            - name: prune
+              image: ascstats
+              imagePullPolicy: IfNotPresent
+              # 30 days of job history; the schedule looks back 7
+              args: ["python", "manage.py", "prune_db_task_results", "--queue-name", "*", "--min-age-days", "30"]
+              envFrom:
+                - configMapRef: {name: ascstats-config}
+                - secretRef: {name: asc-settings, optional: true}
+                - secretRef: {name: ascstats-app}
+              resources:
+                requests: {cpu: 50m, memory: 128Mi}
+                limits: {memory: 256Mi}

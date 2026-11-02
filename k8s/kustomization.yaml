@@ -11,7 +11,7 @@ resources:
   - postgres.yaml
   - minio.yaml
   - web.yaml
-  - cronjobs.yaml
+  - jobs.yaml
 
 # Stable names: Airflow's KubernetesPodOperator pods reference these from outside Kustomize.
 # Without the hash suffix a config change no longer rolls the Deployment by itself:
@@ -33,6 +33,9 @@ configMapGenerator:
       - AWS_DEFAULT_REGION=us-east-1
       - DJANGO_ALLOWED_HOSTS=*
       - DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost:8000
+      # The jobs the schedule CronJob queues (stats/schedule.py); the others still run in
+      # Airflow while they move over, one at a time.
+      - SCHEDULED_JOBS=
 
 # Dev-only credentials so the stack comes up with one command. For any shared cluster delete
 # this generator and create the Secrets from secrets/*.example.yaml (or External Secrets).
