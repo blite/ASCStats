@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 
 import httpx
@@ -338,8 +338,16 @@ def detail(app: App, keyword: Keyword) -> dict:
     since = end - timedelta(days=HISTORY_DAYS - 1)
     snaps = [s for s in snaps if s.date >= since]
     latest = snaps[-1]
-    ps = players(app)
-    ranks = {p.apple_id: [s.rank(p.apple_id) for s in snaps] for p in ps}
+    you, *rivals = players(app)
+    ranks = {p.apple_id: [s.rank(p.apple_id) for s in snaps] for p in (you, *rivals)}
+    # Only the competitors this search has shown, best placed first and colored in that order
+    ranked = sorted(
+        (p for p in rivals if any(ranks[p.apple_id])),
+        key=lambda p: min(r for r in ranks[p.apple_id] if r),
+    )
+    ps = [you] + [
+        replace(p, color=COLORS[min(i, len(COLORS) - 1)]) for i, p in enumerate(ranked, start=1)
+    ]
     seen = [r for rs in ranks.values() for r in rs if r is not None]
     worst = max([*seen, 10])
     step = nice_step(worst, 4)

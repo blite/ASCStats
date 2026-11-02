@@ -10,6 +10,7 @@ app and its competitors are always counted over the same storefronts.
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
@@ -27,7 +28,8 @@ from ascstats.stats.rating_trends import countries_of, grade, snapshot_points
 from . import synthetic
 from .models import Competitor, CompetitorRelease, CompetitorSnapshot
 
-MAX_PER_APP = 10  # enough to compare against; keeps the chart and the Lookup calls small
+MAX_PER_APP = 100  # a whole market: one Lookup request per storefront carries 100
+CHARTED = 4  # competitors in the charts, one color each: those with the most new ratings
 RECENT = 30  # days of "new ratings" in the table
 WEEKS = 12  # weeks in the new-ratings chart
 TIMELINE = 182  # days in the release timeline
@@ -71,9 +73,12 @@ def _listing(apple_id: int, storefront: str, transport: httpx.BaseTransport | No
     return found
 
 
-def add(app: App, text: str, transport: httpx.BaseTransport | None = None) -> Competitor:
+def add(
+    app: App, text: str, transport: httpx.BaseTransport | None = None, listing: dict | None = None
+) -> Competitor:
     """Follow the app ``text`` names as a competitor of ``app``. A competitor another app
-    already follows is shared, history and all."""
+    already follows is shared, history and all. ``listing`` is its Lookup result when the
+    caller has it already."""
     apple_id, storefront = parse(text)
     if App.objects.filter(apple_id=apple_id).exists():
         raise CompetitorError("That is one of your own apps.")
@@ -83,13 +88,47 @@ def add(app: App, text: str, transport: httpx.BaseTransport | None = None) -> Co
         raise CompetitorError(f"{app.name} already follows {MAX_PER_APP} competitors; remove one.")
     competitor = Competitor.objects.filter(apple_id=apple_id).first()
     if competitor is None:
-        listing = _listing(apple_id, storefront, transport)
+        listing = listing or _listing(apple_id, storefront, transport)
         competitor = Competitor.objects.create(
             apple_id=apple_id, name=listing.get("trackName") or str(apple_id)
         )
         store_listing(competitor, listing, timezone.localdate())
     competitor.tracked_for.add(app)
     return competitor
+
+
+def add_many(
+    app: App, texts: list[str], transport: httpx.BaseTransport | None = None
+) -> tuple[list[Competitor], list[str]]:
+    """``add`` for many at once, asking Lookup for the new ones in batches (``LOOKUP_IDS`` a
+    request) rather than one by one. Returns those followed and a message for each refused."""
+    added, refused, wanted = [], [], []
+    for text in texts:
+        try:
+            wanted.append((text, *parse(text)))
+        except CompetitorError as error:
+            refused.append(f"{text}: {error}")
+    known = {*Competitor.objects.values_list("apple_id", flat=True),
+             *App.objects.values_list("apple_id", flat=True)}  # fmt: skip
+    new: dict[str, list[int]] = defaultdict(list)
+    for _, apple_id, front in wanted:
+        if apple_id not in known:
+            new[front].append(apple_id)
+    listings: dict[int, dict] = {}
+    if new and settings.ASC_SOURCE != "synthetic":
+        with store.client(transport) as client:
+            for front, ids in new.items():
+                try:
+                    found = store.lookup_all(ids, front, client, store.PAUSE)
+                except store.StoreError:
+                    continue  # each asks on its own below
+                listings |= {r["trackId"]: r for r in found if r.get("trackId") in ids}
+    for text, apple_id, _ in wanted:
+        try:
+            added.append(add(app, text, transport, listings.get(apple_id)))
+        except CompetitorError as error:
+            refused.append(f"{text}: {error}")
+    return added, refused
 
 
 def remove(app: App, competitor: Competitor) -> None:
@@ -276,24 +315,29 @@ def compare(app: App) -> dict:
     if latest:
         you.version, you.version_on = latest.version, latest.first_seen
     members = [you]
-    for i, c in enumerate(rivals):
+    for c in rivals:
         members.append(Member(
-            c.name, c.apple_id, c.icon_url, c.seller, COLORS[min(i + 1, len(COLORS) - 1)], False,
+            c.name, c.apple_id, c.icon_url, c.seller, COLORS[-1], False,
             competitor=c, version=c.version, version_on=c.version_released_on, price=c.price,
         ))  # fmt: skip
     if end is None:
-        return {"members": members, "end": None, "max": MAX_PER_APP}
+        return {"members": members, "end": None, "max": MAX_PER_APP, "charted": members}
 
     _ratings(you, RatingSnapshot.objects.filter(app=app), end)
     for m in members[1:]:
         _ratings(m, CompetitorSnapshot.objects.filter(competitor=m.competitor), end)
+    # Busiest first: new ratings lately, then ratings in all; the top few are charted
+    members[1:] = sorted(members[1:], key=lambda m: (-(m.new or 0), -(m.count or 0), m.name))
+    charted = [you, *[m for m in members[1:] if m.count is not None][:CHARTED]]
+    for i, m in enumerate(charted[1:], start=1):
+        m.color = COLORS[i]
 
     since = end - timedelta(days=TIMELINE - 1)
     you.releases = [
         (v.version, v.first_seen, "")
         for v in AppVersion.objects.filter(app=app, platform=IOS, first_seen__gte=since)
     ]
-    for m in members[1:]:
+    for m in charted[1:]:
         m.releases = [
             (r.version, r.released_on or r.first_seen, r.notes)
             for r in CompetitorRelease.objects.filter(competitor=m.competitor)
@@ -303,8 +347,9 @@ def compare(app: App) -> dict:
         "members": members,
         "end": end,
         "max": MAX_PER_APP,
-        "weekly": _weekly_chart(members, end),
-        "timeline": _timeline(members, since, end),
+        "charted": charted,
+        "weekly": _weekly_chart(charted, end),
+        "timeline": _timeline(charted, since, end),
         "recent": RECENT,
         "weeks": WEEKS,
     }

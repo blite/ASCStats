@@ -96,8 +96,30 @@ def test_add_stops_at_the_cap(apps, settings):
     snake = apps[0]
     for i in range(competitors.MAX_PER_APP):
         Competitor.objects.create(apple_id=900000000 + i, name=f"R{i}").tracked_for.add(snake)
-    with pytest.raises(competitors.CompetitorError, match="already follows 10"):
+    cap = f"already follows {competitors.MAX_PER_APP}"
+    with pytest.raises(competitors.CompetitorError, match=cap):
         competitors.add(snake, str(RIVAL), transport(lambda: [listing()]))
+
+
+@pytest.mark.django_db
+def test_add_many_looks_up_new_ones_together(apps, settings, monkeypatch):
+    settings.ASC_SOURCE = "asc"
+    monkeypatch.setattr("ascstats.store.itunes.time.sleep", lambda _: None)
+    monkeypatch.setattr("ascstats.store.itunes.LOOKUP_IDS", 40)
+    snake, sudoku = apps[0], apps[1]
+    Competitor.objects.create(apple_id=RIVAL, name="Real Rival").tracked_for.add(sudoku)
+    others = [dict(listing(), trackId=600000000 + i, trackName=f"R{i}") for i in range(60)]
+    calls = []
+    added, refused = competitors.add_many(
+        snake,
+        [str(RIVAL), *(str(r["trackId"]) for r in others), "600000999", str(SUDOKU), "nonsense"],
+        transport(lambda: others, calls),
+    )
+    assert len(added) == 61  # the shared one too, without asking for it
+    assert len(calls) == 3  # 61 new IDs in two batches, then the one Lookup did not know
+    assert str(RIVAL) not in calls[0].url.params["id"]
+    assert {m.split(":")[0] for m in refused} == {"600000999", str(SUDOKU), "nonsense"}
+    assert snake.competitors.count() == 61
 
 
 @pytest.mark.django_db
@@ -158,6 +180,22 @@ def test_competitors_tab_compares_on_synthetic_data(client, seeded):
     lanes = {lane["member"].name: lane["dots"] for lane in data["timeline"]["lanes"]}
     # 40 days of snapshots only ever saw 3.2.1: a competitor's history starts with following
     assert [d["label"] for d in lanes["Synthetic Worm Rush"]] == ["3.2.1"]
+    rivals = data["members"][1:]
+    assert [m.new for m in rivals] == sorted((m.new for m in rivals), reverse=True)
+
+
+@pytest.mark.django_db
+def test_only_the_busiest_competitors_are_charted(seeded):
+    snake = App.objects.get(apple_id=SNAKE)
+    for i in range(8):
+        Competitor.objects.create(apple_id=900000000 + i, name=f"Quiet {i}").tracked_for.add(snake)
+    data = competitors.compare(snake)
+    assert len(data["members"]) == snake.competitors.count() + 1  # the table has every one
+    charted = data["charted"]
+    assert 1 < len(charted) <= competitors.CHARTED + 1
+    assert not any(m.name.startswith("Quiet") for m in charted)  # no ratings: not charted
+    assert len(data["timeline"]["lanes"]) == len(charted)
+    assert {s["member"].name for s in data["weekly"]["series"]} <= {m.name for m in charted}
 
 
 def test_manage_page_adds_and_removes(client, seeded):
@@ -183,3 +221,10 @@ def test_add_competitor_command(seeded):
     call_command("add_competitor", str(SUDOKU), "1000000204", "--remove")
     with pytest.raises(CommandError, match="one of your own apps"):
         call_command("add_competitor", str(SUDOKU), str(SNAKE))
+    call_command("add_competitor", str(SUDOKU), "1000000204", "1000000205")
+    assert (
+        App.objects.get(apple_id=SUDOKU)
+        .competitors.filter(apple_id__in=[1000000204, 1000000205])
+        .count()
+        == 2
+    )

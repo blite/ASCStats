@@ -5,7 +5,7 @@
   <div class="card-head">
     <div>
       <h2>Side by side</h2>
-      <p class="sub">Ratings across the storefronts your apps are snapshotted in{% if end %}, as of {{ end|date:"M j, Y" }}{% endif %}; new ratings are the last {{ recent }} days. Competitors are snapshotted with your apps every day, in the same requests.</p>
+      <p class="sub">Ratings across the storefronts your apps are snapshotted in{% if end %}, as of {{ end|date:"M j, Y" }}{% endif %}; new ratings are the last {{ recent }} days, busiest competitors first. Competitors are snapshotted with your apps every day, in the same requests.</p>
     </div>
     {% if not demo %}<a class="btn outline sm" href="{% url 'app_competitors_manage' app.apple_id %}">{% icon "competitors" %}Manage competitors</a>{% endif %}
   </div>
@@ -43,12 +43,12 @@
   {% endif %}
 </section>
 
-{% if weekly.series and members|length > 1 %}
+{% if weekly.series and charted|length > 1 %}
 <section class="card fade">
   <div class="card-head">
     <div>
       <h2>New ratings per week</h2>
-      <p class="sub">The last {{ weeks }} weeks, every app on one scale. Gaps are weeks with no two snapshots to compare.</p>
+      <p class="sub">The last {{ weeks }} weeks: {{ app.name }} and the {{ charted|length|add:"-1" }} competitor{{ charted|length|add:"-1"|pluralize }} with the most new ratings lately, on one scale. Gaps are weeks with no two snapshots to compare.</p>
     </div>
   </div>
   <div class="split legend">{% for s in weekly.series %}<span class="key"><span class="sw" style="background:{{ s.member.color }}"></span>{% if s.member.you %}<strong>{{ s.member.name }}</strong>{% else %}{{ s.member.name }}{% endif %}</span>{% endfor %}</div>
@@ -66,7 +66,7 @@
   <div class="card-head">
     <div>
       <h2>Releases</h2>
-      <p class="sub">The last half year. Yours are dated by the first day they show in sales; competitors' by the release date their listing gives, with its notes. A competitor's history starts when you begin following it.</p>
+      <p class="sub">The last half year, for the same apps. Yours are dated by the first day they show in sales; competitors' by the release date their listing gives, with its notes. A competitor's history starts when you begin following it.</p>
     </div>
   </div>
   <div class="scroll">
