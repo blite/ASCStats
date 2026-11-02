@@ -27,6 +27,7 @@ class AsoConfig(AppConfig):
             Competitor, Competitor.tracked_for.through, CompetitorSnapshot, CompetitorRelease,
             Keyword, Keyword.tracked_for.through, KeywordSnapshot, KeywordSuggestion,
         ]  # fmt: skip
+        extensions.daily_store_steps += [keywords.snapshot, suggestions.probe]
         extensions.synthetic_setup += [competitors.seed_synthetic, keywords.seed_synthetic]
         extensions.synthetic_day += [keywords.seed_day, suggestions.seed_day]
         extensions.export_paths.append(views.export_paths)

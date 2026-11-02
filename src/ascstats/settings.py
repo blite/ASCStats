@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.humanize",
+    "django_tasks_db",
     "ascstats.stats",
     "ascstats.aso",
 ]
@@ -115,12 +116,28 @@ S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL") or None  # MinIO; unset for 
 # Report source: "asc" talks to App Store Connect, "synthetic" generates fake but realistic files.
 ASC_SOURCE = os.environ.get("ASC_SOURCE", "synthetic")
 ASC_VENDOR_NUMBER = os.environ.get("ASC_VENDOR_NUMBER", "")
-# The Airflow UI that schedules the jobs, linked from the sidebar.
-AIRFLOW_URL = os.environ.get("AIRFLOW_URL", "http://localhost:8080/")
+
+# --- Background jobs (stats/jobs.py) -----------------------------------------------------
+
+# Queued in Postgres; one db_worker per queue, so jobs in a queue never overlap.
+TASKS = {
+    "default": {
+        "BACKEND": "django_tasks_db.DatabaseBackend",
+        "QUEUES": ["default", "asc", "store"],
+    }
+}
+# The jobs `manage.py schedule` queues (stats/schedule.py JOBS); empty to queue none.
+SCHEDULED_JOBS = tuple(
+    j
+    for j in os.environ.get(
+        "SCHEDULED_JOBS", "sales,analytics,derived,asc_daily,store_daily,restatement"
+    ).split(",")
+    if j
+)
 
 # --- Static demo (export_site) ------------------------------------------------------------
 
 # True only while export_site renders the static demo: pages say so and drop the live-only
-# links (API, admin, Airflow).
+# links (API, admin, jobs).
 DEMO_SITE = False
 SOURCE_URL = "https://github.com/blite/ASCStats"

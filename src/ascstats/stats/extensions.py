@@ -1,8 +1,9 @@
 """Hooks other apps fill in from their ``AppConfig.ready()``, so ``stats`` never imports them.
 
-``aso`` (competitors, keywords) uses all four: its competitors ride in the ratings snapshot's
-Lookup requests, its tables refresh cached pages, the synthetic seed creates its demo data,
-and the static export renders its pages.
+``aso`` (competitors, keywords) uses them all: its competitors ride in the ratings snapshot's
+Lookup requests, its keyword searches follow it in the daily store job, its tables refresh
+cached pages, the synthetic seed creates its demo data, and the static export renders its
+pages.
 """
 
 from __future__ import annotations
@@ -32,3 +33,4 @@ data_models: list = []  # models whose rows count toward the cached pages' data 
 synthetic_setup: list[Callable[[], None]] = []  # seed_synthetic, once before the days
 synthetic_day: list[Callable[[date], None]] = []  # seed_synthetic, for every day seeded
 export_paths: list[Callable[[object], list[str]]] = []  # export_site, per app: more pages
+daily_store_steps: list[Callable[[], None]] = []  # jobs.store_daily, after the ratings

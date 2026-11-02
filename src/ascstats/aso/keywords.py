@@ -125,14 +125,16 @@ def snapshot(
     source: str | None = None,
     transport: httpx.BaseTransport | None = None,
     pause: float = store.PAUSE,
+    only: list[Keyword] | None = None,
 ) -> int:
-    """Search every tracked keyword once and save the results; returns the searches saved.
+    """Search every tracked keyword (or ``only`` these) once and save the results; returns the
+    searches saved.
 
     A keyword already searched today is not searched again, so a rerun after a failure only
     asks what is missing; two searches failing in a row stop the run for the day."""
     day = day or timezone.localdate()
     source = source or settings.ASC_SOURCE
-    keywords = tracked()
+    keywords = tracked() if only is None else only
     if source == "synthetic":
         for k in keywords:
             _save(k, day, synthetic.search_results(k.term, k.storefront, day))

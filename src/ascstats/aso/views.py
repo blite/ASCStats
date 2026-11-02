@@ -17,6 +17,7 @@ from ascstats.stats.ratings import storefronts
 from ascstats.stats.territories import name
 
 from . import competitors as cp
+from . import jobs
 from . import keywords as kw
 
 
@@ -107,8 +108,10 @@ def app_keywords_manage(request, apple_id):
         except kw.KeywordError as error:
             messages.error(request, str(error))
         else:
+            for k in added:
+                jobs.search_keyword.enqueue(k.pk)
             terms = ", ".join(f"“{k.term}”" for k in added)
-            messages.success(request, f"Tracking {terms}. Ranks start with the next daily search.")
+            messages.success(request, f"Tracking {terms}. Searching now: ranks show in a minute.")
             return redirect("app_keywords_manage", apple_id)
     fronts = storefronts(timezone.localdate())
     context = _tab(app, "keywords") | {
