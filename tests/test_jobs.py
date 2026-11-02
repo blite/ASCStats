@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, timedelta
+from unittest import mock
 
 import pytest
 from django.core.management import call_command
@@ -14,9 +15,11 @@ ALL = schedule.JOBS
 
 
 def work():
-    """Run every queued job, as the workers would."""
-    call_command("db_worker", "--batch", "--queue-name", "*", "--no-startup-delay",
-                 "--no-reload", verbosity=0)  # fmt: skip
+    """Run every queued job, as the workers would. Between jobs the worker closes the
+    database connection, which on Postgres would end the test's transaction: not here."""
+    with mock.patch("django_tasks_db.management.commands.db_worker.close_old_connections"):
+        call_command("db_worker", "--batch", "--queue-name", "*", "--no-startup-delay",
+                     "--no-reload", verbosity=0)  # fmt: skip
 
 
 def queued(now=NOW, owned=ALL):
