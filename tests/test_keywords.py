@@ -1,3 +1,4 @@
+import plistlib
 import re
 from datetime import date
 from pathlib import Path
@@ -9,7 +10,7 @@ from django.core.management.base import CommandError
 from django.test import override_settings
 
 import ascstats.stats
-from ascstats.aso import keywords
+from ascstats.aso import keywords, suggestions
 from ascstats.aso.models import Competitor, Keyword, KeywordSnapshot
 from ascstats.stats.cache import data_version
 from ascstats.stats.models import App
@@ -89,6 +90,29 @@ def test_two_failed_searches_stop_the_run(apps, settings, monkeypatch):
     refuse = httpx.MockTransport(lambda request: httpx.Response(429))
     assert keywords.snapshot(DAY, transport=refuse, pause=0) == 0
     assert not KeywordSnapshot.objects.exists()
+
+
+@pytest.mark.django_db
+def test_the_daily_jobs_never_track_a_keyword_on_their_own(apps, settings, monkeypatch):
+    """Only a person adds keywords. The searches and suggestions turn up plenty of other
+    terms; none of them is tracked, for this app or any other."""
+    settings.ASC_SOURCE = "asc"
+    monkeypatch.setattr("ascstats.store.itunes.time.sleep", lambda _: None)
+    keywords.add(apps[0], "snake game")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/search":
+            return httpx.Response(200, json={"results": results(42, SNAKE, 7)})
+        offered = ["snake game", "snake game offline", "snake io", "worm game", "slither"]
+        return httpx.Response(
+            200, content=plistlib.dumps({"hints": [{"term": t} for t in offered]})
+        )
+
+    transport = httpx.MockTransport(handler)
+    assert keywords.snapshot(DAY, transport=transport, pause=0) == 1
+    assert suggestions.probe(DAY, transport=transport, pause=0) == 1
+    assert list(Keyword.objects.values_list("term", flat=True)) == ["snake game"]
+    assert [a.keywords.count() for a in apps] == [1] + [0] * (len(apps) - 1)
 
 
 @pytest.fixture

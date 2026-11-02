@@ -7,6 +7,9 @@ app's position, yours, a competitor's or one you start following later, comes fr
 saved searches. The public Search API's order follows the App Store's own closely but not
 exactly, and Apple publishes search volume only through Apple Ads, so popularity is an
 estimate from the results and the store's search suggestions.
+
+Only a person adds keywords (``add``, from the Keywords tab or ``add_keyword``): nothing here
+tracks a term on its own, not from the results, the suggestions or a competitor's listing.
 """
 
 from __future__ import annotations
