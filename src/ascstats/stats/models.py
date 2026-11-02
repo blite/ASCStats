@@ -25,6 +25,27 @@ class AppQuerySet(models.QuerySet):
         """The apps every stat covers."""
         return self.filter(is_active=True)
 
+    def listed(self):
+        """The apps the sidebar lists: active and not hidden, in the order the user chose."""
+        return self.active().filter(is_hidden=False)
+
+    def arrange(self, pks):
+        """Put these apps first, in this order; every other app keeps its order after them."""
+        pks = [int(pk) for pk in pks]
+        rest = self.exclude(pk__in=pks).values_list("pk", flat=True)
+        apps = {a.pk: a for a in self.filter(pk__in=pks)}
+        ordered = [apps[pk] for pk in dict.fromkeys(pks) if pk in apps]
+        ordered += [App(pk=pk) for pk in rest]
+        for n, app in enumerate(ordered):
+            app.sort_order = n
+        self.model.objects.bulk_update(ordered, ["sort_order"])
+
+
+def next_sort_order() -> int:
+    """New apps join the end of the list."""
+    last = App.objects.aggregate(models.Max("sort_order"))["sort_order__max"]
+    return 0 if last is None else last + 1
+
 
 class App(models.Model):
     apple_id = models.BigIntegerField(unique=True, help_text="App Apple Identifier")
@@ -32,6 +53,9 @@ class App(models.Model):
     sku = models.CharField(max_length=100, blank=True)
     bundle_id = models.CharField(max_length=255, blank=True)
     is_active = models.BooleanField(default=True, help_text="Include in daily imports")
+    # Display only: a hidden app is still imported and counted, just not listed in the sidebar.
+    sort_order = models.PositiveIntegerField(default=next_sort_order, help_text="Sidebar position")
+    is_hidden = models.BooleanField(default=False, help_text="Left out of the sidebar")
     # From the public store listing (iTunes Lookup), refreshed by every rating snapshot.
     released_on = models.DateField(null=True, blank=True, help_text="First App Store release")
     icon_url = models.URLField(max_length=500, blank=True)
@@ -41,7 +65,7 @@ class App(models.Model):
     objects = AppQuerySet.as_manager()
 
     class Meta:
-        ordering = ["name"]
+        ordering = ["sort_order", "name"]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.apple_id})"

@@ -22,6 +22,7 @@ urlpatterns = [
     path("app/<int:apple_id>/reviews/", views.app_reviews, name="app_reviews"),
     path("app/<int:apple_id>/reviews/<slug:state>/", views.app_reviews, name="app_reviews_state"),
     path("chart/<int:apple_id>/<int:days>/", views.chart, name="chart"),
+    path("apps/", views.arrange_apps, name="arrange_apps"),
     path("revenue/", views.revenue, name="revenue"),
     path("revenue/<int:days>d/", views.revenue, name="revenue_period"),
     path("revenue/all/", views.revenue, {"days": ALL}, name="revenue_all"),

@@ -2,8 +2,8 @@
 
 from django.conf import settings
 from django.contrib.auth import logout
-from django.http import Http404
-from django.shortcuts import redirect, render
+from django.http import Http404, HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
 
 from . import dashboard as d
 from . import funnel as f
@@ -159,6 +159,37 @@ def app_funnel(request, apple_id):
         return render(request, "stats/_funnel_app.html", {"empty": True})
     context = {"app": app, "trends": f.step_trends(app, end), "mix": f.source_mix(app, end)}
     return render(request, "stats/_funnel_app.html", context)
+
+
+def arrange_apps(request):
+    """Re-order the sidebar's apps and hide the ones not worth a row. Uncached: it carries a
+    CSRF token. Each button posts one move; a drag posts the whole order."""
+    apps = App.objects.active()
+    if request.method == "POST":
+        listed = list(apps.filter(is_hidden=False).values_list("pk", flat=True))
+        if order := request.POST.getlist("order"):
+            App.objects.arrange([pk for pk in order if pk.isdigit()])
+            return HttpResponse(status=204)
+        for step, field in ((-1, "up"), (1, "down")):
+            if (pk := request.POST.get(field, "")).isdigit() and int(pk) in listed:
+                i = listed.index(int(pk))
+                if 0 <= i + step < len(listed):
+                    listed[i], listed[i + step] = listed[i + step], listed[i]
+                    App.objects.arrange(listed)
+        for field, hidden in (("hide", True), ("show", False)):
+            if (pk := request.POST.get(field, "")).isdigit():
+                app = get_object_or_404(apps, pk=pk)
+                app.is_hidden = hidden
+                if not hidden:  # back at the end of the list, where it is easy to find
+                    App.objects.arrange([*listed, app.pk])
+                app.save(update_fields=["is_hidden"])
+        return redirect("arrange_apps")
+    context = {
+        "page": "apps",
+        "listed": apps.filter(is_hidden=False),
+        "hidden": apps.filter(is_hidden=True),
+    }
+    return render(request, "stats/arrange_apps.html", context)
 
 
 def sign_out(request):

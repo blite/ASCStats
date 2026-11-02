@@ -17,8 +17,9 @@ from .models import (
 class AppAdmin(admin.ModelAdmin):
     list_display = [
         "name", "apple_id", "sku", "bundle_id", "primary_genre", "released_on", "is_active",
+        "is_hidden", "sort_order",
     ]  # fmt: skip
-    list_filter = ["is_active", "primary_genre"]
+    list_filter = ["is_active", "is_hidden", "primary_genre"]
     search_fields = ["name", "sku", "bundle_id"]
 
 

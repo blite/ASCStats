@@ -9,5 +9,5 @@ def site(request):
     return {
         "demo": settings.DEMO_SITE,
         "source_url": settings.SOURCE_URL,
-        "nav_apps": App.objects.active().only("apple_id", "name", "icon_url"),  # read lazily
+        "nav_apps": App.objects.listed().only("apple_id", "name", "icon_url"),  # read lazily
     }
