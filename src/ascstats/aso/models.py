@@ -104,7 +104,8 @@ class KeywordSnapshot(models.Model):
     date = models.DateField()
     ids = models.JSONField(default=list, help_text="Apple IDs in result order, up to 200")
     top = models.JSONField(
-        default=list, help_text="the first results: {id, name, seller, icon, ratings, average}"
+        default=list,
+        help_text="the first 25 results: {id, name, seller, icon, ratings, average}",
     )
 
     class Meta:
@@ -119,3 +120,36 @@ class KeywordSnapshot(models.Model):
             return self.ids.index(apple_id) + 1
         except ValueError:
             return None
+
+
+class KeywordSuggestion(models.Model):
+    """A weekly look at how the store's search suggestions offer a keyword: the evidence
+    behind its popularity estimate (``aso.scoring``)."""
+
+    class Reach(models.TextChoices):
+        HIT = "hit", "suggested from its first letters"
+        LISTED = "listed", "suggested only once typed in full"
+        ABSENT = "absent", "not suggested"
+
+    keyword = models.ForeignKey(
+        Keyword, on_delete=models.CASCADE, related_name="suggestions", db_index=False
+    )
+    date = models.DateField()
+    reach = models.CharField(max_length=10, choices=Reach.choices)
+    prefix = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="characters typed when it was first suggested"
+    )
+    position = models.PositiveSmallIntegerField(null=True, blank=True)
+    continuations = models.PositiveSmallIntegerField(
+        help_text="suggestions that are the term or extend it by whole words"
+    )
+    requests = models.PositiveSmallIntegerField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["keyword", "date"], name="uniq_keyword_suggestion")
+        ]
+        ordering = ["keyword", "date"]
+
+    def __str__(self) -> str:
+        return f"{self.keyword_id} {self.date} {self.reach}"

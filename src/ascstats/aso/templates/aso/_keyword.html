@@ -8,6 +8,25 @@
 {% if not date %}
 <p class="muted">Not searched yet: ranks start with the next daily search.</p>
 {% else %}
+{% with sc=scores look=scores.suggestion %}
+<div class="kscores">
+  <div class="ks">
+    <div class="label">Popularity</div>
+    <div class="big">{% if sc.popularity is not None %}{% if sc.estimated %}<span class="muted">~</span>{% endif %}{{ sc.popularity }}{% else %}–{% endif %}</div>
+    <p>{% if look %}{% if look.reach == "hit" %}Suggested after typing “{{ typed }}” ({{ look.prefix }} letter{{ look.prefix|pluralize }}), {{ look.position|ordinal }} suggestion{% elif look.reach == "listed" %}Suggested only once typed in full{% else %}Not suggested at all{% endif %}; {{ look.continuations }} suggestion{{ look.continuations|pluralize }} continue{{ look.continuations|pluralize:"s," }} it. Looked at {{ look.date|date:"M j" }}.{% else %}Estimated from the results alone, until the weekly look at the store's suggestions.{% endif %}</p>
+  </div>
+  <div class="ks">
+    <div class="label">Difficulty</div>
+    <div class="big">{{ sc.difficulty|default:"–" }}</div>
+    <p>{% if sc.strength is not None %}The top 10 are at {% widthratio sc.strength 1 100 %}% strength (ratings, 1,000 to 1,000,000 on a log scale), and {% widthratio sc.targeting 1 100 %}% of their titles aim at the term.{% endif %}</p>
+  </div>
+  <div class="ks">
+    <div class="label">Opportunity</div>
+    <div class="big">{{ sc.opportunity|default:"–" }}</div>
+    <p>Enough searches (full credit from 30 popularity) times how open the first page is (100 − difficulty).</p>
+  </div>
+</div>
+{% endwith %}
 {% if series %}
 <div class="split legend">{% for s in series %}<span class="key"><span class="sw" style="background:{{ s.player.color }}"></span>{% if s.player.you %}<strong>{{ s.player.name }}</strong>{% else %}{{ s.player.name }}{% endif %}</span>{% endfor %}</div>
 <div class="scroll">
@@ -48,6 +67,11 @@
 </div>
 {% endif %}
 <style>
+  .kscores { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; margin: 0 0 14px; }
+  .ks { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+  .ks .label { font-size: 13px; color: var(--ink-2); }
+  .ks .big { font-size: 26px; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .ks p { margin: 2px 0 0; font-size: 12.5px; color: var(--muted-foreground); }
   .kd-title { display: flex; align-items: center; gap: 8px; }
   .legend { margin: 0 0 6px; }
   .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; }

@@ -38,6 +38,9 @@ def test_add_normalizes_shares_and_caps(apps):
     with pytest.raises(keywords.KeywordError, match="already tracks"):
         keywords.add(snake, "SNAKE GAME")
     assert keywords.add(snake, "snake game", "gb")[0].storefront == "gb"  # another store
+    with pytest.raises(keywords.KeywordError, match="too general"):
+        keywords.add(snake, "snake game\nads")  # nothing added: the whole list is refused
+    assert keywords.add(snake, "snake no ads")[0].term == "snake no ads"  # fine in a phrase
     with pytest.raises(keywords.KeywordError, match="storefront"):
         keywords.add(snake, "snake", "usa")
     with pytest.raises(keywords.KeywordError, match="room for"):

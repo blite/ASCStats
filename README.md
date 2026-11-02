@@ -34,7 +34,11 @@ iOS apps into Postgres and serves them through Django.
   50 keywords per app (`add_keyword`, or the Keywords tab), each searched once a day with
   iTunes Search, top 200; the whole result order is kept, so your rank and every
   competitor's come from the same searches. The public Search API's order follows the App
-  Store's own closely but not exactly, and Apple publishes no search volume outside Search Ads.
+  Store's own closely but not exactly. Each keyword also gets scores, 0-100
+  (`aso/scoring.py`): difficulty from the top 10 (rating strength, titles aiming at the
+  term), popularity from a fitted App Store model (the first 25 results plus a weekly
+  look at the store's search suggestions, `probe_suggestions`), and opportunity from the two.
+  Popularity is an estimate: Apple publishes real search volume only through Apple Ads.
 - **Serve**: behind a sign-in (only `/api/health` is open), Django admin, a JSON API (Django Ninja, OpenAPI at `/api/docs`) and one
   server-rendered htmx page with a chart.
 - **Run**: Docker Compose for development, Kustomize manifests for Kubernetes (a CronJob per
@@ -114,7 +118,8 @@ own, and any day can be reloaded from raw without asking Apple again.
 | `CompetitorSnapshot` | A competitor's public rating totals per storefront and day, like `RatingSnapshot`.       |
 | `CompetitorRelease` | A competitor version with Apple's release date and notes, from the day it was first seen. |
 | `Keyword`          | A search term in one storefront, tracked for one or more of your apps (`aso`).              |
-| `KeywordSnapshot`  | One day's search results for a keyword: every Apple ID in order, and the top 10 by name.    |
+| `KeywordSnapshot`  | One day's search results for a keyword: every Apple ID in order, and the top 25 by name.    |
+| `KeywordSuggestion` | A weekly look at the store's search suggestions for a keyword: how early and how often.   |
 | `FxDay`            | One row per day: JSON of currency -> USD per unit (ECB via Frankfurter); as-of lookup on weekends. Apple pays at its own rates, so this is an estimate. |
 | `IngestionRun`     | The run log: report, day, app, step, source, status, row counts, error.                   |
 
@@ -265,7 +270,7 @@ the ascstats image's management command on the cluster above.
 | `ascstats_daily_sales`        | daily data intervals, catchup    | `wait_for_report` (deferrable) → `download_raw` → `validate` → `load_day`[apps] → `quality_checks`[apps] |
 | `ascstats_daily_analytics`    | daily data intervals, catchup    | task group mapped over apps: `wait_for_report` → `download_raw` → `validate` → `load_day` → `quality_checks` |
 | `ascstats_conversion_metrics` | assets: sales **and** analytics  | rebuild the last 7 days of `ConversionMetric` → `build_versions`; `import_fx` alongside       |
-| `ascstats_daily_ratings`      | daily, no catchup                | `snapshot_ratings` (public lookup, extra retries: a missed day is lost) → `snapshot_keywords` (public search); `build_versions` → `import_reviews`; `check_report_requests` |
+| `ascstats_daily_ratings`      | daily, no catchup                | `snapshot_ratings` (public lookup, extra retries: a missed day is lost) → `snapshot_keywords` (public search) → `probe_suggestions` (search hints); `build_versions` → `import_reviews`; `check_report_requests` |
 | `ascstats_weekly_restatement` | Mondays                          | re-import the previous 7 complete days of both reports, rebuild metrics                     |
 
 - **Deferrable sensor**: `wait_for_report` hands off to the triggerer, which polls Apple with
@@ -329,7 +334,7 @@ JWT claims, pagination, retries with `Retry-After`, 404-as-not-ready and GET-onl
 src/ascstats/
   asc/client.py         read-only App Store Connect client
   asc/credentials.py    the only place the .p8 key is read
-  store/itunes.py       the public App Store: iTunes Lookup and Search, keyless, read-only
+  store/itunes.py       the public App Store: iTunes Lookup, Search and search hints, keyless
   stats/pipeline.py     check / download / validate / load / quality
   stats/parsing.py      report parsing and validation (pure functions)
   stats/synthetic.py    synthetic reports in Apple's file format
@@ -340,7 +345,8 @@ src/ascstats/
                         ensure_report_requests, ensure_raw_bucket, list_apps
   stats/extensions.py   hooks other apps register with, so stats never imports them
   aso/                  competitors and keywords (models, daily search, tabs,
-                        add_competitor, add_keyword, snapshot_keywords)
+                        scoring, add_competitor, add_keyword, snapshot_keywords,
+                        probe_suggestions)
   api.py                Django Ninja API
 k8s/                    Kustomize manifests
 airflow/                Airflow 3 DAGs, Compose stack, DAG-integrity tests

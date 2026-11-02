@@ -125,8 +125,8 @@ spec:
               imagePullPolicy: IfNotPresent
               # Each part runs even if another failed; the job fails if any did. The report-request
               # check is read-only: it names apps whose Analytics request needs an Admin re-request.
-              # Keywords search the same public store as the ratings: after them, never alongside.
-              args: ["sh", "-c", "python manage.py snapshot_ratings; s=$?; python manage.py snapshot_keywords; k=$?; python manage.py build_versions && python manage.py import_reviews; r=$?; python manage.py ensure_report_requests --check-only; c=$?; exit $(( s || k || r || c ))"]
+              # Keywords and suggestions use the same public store as the ratings: after them, never alongside.
+              args: ["sh", "-c", "python manage.py snapshot_ratings; s=$?; python manage.py snapshot_keywords; k=$?; python manage.py probe_suggestions; p=$?; python manage.py build_versions && python manage.py import_reviews; r=$?; python manage.py ensure_report_requests --check-only; c=$?; exit $(( s || k || p || r || c ))"]
               envFrom:
                 - configMapRef: {name: ascstats-config}
                 - secretRef: {name: asc-settings, optional: true}  # overrides the ConfigMap

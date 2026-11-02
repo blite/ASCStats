@@ -179,3 +179,20 @@ def search_results(term: str, storefront: str, day: date) -> list[dict]:
         }
         for i in ranked
     ]  # fmt: skip
+
+
+def suggestions(term: str, storefront: str) -> dict:
+    """How the store's suggestions offer ``term``, shaped like ``suggestions.look``: most
+    terms are suggested within a few letters, some only in full, a few not at all."""
+    rng = _rng("suggest", term, storefront)
+    roll = rng.random()
+    if roll < 0.1:
+        return {"reach": "absent", "prefix": None, "position": None, "continuations": 0,
+                "requests": 1}  # fmt: skip
+    if roll < 0.25:
+        return {"reach": "listed", "prefix": None, "position": rng.randint(1, 6),
+                "continuations": rng.randint(0, 3),
+                "requests": 2 + min(len(term) - 1, 8)}  # fmt: skip
+    prefix = rng.randint(2, min(6, len(term) - 1))
+    return {"reach": "hit", "prefix": prefix, "position": rng.randint(1, 4),
+            "continuations": rng.randint(2, 14), "requests": 2 + prefix}  # fmt: skip

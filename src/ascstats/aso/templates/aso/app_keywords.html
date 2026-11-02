@@ -5,9 +5,14 @@
   <div class="card-head">
     <div>
       <h2>Search ranks</h2>
-      <p class="sub">Where {{ app.name }} comes up in App Store search for each term, among the top {{ limit }}{% if date %}, as of {{ date|date:"M j, Y" }}{% endif %}. ▲ is a climb since a week before. Ranks come from iTunes Search, which follows the App Store's order closely but not exactly.</p>
+      <p class="sub">Where {{ app.name }} comes up in App Store search for each term, among the top {{ limit }}{% if date %}, as of {{ date|date:"M j, Y" }}{% endif %}. ▲ is a climb since a week before. Ranks come from iTunes Search, which follows the App Store's order closely but not exactly. Popularity, difficulty and opportunity are 0–100 estimates from the results and the store's search suggestions; <span class="est">~</span> marks a popularity read from the results alone, before its weekly look at the suggestions.</p>
     </div>
-    {% if not demo %}<a class="btn outline sm" href="{% url 'app_keywords_manage' app.apple_id %}">{% icon "keywords" %}Manage keywords</a>{% endif %}
+    <div class="filters">
+      {% if rows %}<div class="seg" role="radiogroup" aria-label="Sort by">
+        {% for key, label in sorts %}<input type="radio" name="kwsort" id="sort-{{ key }}" value="{{ key }}"{% if forloop.first %} checked{% endif %}><label for="sort-{{ key }}">{{ label }}</label>{% endfor %}
+      </div>{% endif %}
+      {% if not demo %}<a class="btn outline sm" href="{% url 'app_keywords_manage' app.apple_id %}">{% icon "keywords" %}Manage keywords</a>{% endif %}
+    </div>
   </div>
   {% if not rows %}
   <div class="empty">
@@ -19,16 +24,20 @@
     <input type="hidden" name="app" value="{{ app.apple_id }}">
     <div class="scroll">
     <div class="kwt" role="radiogroup" aria-label="Keyword">
-      <div class="kwh"><span>Keyword</span><span class="num">Rank</span><span class="num">7 days</span><span>Last 30 days</span><span>Best competitor</span><span>Top result</span></div>
+      <div class="kwh"><span>Keyword</span><span class="num">Rank</span><span class="num">7 days</span><span>Last 30 days</span><span class="num">Popularity</span><span class="num">Difficulty</span><span class="num">Opportunity</span><span>Best competitor</span></div>
       {% for r in rows %}
-      <label class="kwr"><input type="radio" name="keyword" value="{{ r.keyword.pk }}"{% if forloop.first %} checked{% endif %}>
+      {% with sc=r.scores %}
+      <label class="kwr" data-rank="{{ r.rank|default:'' }}" data-opportunity="{{ sc.opportunity|default:'' }}" data-popularity="{{ sc.popularity|default:'' }}" data-difficulty="{{ sc.difficulty|default:'' }}"><input type="radio" name="keyword" value="{{ r.keyword.pk }}"{% if forloop.first %} checked{% endif %}>
         <span class="term"><span class="flag" title="{{ r.country }}" aria-label="{{ r.country }}">{{ r.flag }}</span>{{ r.keyword.term }}</span>
         <span class="num rank">{% if r.rank %}#{{ r.rank }}{% elif r.date %}<span class="muted">{{ limit }}+</span>{% else %}<span class="muted">next search</span>{% endif %}</span>
         <span class="num">{% if r.change %}<span class="chip {% if r.change > 0 %}up{% else %}down{% endif %}">{% if r.change > 0 %}▲ {{ r.change }}{% else %}▼ {{ r.change|stringformat:"d"|cut:"-" }}{% endif %}</span>{% elif r.change == 0 %}<span class="muted">–</span>{% endif %}</span>
         <span>{% if r.spark %}<svg viewBox="0 0 100 24" width="100" height="24" aria-label="Rank over the last 30 days{% if r.best %}, best #{{ r.best }}{% endif %}">{% for l in r.spark %}<polyline points="{{ l }}" fill="none" stroke="var(--chart-1)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>{% endfor %}</svg>{% endif %}</span>
+        <span class="num score" title="{% if sc.estimated %}From the results alone: the suggestions are looked at weekly{% else %}Suggestions looked at {{ sc.suggestion.date|date:'M j' }}{% endif %}">{% if sc.popularity is not None %}{% if sc.estimated %}<span class="est">~</span>{% endif %}{{ sc.popularity }}<i style="--v:{{ sc.popularity }}"></i>{% else %}<span class="muted">–</span>{% endif %}</span>
+        <span class="num score">{% if sc.difficulty is not None %}{{ sc.difficulty }}<i class="hard" style="--v:{{ sc.difficulty }}"></i>{% else %}<span class="muted">–</span>{% endif %}</span>
+        <span class="num score">{% if sc.opportunity is not None %}<strong>{{ sc.opportunity }}</strong><i class="opp" style="--v:{{ sc.opportunity }}"></i>{% else %}<span class="muted">–</span>{% endif %}</span>
         <span class="ellip">{% if r.rival %}{{ r.rival.0 }} <strong>#{{ r.rival.1 }}</strong>{% else %}<span class="muted">–</span>{% endif %}</span>
-        <span class="ellip muted">{{ r.leader }}</span>
       </label>
+      {% endwith %}
       {% endfor %}
     </div>
     </div>
@@ -39,8 +48,13 @@
 <section class="card fade"><div id="keyword"><p class="muted">Loading…</p></div></section>
 {% endif %}
 <style>
-  .kwt { min-width: 760px; }
-  .kwh, .kwr { display: grid; grid-template-columns: minmax(160px, 1.4fr) 64px 72px 112px minmax(140px, 1fr) minmax(140px, 1fr); gap: 10px; align-items: center; padding: 0 10px; }
+  .kwt { min-width: 880px; }
+  .kwh, .kwr { display: grid; grid-template-columns: minmax(150px, 1.4fr) 56px 64px 108px 76px 76px 84px minmax(130px, 1fr); gap: 10px; align-items: center; padding: 0 10px; }
+  .score { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+  .score i { display: block; width: 100%; max-width: 64px; height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--chart-1) calc(var(--v) * 1%), var(--muted) 0); }
+  .score i.hard { background: linear-gradient(to right, var(--chart-2) calc(var(--v) * 1%), var(--muted) 0); }
+  .score i.opp { background: linear-gradient(to right, var(--chart-3) calc(var(--v) * 1%), var(--muted) 0); }
+  .est { color: var(--muted-foreground); font-weight: 400; }
   .kwh { height: 34px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); border-bottom: 1px solid var(--border); }
   .kwr { position: relative; min-height: 40px; border-radius: calc(var(--radius) - 4px); font-size: 14px; cursor: pointer; font-variant-numeric: tabular-nums; }
   .kwr:hover { background: var(--accent); }
@@ -56,4 +70,32 @@
   .empty { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 18px; border: 1px dashed var(--border); border-radius: var(--radius); }
   .empty p { margin: 0; font-size: 14px; color: var(--muted-foreground); } .empty strong { color: var(--foreground); }
 </style>
+<script>
+  // Sort the keyword rows in the page (so the static demo sorts too); the choice is kept per browser.
+  (() => {
+    const table = document.querySelector(".kwt");
+    if (!table) return;
+    const order = {rank: 1, opportunity: -1, popularity: -1, difficulty: 1};  // 1: low first
+    function sortBy(key) {
+      const rows = [...table.querySelectorAll(".kwr")];
+      const value = r => r.dataset[key] === "" ? null : Number(r.dataset[key]);
+      rows.sort((a, b) => {
+        const x = value(a), y = value(b);
+        if (x === null || y === null) return (x === null) - (y === null);
+        return order[key] * (x - y);
+      });
+      rows.forEach(r => table.append(r));
+    }
+    const radios = document.querySelectorAll("input[name=kwsort]");
+    let saved = "rank";
+    try { saved = localStorage.getItem("kwsort") || "rank"; } catch (e) {}
+    radios.forEach(r => {
+      if (r.value === saved) { r.checked = true; sortBy(saved); }
+      r.addEventListener("change", () => {
+        sortBy(r.value);
+        try { localStorage.setItem("kwsort", r.value); } catch (e) {}
+      });
+    });
+  })();
+</script>
 {% endblock %}

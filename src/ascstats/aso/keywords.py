@@ -1,10 +1,12 @@
-"""Keyword ranks: where your apps and their competitors come up in App Store search.
+"""Keyword ranks and scores: where your apps and their competitors come up in App Store search,
+and how popular and how hard to rank for each term is (``scoring``, ``suggestions``).
 
 Each tracked keyword (a term in one storefront) is searched once a day through iTunes Search
 (``store.search``, the top 200 iPhone apps), and the whole result order is kept, so every
 app's position, yours, a competitor's or one you start following later, comes from the same
 saved searches. The public Search API's order follows the App Store's own closely but not
-exactly, and Apple publishes no search volume outside Search Ads, so there is no popularity.
+exactly, and Apple publishes search volume only through Apple Ads, so popularity is an
+estimate from the results and the store's search suggestions.
 """
 
 from __future__ import annotations
@@ -26,18 +28,27 @@ from ascstats.stats.charts import fmt_day, month_ticks, nice_step
 from ascstats.stats.models import App
 from ascstats.stats.territories import flag, name
 
-from . import synthetic
+from . import scoring, synthetic
 from .competitors import COLORS
-from .models import Keyword, KeywordSnapshot
+from .models import Keyword, KeywordSnapshot, KeywordSuggestion
 
 log = logging.getLogger(__name__)
 
-MAX_PER_APP = 50  # one search a day each; 50 keywords is about four minutes at the store pace
+MAX_PER_APP = 150  # one search a day each; 150 keywords is about 12 minutes at the store pace
 FAILURES_TO_STOP = 2  # searches failing in a row before the run stops for the day
-TOP = 10  # results kept with their names, for the "who's on top" list
+TOP = 25  # results kept with their names: the popularity model reads 25, the list shows 10
 WEEK = 7
 SPARK_DAYS = 30
 HISTORY_DAYS = 90  # days in the rank chart
+
+
+# Words too general to track on their own: nobody finds an app by searching just "ads". They
+# still count inside a phrase ("euchre no ads").
+FILLER = {
+    "a", "ad", "ads", "an", "and", "app", "apps", "best", "big", "by", "card", "cards", "classic",
+    "daily", "easy", "for", "free", "fun", "game", "games", "in", "large", "lite", "my", "new",
+    "no", "of", "offline", "on", "online", "plus", "pro", "the", "to", "top", "with", "your",
+}  # fmt: skip
 
 
 class KeywordError(Exception):
@@ -59,6 +70,11 @@ def add(app: App, text: str, storefront: str = "us") -> list[Keyword]:
         raise KeywordError("Type at least one search term.")
     if too_long := [t for t in terms if len(t) > 100]:
         raise KeywordError(f"Too long for a search term: {too_long[0][:40]}…")
+    if filler := [t for t in terms if t in FILLER]:
+        raise KeywordError(
+            f"“{filler[0]}” is too general to track on its own; track it in a phrase, like "
+            f"“{app.name.split(':')[0].split('•')[0].strip().lower()} {filler[0]}”."
+        )
     tracked = set(app.keywords.filter(storefront=storefront).values_list("term", flat=True))
     new = [t for t in terms if t not in tracked]
     if not new:
@@ -194,6 +210,52 @@ def _spark(ranks: list[int | None], width: int = 100, height: int = 24) -> list[
 
 
 @dataclass
+class Scores:
+    """A keyword's difficulty, popularity and opportunity (0-100) and the evidence behind them."""
+
+    difficulty: int | None = None
+    popularity: int | None = None
+    opportunity: int | None = None
+    strength: float | None = None  # how strong the top 10 are, 0-1
+    targeting: float | None = None  # share of the top 10 whose titles aim at the term
+    suggestion: KeywordSuggestion | None = None  # None: not looked at yet
+
+    @property
+    def estimated(self) -> bool:
+        """Popularity read from the results alone, before the suggestions were looked at."""
+        return self.suggestion is None
+
+
+def scores(
+    keyword: Keyword, snap: KeywordSnapshot | None, look: KeywordSuggestion | None
+) -> Scores:
+    if snap is None:
+        return Scores(suggestion=look)
+    page = [scoring.Result(r.get("name") or "", r.get("ratings")) for r in snap.top]
+    reach = (
+        scoring.Reach(look.reach, look.prefix, look.position) if look else scoring.Reach("unknown")
+    )
+    difficulty = scoring.difficulty(page, keyword.term)
+    popularity = scoring.popularity(
+        page, keyword.term, len(snap.ids), reach, look.continuations if look else None
+    )
+    return Scores(
+        difficulty=difficulty,
+        popularity=popularity,
+        opportunity=scoring.opportunity(popularity, difficulty),
+        strength=scoring.page_strength(page[:10]) if page else None,
+        targeting=scoring.targeting(page[:10], keyword.term) if page else None,
+        suggestion=look,
+    )
+
+
+def latest_suggestions(keywords: list[Keyword]) -> dict[int, KeywordSuggestion]:
+    from .suggestions import latest
+
+    return latest(keywords)
+
+
+@dataclass
 class Row:
     keyword: Keyword
     date: date | None = None
@@ -204,6 +266,7 @@ class Row:
     leader: str = ""  # the first result today
     results: int = 0
     spark: list[str] = field(default_factory=list)
+    scores: Scores = field(default_factory=Scores)
 
     @property
     def flag(self) -> str:
@@ -220,9 +283,11 @@ def board(app: App) -> dict:
     you = app.apple_id
     rivals = {p.apple_id: p.name for p in players(app)[1:]}
     rows = []
-    for k in app.keywords.all():
+    keywords = list(app.keywords.all())
+    looks = latest_suggestions(keywords)
+    for k in keywords:
         snaps = list(k.snapshots.order_by("date"))
-        row = Row(k)
+        row = Row(k, scores=scores(k, snaps[-1] if snaps else None, looks.get(k.pk)))
         if snaps:
             latest = snaps[-1]
             row.date, row.rank, row.results = latest.date, latest.rank(you), len(latest.ids)
@@ -245,7 +310,9 @@ def board(app: App) -> dict:
         "date": max((r.date for r in rows if r.date), default=None),
         "max": MAX_PER_APP,
         "limit": store.SEARCH_LIMIT,
-    }
+        "sorts": [("rank", "Rank"), ("opportunity", "Opportunity"),
+                  ("popularity", "Popularity"), ("difficulty", "Difficulty")],
+    }  # fmt: skip
 
 
 W, H, PAD_L, PAD_R, PAD_T, PAD_B = 1000, 240, 40, 12, 12, 22
@@ -255,10 +322,13 @@ def detail(app: App, keyword: Keyword) -> dict:
     """One keyword over the last ``HISTORY_DAYS``: a rank line per app (yours and each
     competitor that showed up), today's top results, and where each app stands."""
     snaps = list(keyword.snapshots.order_by("date"))
+    look = latest_suggestions([keyword]).get(keyword.pk)
     out = {
         "keyword": keyword,
         "flag": flag(keyword.storefront),
         "country": name(keyword.storefront),
+        "scores": scores(keyword, snaps[-1] if snaps else None, look),
+        "typed": keyword.term[: look.prefix] if look and look.prefix else "",
     }
     if not snaps:
         return out
@@ -318,7 +388,9 @@ def detail(app: App, keyword: Keyword) -> dict:
         "series": series,
         "grid": [{"y": y(t), "label": f"#{t}"} for t in ticks],
         "xticks": month_ticks(every, lambda i: x(every[i]), 56),
-        "top": [r | {"rank": i + 1, "player": mine.get(r["id"])} for i, r in enumerate(latest.top)],
+        "top": [
+            r | {"rank": i + 1, "player": mine.get(r["id"])} for i, r in enumerate(latest.top[:10])
+        ],
         "standings": standings,
         "results": len(latest.ids),
         "limit": store.SEARCH_LIMIT,

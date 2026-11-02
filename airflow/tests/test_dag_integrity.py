@@ -108,3 +108,5 @@ def test_ratings_snapshot_never_catches_up_and_reviews_follow_versions(dagbag):
     assert "snapshot_keywords" in _all_downstream(dag, "snapshot_ratings")
     assert dag.get_task("snapshot_keywords").trigger_rule == "all_done"
     assert dag.get_task("snapshot_keywords").pool != ASC_POOL
+    assert "probe_suggestions" in _all_downstream(dag, "snapshot_keywords")
+    assert dag.get_task("probe_suggestions").trigger_rule == "all_done"
