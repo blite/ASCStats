@@ -7,6 +7,8 @@ from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_POST
 
 from ascstats.stats import dashboard as d
 from ascstats.stats.cache import cached_page
@@ -66,6 +68,7 @@ def app_competitors_manage(request, apple_id):
     return render(request, "aso/app_competitors_manage.html", context)
 
 
+@ensure_csrf_cookie  # outside the cache: the delete form reads its token from the cookie
 @cached_page
 def app_keywords(request, apple_id):
     """An app's Keywords tab: where it ranks for each term it tracks."""
@@ -79,6 +82,16 @@ def app_keyword(request, apple_id, keyword_id):
     app = _app(apple_id)
     keyword = get_object_or_404(app.keywords, pk=keyword_id)
     return render(request, "aso/_keyword.html", kw.detail(app, keyword))
+
+
+@require_POST
+def app_keywords_delete(request, apple_id):
+    """Stop tracking the keywords picked on the Keywords tab, then show the tab again."""
+    app = _editable(apple_id)
+    picked = [pk for pk in request.POST.getlist("delete") if pk.isdigit()]
+    for keyword in app.keywords.filter(pk__in=picked):
+        kw.remove(app, keyword)
+    return redirect("app_keywords", apple_id)
 
 
 def app_keywords_manage(request, apple_id):

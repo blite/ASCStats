@@ -95,6 +95,8 @@ ICONS = {
     '<path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>',
     "admin": '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/>'
     '<path d="M3 12a9 3 0 0 0 18 0"/>',
+    "airflow": '<path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/>'
+    '<path d="M9.8 4.4A2 2 0 1 1 11 8H2"/>',
     "source": '<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>',
     "panel": '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>',
     "logout": '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/>'

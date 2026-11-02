@@ -136,6 +136,27 @@ def test_manage_keywords_page(client, seeded):
         assert client.get(f"/app/{SNAKE}/keywords/manage/").status_code == 404
 
 
+def test_delete_picked_keywords_from_the_tab(client, seeded):
+    snake = App.objects.get(apple_id=SNAKE)
+    sudoku = App.objects.get(apple_id=SUDOKU)
+    first, second, kept = snake.keywords.order_by("pk")[:3]
+    first.tracked_for.add(sudoku)  # shared: only Snake stops tracking it
+    page = client.get(f"/app/{SNAKE}/keywords/")
+    assert 'form="kwdelete"' in page.content.decode()
+    assert "csrftoken" in page.cookies  # the cached tab's form reads its token from here
+    assert client.get(f"/app/{SNAKE}/keywords/delete/").status_code == 405
+    done = client.post(f"/app/{SNAKE}/keywords/delete/", {"delete": [first.pk, second.pk, "x"]})
+    assert done.status_code == 302
+    assert done.url == f"/app/{SNAKE}/keywords/"
+    assert set(snake.keywords.filter(pk__in=[first.pk, second.pk, kept.pk])) == {kept}
+    assert sudoku.keywords.filter(pk=first.pk).exists()
+    page = client.get(f"/app/{SNAKE}/keywords/").content.decode()
+    assert f'value="{second.pk}" form="kwdelete"' not in page  # the cached tab was rebuilt
+    with override_settings(DEMO_SITE=True):
+        assert client.post(f"/app/{SNAKE}/keywords/delete/").status_code == 404
+        assert 'form="kwdelete"' not in client.get(f"/app/{SUDOKU}/keywords/").content.decode()
+
+
 def test_add_keyword_command(seeded):
     call_command("add_keyword", str(SUDOKU), "number puzzle", "--storefront", "gb")
     sudoku = App.objects.get(apple_id=SUDOKU)

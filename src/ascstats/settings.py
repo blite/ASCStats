@@ -115,10 +115,12 @@ S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL") or None  # MinIO; unset for 
 # Report source: "asc" talks to App Store Connect, "synthetic" generates fake but realistic files.
 ASC_SOURCE = os.environ.get("ASC_SOURCE", "synthetic")
 ASC_VENDOR_NUMBER = os.environ.get("ASC_VENDOR_NUMBER", "")
+# The Airflow UI that schedules the jobs, linked from the sidebar.
+AIRFLOW_URL = os.environ.get("AIRFLOW_URL", "http://localhost:8080/")
 
 # --- Static demo (export_site) ------------------------------------------------------------
 
 # True only while export_site renders the static demo: pages say so and drop the live-only
-# links (API, admin).
+# links (API, admin, Airflow).
 DEMO_SITE = False
 SOURCE_URL = "https://github.com/blite/ASCStats"

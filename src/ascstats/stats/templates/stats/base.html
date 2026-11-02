@@ -182,7 +182,8 @@
       <ul class="sb-menu">
         {% if demo %}<li><a class="sb-btn" href="{{ source_url }}" title="Source">{% icon "source" %}<span>Source</span></a></li>
         {% else %}<li><a class="sb-btn" href="/api/docs" title="API">{% icon "api" %}<span>API</span></a></li>
-        <li><a class="sb-btn" href="/admin/" title="Admin">{% icon "admin" %}<span>Admin</span></a></li>{% endif %}
+        <li><a class="sb-btn" href="/admin/" title="Admin">{% icon "admin" %}<span>Admin</span></a></li>
+        <li><a class="sb-btn" href="{{ airflow_url }}" title="Airflow">{% icon "airflow" %}<span>Airflow</span></a></li>{% endif %}
       </ul>
     </div>
   </nav>

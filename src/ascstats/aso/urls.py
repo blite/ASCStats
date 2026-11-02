@@ -16,6 +16,11 @@ urlpatterns = [
         name="app_keywords_manage",
     ),
     path(
+        "app/<int:apple_id>/keywords/delete/",
+        views.app_keywords_delete,
+        name="app_keywords_delete",
+    ),
+    path(
         "app/<int:apple_id>/keywords/<int:keyword_id>/",
         views.app_keyword,
         name="app_keyword",

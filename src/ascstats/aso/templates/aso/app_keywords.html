@@ -20,14 +20,15 @@
     {% if not demo %}<a class="btn" href="{% url 'app_keywords_manage' app.apple_id %}">Add keywords</a>{% endif %}
   </div>
   {% else %}
-  <form class="kw" hx-get="{% url_pattern 'app_keyword' 'app' 'keyword' %}" hx-params="none" hx-target="#keyword" hx-trigger="load, change">
+  <form class="kw" hx-get="{% url_pattern 'app_keyword' 'app' 'keyword' %}" hx-params="none" hx-target="#keyword" hx-trigger="load, change[target.name==='keyword']">
     <input type="hidden" name="app" value="{{ app.apple_id }}">
     <div class="scroll">
     <div class="kwt" role="radiogroup" aria-label="Keyword">
-      <div class="kwh"><span>Keyword</span><span class="num">Rank</span><span class="num">7 days</span><span>Last 30 days</span><span class="num">Popularity</span><span class="num">Difficulty</span><span class="num">Opportunity</span><span>Best competitor</span></div>
+      <div class="kwh">{% if not demo %}<input type="checkbox" class="pick" data-pick-all aria-label="Select all keywords">{% endif %}<span>Keyword</span><span class="num">Rank</span><span class="num">7 days</span><span>Last 30 days</span><span class="num">Popularity</span><span class="num">Difficulty</span><span class="num">Opportunity</span><span>Best competitor</span></div>
       {% for r in rows %}
       {% with sc=r.scores %}
       <label class="kwr" data-rank="{{ r.rank|default:'' }}" data-opportunity="{{ sc.opportunity|default:'' }}" data-popularity="{{ sc.popularity|default:'' }}" data-difficulty="{{ sc.difficulty|default:'' }}"><input type="radio" name="keyword" value="{{ r.keyword.pk }}"{% if forloop.first %} checked{% endif %}>
+        {% if not demo %}<input type="checkbox" class="pick" name="delete" value="{{ r.keyword.pk }}" form="kwdelete" aria-label="Select {{ r.keyword.term }}">{% endif %}
         <span class="term"><span class="flag" title="{{ r.country }}" aria-label="{{ r.country }}">{{ r.flag }}</span>{{ r.keyword.term }}</span>
         <span class="num rank">{% if r.rank %}#{{ r.rank }}{% elif r.date %}<span class="muted">{{ limit }}+</span>{% else %}<span class="muted">next search</span>{% endif %}</span>
         <span class="num">{% if r.change %}<span class="chip {% if r.change > 0 %}up{% else %}down{% endif %}">{% if r.change > 0 %}▲ {{ r.change }}{% else %}▼ {{ r.change|stringformat:"d"|cut:"-" }}{% endif %}</span>{% elif r.change == 0 %}<span class="muted">–</span>{% endif %}</span>
@@ -42,6 +43,12 @@
     </div>
     </div>
   </form>
+  {% if not demo %}
+  <form id="kwdelete" class="kwbar" method="post" action="{% url 'app_keywords_delete' app.apple_id %}">
+    <span class="muted" data-picked>Select keywords to stop tracking them.</span>
+    <button class="btn destructive sm" type="submit" disabled>Delete</button>
+  </form>
+  {% endif %}
   {% endif %}
 </section>
 {% if rows %}
@@ -58,9 +65,13 @@
   .kwh { height: 34px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); border-bottom: 1px solid var(--border); }
   .kwr { position: relative; min-height: 40px; border-radius: calc(var(--radius) - 4px); font-size: 14px; cursor: pointer; font-variant-numeric: tabular-nums; }
   .kwr:hover { background: var(--accent); }
-  .kwr:has(input:checked) { background: color-mix(in oklch, var(--primary) 12%, transparent); }
-  .kwr:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
-  .kwr input { position: absolute; opacity: 0; pointer-events: none; }
+  .kwr:has(.pick:checked) { background: var(--accent); }
+  .kwr:has(input[type=radio]:checked) { background: color-mix(in oklch, var(--primary) 12%, transparent); }
+  .kwr:has(input[type=radio]:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
+  .kwr input[type=radio] { position: absolute; opacity: 0; pointer-events: none; }
+  .kwt:has(.pick) :is(.kwh, .kwr) { grid-template-columns: 16px minmax(150px, 1.4fr) 56px 64px 108px 76px 76px 84px minmax(130px, 1fr); }
+  .pick { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); cursor: pointer; }
+  .kwbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 13px; }
   .kwr .term { display: flex; align-items: center; gap: 8px; font-weight: 500; }
   .kwr .rank { font-weight: 650; }
   .kwr .flag { font-size: 15px; }
@@ -96,6 +107,33 @@
         try { localStorage.setItem("kwsort", r.value); } catch (e) {}
       });
     });
+  })();
+
+  // Pick keywords to delete. The tab is cached, so the CSRF token is read from its cookie on submit.
+  (() => {
+    const bar = document.getElementById("kwdelete");
+    if (!bar) return;
+    const all = document.querySelector("[data-pick-all]");
+    const picks = [...document.querySelectorAll("input[name=delete]")];
+    const note = bar.querySelector("[data-picked]"), button = bar.querySelector("button");
+    const blank = note.textContent;
+    function update() {
+      const n = picks.filter(p => p.checked).length;
+      note.textContent = n ? `${n} of ${picks.length} selected` : blank;
+      button.disabled = !n;
+      all.checked = n === picks.length;
+      all.indeterminate = n > 0 && n < picks.length;
+    }
+    picks.forEach(p => p.addEventListener("change", update));
+    all.addEventListener("change", () => { picks.forEach(p => p.checked = all.checked); update(); });
+    bar.addEventListener("submit", e => {
+      const n = picks.filter(p => p.checked).length;
+      if (!confirm(`Stop tracking ${n} keyword${n === 1 ? "" : "s"}? Their saved ranks are kept.`)) return e.preventDefault();
+      const token = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+      const input = Object.assign(document.createElement("input"), {type: "hidden", name: "csrfmiddlewaretoken", value: token ? token[1] : ""});
+      bar.append(input);
+    });
+    update();
   })();
 </script>
 {% endblock %}
