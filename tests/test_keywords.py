@@ -10,7 +10,7 @@ from django.core.management.base import CommandError
 from django.test import override_settings
 
 import ascstats.stats
-from ascstats.aso import keywords, suggestions
+from ascstats.aso import keywords, suggestions, views
 from ascstats.aso.models import Competitor, Keyword, KeywordSnapshot
 from ascstats.stats.cache import data_version
 from ascstats.stats.models import App
@@ -142,6 +142,54 @@ def test_keywords_tab_ranks_you_and_your_competitors(client, seeded):
     assert client.get(f"/app/{SNAKE}/keywords/{sudoku_kw.pk}/").status_code == 404
 
 
+@pytest.mark.django_db
+def test_storefront_tabs_put_the_us_first_then_the_most_keywords(apps):
+    app = apps[0]
+    keywords.add(app, "química alberca", "mx")
+    keywords.add(app, "piscina", "it")
+    keywords.add(app, "chimie piscine\nentretien piscine", "fr")
+    keywords.add(app, "pool chemistry", "us")
+    fronts = keywords.storefronts(app)
+    assert [(f.code, f.count, f.country) for f in fronts] == [
+        ("us", 1, "United States"), ("fr", 2, "France"), ("it", 1, "Italy"), ("mx", 1, "Mexico"),
+    ]  # fmt: skip
+    assert [r.keyword.term for r in keywords.board(app, "fr")["rows"]] == [
+        "chimie piscine", "entretien piscine",
+    ]  # fmt: skip
+    assert keywords.board(app, "de")["rows"] == []  # not tracked there
+
+
+def test_keywords_tab_has_a_tab_per_storefront(client, seeded):
+    snake = App.objects.get(apple_id=SNAKE)
+    assert [(f.code, f.count) for f in keywords.storefronts(snake)] == [("us", 3), ("gb", 1)]
+    gb = keywords.board(snake, "gb")["rows"]
+    assert [(r.keyword.term, r.keyword.storefront) for r in gb] == [("snake game", "gb")]
+    assert {r.keyword.storefront for r in keywords.board(snake, "us")["rows"]} == {"us"}
+
+    def terms(page):
+        return re.findall(r'name="keyword" value="(\d+)"', page)
+
+    us_kw = {str(k.pk) for k in snake.keywords.filter(storefront="us")}
+    gb_kw = {str(k.pk) for k in snake.keywords.filter(storefront="gb")}
+    first = client.get(f"/app/{SNAKE}/keywords/").content.decode()
+    assert set(terms(first)) == us_kw  # the US first
+    assert f'href="/app/{SNAKE}/keywords/us/" aria-current="page"' in first
+    assert f'href="/app/{SNAKE}/keywords/gb/"' in first
+    page = client.get(f"/app/{SNAKE}/keywords/gb/").content.decode()
+    assert set(terms(page)) == gb_kw
+    assert f'href="/app/{SNAKE}/keywords/gb/" aria-current="page"' in page
+    assert f'"kwFront:{SNAKE}", "gb/"' in page  # remembered per browser, like the app tabs
+    assert 'name="storefront" value="gb"' in page  # deleting from here comes back here
+    # a storefront it no longer tracks (remembered by a browser) goes back to the first tab
+    gone = client.get(f"/app/{SNAKE}/keywords/fr/")
+    assert (gone.status_code, gone.url) == (302, f"/app/{SNAKE}/keywords/")
+    assert "Tracking <strong>1</strong> of <strong>4</strong> keywords" in page
+    # one storefront: a single pill, which names it
+    sudoku = client.get(f"/app/{SUDOKU}/keywords/").content.decode()
+    assert f'href="/app/{SUDOKU}/keywords/us/" aria-current="page" title="United States"' in sudoku
+    assert f"app/{SNAKE}/keywords/gb/" in views.export_paths(snake)  # the static demo has it
+
+
 def test_manage_keywords_page(client, seeded):
     snake = App.objects.get(apple_id=SNAKE)
     assert b"csrfmiddlewaretoken" in client.get(f"/app/{SNAKE}/keywords/manage/").content
@@ -174,6 +222,11 @@ def test_delete_picked_keywords_from_the_tab(client, seeded):
     assert done.url == f"/app/{SNAKE}/keywords/"
     assert set(snake.keywords.filter(pk__in=[first.pk, second.pk, kept.pk])) == {kept}
     assert sudoku.keywords.filter(pk=first.pk).exists()
+    gb = snake.keywords.get(storefront="gb")
+    back = client.post(f"/app/{SNAKE}/keywords/delete/", {"delete": [], "storefront": "gb"})
+    assert back.url == f"/app/{SNAKE}/keywords/gb/"  # back to the storefront's tab
+    client.post(f"/app/{SNAKE}/keywords/delete/", {"delete": [gb.pk], "storefront": "gb"})
+    assert not snake.keywords.filter(storefront="gb").exists()
     page = client.get(f"/app/{SNAKE}/keywords/").content.decode()
     assert f'value="{second.pk}" form="kwdelete"' not in page  # the cached tab was rebuilt
     with override_settings(DEMO_SITE=True):

@@ -71,10 +71,18 @@ def app_competitors_manage(request, apple_id):
 
 @ensure_csrf_cookie  # outside the cache: the delete form reads its token from the cookie
 @cached_page
-def app_keywords(request, apple_id):
-    """An app's Keywords tab: where it ranks for each term it tracks."""
+def app_keywords(request, apple_id, storefront=None):
+    """An app's Keywords tab: where it ranks for each term it tracks, one storefront at a time
+    (the first one, the US if tracked, without ``storefront``)."""
     app = _app(apple_id)
-    return render(request, "aso/app_keywords.html", _tab(app, "keywords") | kw.board(app))
+    fronts = kw.storefronts(app)
+    codes = [f.code for f in fronts]
+    if storefront is not None and storefront not in codes:  # say, one the browser remembered
+        return redirect("app_keywords", apple_id)  # that the app no longer tracks
+    front = storefront or (codes[0] if codes else None)
+    context = _tab(app, "keywords") | kw.board(app, front)
+    context |= {"fronts": fronts, "front": front, "total": sum(f.count for f in fronts)}
+    return render(request, "aso/app_keywords.html", context)
 
 
 @cached_page
@@ -92,6 +100,9 @@ def app_keywords_delete(request, apple_id):
     picked = [pk for pk in request.POST.getlist("delete") if pk.isdigit()]
     for keyword in app.keywords.filter(pk__in=picked):
         kw.remove(app, keyword)
+    front = request.POST.get("storefront", "")
+    if app.keywords.filter(storefront=front).exists():  # back to that storefront's tab
+        return redirect("app_keywords_front", apple_id, front)
     return redirect("app_keywords", apple_id)
 
 
@@ -127,6 +138,8 @@ def app_keywords_manage(request, apple_id):
 def export_paths(app: App) -> list[str]:
     """The pages the static demo writes for one app (``export_site``)."""
     tab = f"app/{app.apple_id}/"
-    return [f"{tab}competitors/", f"{tab}keywords/"] + [
-        f"{tab}keywords/{k.pk}/" for k in app.keywords.all()
-    ]
+    return (
+        [f"{tab}competitors/", f"{tab}keywords/"]
+        + [f"{tab}keywords/{f.code}/" for f in kw.storefronts(app)]
+        + [f"{tab}keywords/{k.pk}/" for k in app.keywords.all()]
+    )

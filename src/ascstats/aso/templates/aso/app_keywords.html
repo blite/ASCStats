@@ -20,6 +20,11 @@
     {% if not demo %}<a class="btn" href="{% url 'app_keywords_manage' app.apple_id %}">Add keywords</a>{% endif %}
   </div>
   {% else %}
+  <nav class="fronts" aria-label="Storefronts">
+    {% for f in fronts %}<a href="{% url 'app_keywords_front' app.apple_id f.code %}"{% if f.code == front %} aria-current="page"{% endif %} title="{{ f.country }}">{{ f.code|upper }}<span class="count">{{ f.count }}</span></a>{% endfor %}
+    {% if not demo %}<a class="add" href="{% url 'app_keywords_manage' app.apple_id %}" title="Track keywords in another storefront" aria-label="Track keywords in another storefront">+</a>{% endif %}
+    <span class="total">Tracking <strong>{{ rows|length }}</strong> of <strong>{{ total }}</strong> keywords</span>
+  </nav>
   <form class="kw" hx-get="{% url_pattern 'app_keyword' 'app' 'keyword' %}" hx-params="none" hx-target="#keyword" hx-trigger="load, change[target.name==='keyword']">
     <input type="hidden" name="app" value="{{ app.apple_id }}">
     <div class="scroll">
@@ -29,7 +34,7 @@
       {% with sc=r.scores %}
       <label class="kwr" data-rank="{{ r.rank|default:'' }}" data-opportunity="{{ sc.opportunity|default:'' }}" data-popularity="{{ sc.popularity|default:'' }}" data-difficulty="{{ sc.difficulty|default:'' }}"><input type="radio" name="keyword" value="{{ r.keyword.pk }}"{% if forloop.first %} checked{% endif %}>
         {% if not demo %}<input type="checkbox" class="pick" name="delete" value="{{ r.keyword.pk }}" form="kwdelete" aria-label="Select {{ r.keyword.term }}">{% endif %}
-        <span class="term"><span class="flag" title="{{ r.country }}" aria-label="{{ r.country }}">{{ r.flag }}</span>{{ r.keyword.term }}</span>
+        <span class="term">{{ r.keyword.term }}</span>
         <span class="num rank">{% if r.rank %}#{{ r.rank }}{% elif r.date %}<span class="muted">{{ limit }}+</span>{% else %}<span class="muted">next search</span>{% endif %}</span>
         <span class="num">{% if r.change %}<span class="chip {% if r.change > 0 %}up{% else %}down{% endif %}">{% if r.change > 0 %}▲ {{ r.change }}{% else %}▼ {{ r.change|stringformat:"d"|cut:"-" }}{% endif %}</span>{% elif r.change == 0 %}<span class="muted">–</span>{% endif %}</span>
         <span>{% if r.spark %}<svg viewBox="0 0 100 24" width="100" height="24" aria-label="Rank over the last 30 days{% if r.best %}, best #{{ r.best }}{% endif %}">{% for l in r.spark %}<polyline points="{{ l }}" fill="none" stroke="var(--chart-1)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>{% endfor %}</svg>{% endif %}</span>
@@ -45,6 +50,7 @@
   </form>
   {% if not demo %}
   <form id="kwdelete" class="kwbar" method="post" action="{% url 'app_keywords_delete' app.apple_id %}">
+    <input type="hidden" name="storefront" value="{{ front }}">
     <span class="muted" data-picked>Select keywords to stop tracking them.</span>
     <button class="btn destructive sm" type="submit" disabled>Delete</button>
   </form>
@@ -55,6 +61,16 @@
 <section class="card fade"><div id="keyword"><p class="muted">Loading…</p></div></section>
 {% endif %}
 <style>
+  /* a pill per storefront, the one shown filled */
+  .fronts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0 14px; }
+  .fronts a { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 14px; border: 1px solid var(--border);
+              border-radius: 999px; background: var(--background); color: var(--foreground); font-size: 14px; font-weight: 600;
+              text-decoration: none; transition: background-color .15s; }
+  .fronts a:hover { background: var(--accent); }
+  .fronts a[aria-current] { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+  .fronts .count { font-size: 12px; font-weight: 400; opacity: .65; font-variant-numeric: tabular-nums; }
+  .fronts .add { width: 32px; padding: 0; justify-content: center; font-weight: 400; font-size: 16px; color: var(--muted-foreground); }
+  .fronts .total { font-size: 13px; color: var(--muted-foreground); } .fronts .total strong { color: var(--foreground); font-weight: 600; }
   .kwt { min-width: 880px; }
   .kwh, .kwr { display: grid; grid-template-columns: minmax(150px, 1.4fr) 56px 64px 108px 76px 76px 84px minmax(130px, 1fr); gap: 10px; align-items: center; padding: 0 10px; }
   .score { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
@@ -74,7 +90,6 @@
   .kwbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 13px; }
   .kwr .term { display: flex; align-items: center; gap: 8px; font-weight: 500; }
   .kwr .rank { font-weight: 650; }
-  .kwr .flag { font-size: 15px; }
   .kwr svg { display: block; }
   .num { text-align: right; white-space: nowrap; }
   .ellip { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
@@ -82,6 +97,9 @@
   .empty p { margin: 0; font-size: 14px; color: var(--muted-foreground); } .empty strong { color: var(--foreground); }
 </style>
 <script>
+  // The storefront shown is where the next link to this app's Keywords tab lands (base.html).
+  {% if front %}try { localStorage.setItem("kwFront:{{ app.apple_id }}", "{{ front }}/"); } catch (e) {}{% endif %}
+
   // Sort the keyword rows in the page (so the static demo sorts too); the choice is kept per browser.
   (() => {
     const table = document.querySelector(".kwt");

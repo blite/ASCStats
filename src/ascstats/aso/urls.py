@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, re_path
 
 from . import views
 
@@ -19,6 +19,11 @@ urlpatterns = [
         "app/<int:apple_id>/keywords/delete/",
         views.app_keywords_delete,
         name="app_keywords_delete",
+    ),
+    re_path(  # a storefront's tab; two letters, so never "manage" or a keyword's id
+        r"^app/(?P<apple_id>[0-9]+)/keywords/(?P<storefront>[a-z]{2})/$",
+        views.app_keywords,
+        name="app_keywords_front",
     ),
     path(
         "app/<int:apple_id>/keywords/<int:keyword_id>/",

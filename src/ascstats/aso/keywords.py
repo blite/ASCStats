@@ -282,13 +282,39 @@ class Row:
         return name(self.keyword.storefront)
 
 
-def board(app: App) -> dict:
-    """One row per keyword the app tracks: its rank today, the change since a week before, a
-    30-day sparkline, the best-placed competitor and who leads."""
+@dataclass
+class Storefront:
+    """A storefront the app tracks keywords in: one tab above the keyword table."""
+
+    code: str
+    count: int
+
+    @property
+    def country(self) -> str:
+        return name(self.code)
+
+
+def storefronts(app: App) -> list[Storefront]:
+    """The storefronts ``app`` tracks keywords in: the US first, then the most keywords first
+    (ties by country name)."""
+    counts: dict[str, int] = {}
+    for code in app.keywords.values_list("storefront", flat=True):
+        counts[code] = counts.get(code, 0) + 1
+    fronts = [Storefront(code, n) for code, n in counts.items()]
+    return sorted(fronts, key=lambda f: (f.code != "us", -f.count, f.country))
+
+
+def board(app: App, storefront: str | None = None) -> dict:
+    """One row per keyword the app tracks (in ``storefront``, or in every storefront): its rank
+    today, the change since a week before, a 30-day sparkline, the best-placed competitor and
+    who leads."""
     you = app.apple_id
     rivals = {p.apple_id: p.name for p in players(app)[1:]}
     rows = []
-    keywords = list(app.keywords.all())
+    keywords = app.keywords.all()
+    if storefront is not None:
+        keywords = keywords.filter(storefront=storefront)
+    keywords = list(keywords)
     looks = latest_suggestions(keywords)
     for k in keywords:
         snaps = list(k.snapshots.order_by("date"))

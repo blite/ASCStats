@@ -244,13 +244,22 @@
   // apps keeps you on Ratings (say). Per browser; app pages are plain /app/<id>/ paths.
   const tabBar = document.querySelector("[data-app-tab]");
   if (tabBar) try { localStorage.setItem("appTab", tabBar.dataset.appTab); } catch (e) {}
+  // Keywords links land on the storefront last opened for that app, the same way.
   function pointAppLinks(root) {
     let tab = "";
     try { tab = localStorage.getItem("appTab") || ""; } catch (e) {}
-    if (!/^(ratings|reviews|keywords|competitors)\/$/.test(tab)) return;
+    const known = /^(ratings|reviews|keywords|competitors)\/$/.test(tab);
     root.querySelectorAll("a[href]").forEach(a => {
-      if (a.closest(".tablist")) return;  // the tab bar's own Stats link stays Stats
-      if (/\/app\/\d+\/$/.test(a.getAttribute("href"))) a.setAttribute("href", a.getAttribute("href") + tab);
+      let href = a.getAttribute("href");
+      const inTabs = a.closest(".tablist");  // the tab bar's own Stats link stays Stats
+      if (known && !inTabs && /\/app\/\d+\/$/.test(href)) href += tab;
+      const app = href.match(/\/app\/(\d+)\/keywords\/$/);
+      if (app) {
+        let front = "";
+        try { front = localStorage.getItem(`kwFront:${app[1]}`) || ""; } catch (e) {}
+        if (/^[a-z]{2}\/$/.test(front)) href += front;
+      }
+      a.setAttribute("href", href);
     });
   }
   pointAppLinks(document);
