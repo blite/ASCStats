@@ -128,8 +128,9 @@ def test_the_rebuild_follows_each_import():
     assert ("derived", {}) not in queued()  # one is waiting already
     DBTaskResult.objects.update(status="SUCCESSFUL", finished_at=NOW)
     assert ("derived", {}) not in queued(NOW + timedelta(minutes=15))  # nothing new landed
-    IngestionRun.objects.update(finished_at=NOW + timedelta(hours=1))
-    assert ("derived", {}) in queued(NOW + timedelta(hours=1))
+    later = datetime.now(UTC) + timedelta(hours=1)  # after the rebuild, by the real clock
+    IngestionRun.objects.update(finished_at=later)
+    assert ("derived", {}) in queued(later)
 
 
 @pytest.mark.django_db
