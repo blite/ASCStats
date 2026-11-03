@@ -35,7 +35,7 @@ configMapGenerator:
       - DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost:8000
       # The jobs the schedule CronJob queues (stats/schedule.py); the others still run in
       # Airflow while they move over, one at a time.
-      - SCHEDULED_JOBS=sales,derived,restatement
+      - SCHEDULED_JOBS=sales,derived,restatement,asc_daily,store_daily
 
 # Dev-only credentials so the stack comes up with one command. For any shared cluster delete
 # this generator and create the Secrets from secrets/*.example.yaml (or External Secrets).
