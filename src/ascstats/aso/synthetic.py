@@ -196,3 +196,18 @@ def suggestions(term: str, storefront: str) -> dict:
     prefix = rng.randint(2, min(6, len(term) - 1))
     return {"reach": "hit", "prefix": prefix, "position": rng.randint(1, 4),
             "continuations": rng.randint(2, 14), "requests": 2 + prefix}  # fmt: skip
+
+
+# The words a made-up store suggests after a term: some are searches, some other apps' names
+_CONTINUATIONS = (
+    "online", "with friends", "classic", "free", "multiplayer", "offline", "royale", "pro",
+    "card game", "for kids", "puzzle", "plus", "music player", "deluxe",
+)  # fmt: skip
+
+
+def hints(term: str, storefront: str) -> list[str]:
+    """The store's suggestions for what has been typed, shaped like ``store.hints``: the term
+    itself, then a few continuations that depend on (term, storefront)."""
+    rng = _rng("hints", term, storefront)
+    picks = rng.sample(_CONTINUATIONS, rng.randint(3, 8))
+    return [term.strip()] + [f"{term.strip()} {p}" for p in picks]

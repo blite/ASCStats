@@ -1,0 +1,37 @@
+<div class="ideas" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <div class="card-head">
+    <div>
+      <h2>Suggestions</h2>
+      <p class="sub">What the App Store suggests as people type {{ app.name }}'s keywords{% if front %} in {{ front|upper }}{% endif %}, and the phrases several of its competitors put in their names. Only suggestions with a word from the app's name are kept, so “offline music” never comes from “spades offline”. Asking is live, so a look takes a few seconds and is kept for the day.</p>
+    </div>
+    <form class="filters" hx-post="{% url 'app_keyword_ideas_look' app.apple_id front %}" hx-target="closest section" hx-disabled-elt="find button" hx-indicator="closest .ideas">
+      <button class="btn outline sm" type="submit">{% if looked %}Look again{% else %}Find suggestions{% endif %}</button>
+      <button class="btn ghost sm" type="submit" name="deep" value="1" title="Ask with more of your keywords and competitor phrases: about half a minute">Deep look</button>
+    </form>
+  </div>
+  <p class="asking muted">Asking the App Store…</p>
+  {% if error %}<div class="alert destructive" role="alert"><div>{{ error }}</div></div>{% endif %}
+  {% if looked and not error %}
+  <p class="ideas-meta muted">{{ ideas|length }} suggestion{{ ideas|length|pluralize }} from {{ asked }} {% if deep %}deep {% endif %}look{{ asked|pluralize }}{% if room <= 0 %} · {{ app.name }} tracks as many keywords as it can{% endif %}</p>
+  {% for i in ideas %}
+  <div class="idea">
+    <span class="term">{{ i.term }}{% if i.brand %} <span class="chip" title="An app it follows is named this: a search for their app, rarely for yours">competitor's name</span>{% endif %}</span>
+    <span class="from muted">from {% for s in i.seeds|slice:":3" %}“{{ s }}”{% if not forloop.last %}, {% endif %}{% endfor %}{% if i.seeds|length > 3 %} and {{ i.seeds|length|add:"-3" }} more{% endif %}{% if i.competitors %} · in {{ i.competitors }} competitors' names{% endif %}</span>
+    {% if room > 0 %}<form hx-post="{% url 'app_keyword_ideas_track' app.apple_id front %}" hx-target="this" hx-swap="outerHTML"><input type="hidden" name="term" value="{{ i.term }}"><button class="btn outline sm" type="submit">+ Track</button></form>{% endif %}
+  </div>
+  {% empty %}
+  <p class="muted">Nothing new: the store suggests only what {{ app.name }} tracks already{% if not deep %}. A deep look asks with more seeds{% endif %}.</p>
+  {% endfor %}
+  {% endif %}
+</div>
+<style>
+  .ideas .asking { display: none; margin: 8px 0; }
+  .ideas.htmx-request .asking { display: block; }
+  .ideas-meta { font-size: 13px; margin: 8px 0 4px; }
+  .idea { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; min-height: 44px; border-top: 1px solid var(--border); font-size: 14px; }
+  .idea .term { font-weight: 500; min-width: 0; }
+  .idea .chip { font-size: 11px; font-weight: 400; color: var(--muted-foreground); }
+  .idea .from { font-size: 12px; text-align: right; }
+  .idea-note { font-size: 13px; } .idea-note.ok { color: var(--muted-foreground); } .idea-note.err { color: var(--bad-text); }
+  @media (max-width: 640px) { .idea { grid-template-columns: minmax(0, 1fr) auto; } .idea .from { display: none; } }
+</style>

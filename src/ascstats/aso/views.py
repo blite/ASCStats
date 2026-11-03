@@ -17,7 +17,7 @@ from ascstats.stats.ratings import storefronts
 from ascstats.stats.territories import name
 
 from . import competitors as cp
-from . import jobs
+from . import ideas, jobs
 from . import keywords as kw
 
 
@@ -104,6 +104,43 @@ def app_keywords_delete(request, apple_id):
     if app.keywords.filter(storefront=front).exists():  # back to that storefront's tab
         return redirect("app_keywords_front", apple_id, front)
     return redirect("app_keywords", apple_id)
+
+
+def _ideas(request, app, storefront, found: dict | None, deep: bool = False):
+    context = {"app": app, "front": storefront, "deep": deep} | (found or {})
+    return render(request, "aso/_ideas.html", context | {"looked": found is not None})
+
+
+def app_keyword_ideas(request, apple_id, storefront):
+    """The Suggestions card: today's look if there was one, else the button that looks. Not
+    cached: it carries this session's CSRF token, and the look is kept for the day anyway."""
+    app = _editable(apple_id)
+    found = ideas.cached(app, storefront, deep=True)
+    deep = found is not None
+    return _ideas(
+        request, app, storefront, found or ideas.cached(app, storefront, deep=False), deep
+    )
+
+
+@require_POST
+def app_keyword_ideas_look(request, apple_id, storefront):
+    """Ask the store for ideas now: a few seconds, or longer for a deep look."""
+    app = _editable(apple_id)
+    deep = bool(request.POST.get("deep"))
+    return _ideas(request, app, storefront, ideas.look(app, storefront, deep=deep), deep)
+
+
+@require_POST
+def app_keyword_ideas_track(request, apple_id, storefront):
+    """Track one suggested term, then show its row as tracked."""
+    app = _editable(apple_id)
+    term = request.POST.get("term", "")
+    try:
+        keyword = kw.add(app, term.replace(",", " "), storefront)[0]  # one term, never a list
+    except kw.KeywordError as error:
+        return render(request, "aso/_idea_tracked.html", {"term": term, "error": str(error)})
+    jobs.search_keyword.enqueue(keyword.pk)
+    return render(request, "aso/_idea_tracked.html", {"term": keyword.term})
 
 
 def app_keywords_manage(request, apple_id):

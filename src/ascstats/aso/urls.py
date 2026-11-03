@@ -25,6 +25,21 @@ urlpatterns = [
         views.app_keywords,
         name="app_keywords_front",
     ),
+    re_path(  # the Suggestions card under a storefront's tab, and its two forms
+        r"^app/(?P<apple_id>[0-9]+)/keywords/(?P<storefront>[a-z]{2})/ideas/$",
+        views.app_keyword_ideas,
+        name="app_keyword_ideas",
+    ),
+    re_path(
+        r"^app/(?P<apple_id>[0-9]+)/keywords/(?P<storefront>[a-z]{2})/ideas/look/$",
+        views.app_keyword_ideas_look,
+        name="app_keyword_ideas_look",
+    ),
+    re_path(
+        r"^app/(?P<apple_id>[0-9]+)/keywords/(?P<storefront>[a-z]{2})/ideas/track/$",
+        views.app_keyword_ideas_track,
+        name="app_keyword_ideas_track",
+    ),
     path(
         "app/<int:apple_id>/keywords/<int:keyword_id>/",
         views.app_keyword,
