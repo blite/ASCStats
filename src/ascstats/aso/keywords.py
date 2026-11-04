@@ -42,7 +42,7 @@ FAILURES_TO_STOP = 2  # searches failing in a row before the run stops for the d
 TOP = 25  # results kept with their names: the popularity model reads 25, the list shows 10
 WEEK = 7
 SPARK_DAYS = 30
-LEADERS = 5  # first results a keyword's menu lists when no competitor places
+FIRST_PAGE = 10  # results a keyword's menu lists, yours and your competitors' marked
 HISTORY_DAYS = 90  # days in the rank chart
 
 
@@ -269,10 +269,15 @@ class Row:
     change: int | None = None  # positions gained since a week before (negative: lost)
     best: int | None = None  # best rank in the sparkline window
     rivals: list[tuple[int, str, int]] = field(default_factory=list)  # (rank, name, apple_id)
-    leaders: list[dict] = field(default_factory=list)  # today's first results, when no rival places
+    top: list[dict] = field(default_factory=list)  # first results, "who": you, rival or None
     results: int = 0
     spark: list[str] = field(default_factory=list)
     scores: Scores = field(default_factory=Scores)
+
+    @property
+    def further(self) -> list[tuple[int, str, int]]:
+        """Competitors placed today below the first page the menu lists."""
+        return [r for r in self.rivals if r[0] > FIRST_PAGE]
 
     @property
     def flag(self) -> str:
@@ -308,7 +313,7 @@ def storefronts(app: App) -> list[Storefront]:
 def board(app: App, storefront: str | None = None) -> dict:
     """One row per keyword the app tracks (in ``storefront``, or in every storefront): its rank
     today, the change since a week before, a 30-day sparkline, the competitors placed today
-    (best first) and, when none is, the first results."""
+    (best first) and the first results, whoever they are."""
     you = app.apple_id
     rivals = {p.apple_id: p.name for p in players(app)[1:]}
     rows = []
@@ -331,9 +336,11 @@ def board(app: App, storefront: str | None = None) -> dict:
             row.best = min(filter(None, ranks), default=None)
             row.spark = _spark(ranks)
             row.rivals = sorted((r, n, i) for i, n in rivals.items() if (r := latest.rank(i)))
-            if not row.rivals:
-                others = [(n, r) for n, r in enumerate(latest.top, 1) if r["id"] != you]
-                row.leaders = [r | {"rank": n} for n, r in others[:LEADERS]]
+            who = {you: "you"} | dict.fromkeys(rivals, "rival")
+            row.top = [
+                r | {"rank": n, "who": who.get(r["id"])}
+                for n, r in enumerate(latest.top[:FIRST_PAGE], 1)
+            ]
         rows.append(row)
     rows.sort(key=lambda r: (r.rank is None, r.rank or 0, r.keyword.term))
     return {

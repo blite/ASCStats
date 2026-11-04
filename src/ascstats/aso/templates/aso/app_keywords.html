@@ -47,7 +47,7 @@
         <span class="num score" title="{% if sc.estimated %}From the results alone: the suggestions are looked at weekly{% else %}Suggestions looked at {{ sc.suggestion.date|date:'M j' }}{% endif %}">{% if sc.popularity is not None %}{% if sc.estimated %}<span class="est">~</span>{% endif %}{{ sc.popularity }}<i style="--v:{{ sc.popularity }}"></i>{% else %}<span class="muted">–</span>{% endif %}</span>
         <span class="num score">{% if sc.difficulty is not None %}{{ sc.difficulty }}<i class="hard" style="--v:{{ sc.difficulty }}"></i>{% else %}<span class="muted">–</span>{% endif %}</span>
         <span class="num score">{% if sc.opportunity is not None %}<strong>{{ sc.opportunity }}</strong><i class="opp" style="--v:{{ sc.opportunity }}"></i>{% else %}<span class="muted">–</span>{% endif %}</span>
-        <button type="button" class="iconbtn" popovertarget="kwm-{{ r.keyword.pk }}" aria-label="Competitors and actions for {{ r.keyword.term }}" title="Competitors and actions">{% icon "more" %}</button>
+        <button type="button" class="iconbtn" popovertarget="kwm-{{ r.keyword.pk }}" aria-label="Top results and actions for {{ r.keyword.term }}" title="Top results and actions">{% icon "more" %}</button>
       </label>
       {% endwith %}
       {% endfor %}
@@ -56,14 +56,11 @@
   </form>
   {% for r in rows %}
   <div id="kwm-{{ r.keyword.pk }}" class="kwmenu" popover>
-    <p class="mh">Best competitors <span class="muted">· “{{ r.keyword.term }}”</span></p>
-    {% if r.rivals %}
-    <ol>{% for rank, name, id in r.rivals|slice:":8" %}<li><span class="pos">#{{ rank }}</span><a class="ellip" href="https://apps.apple.com/{{ r.keyword.storefront }}/app/id{{ id }}" target="_blank" rel="noopener">{{ name }}</a></li>{% endfor %}</ol>
-    {% if r.rivals|length > 8 %}<p class="mnote">and {{ r.rivals|length|add:"-8" }} more in the top {{ limit }}</p>{% endif %}
-    {% elif r.leaders %}
-    <p class="mnote">None of your competitors is in the top {{ limit }}. Leading today:</p>
-    <ol>{% for l in r.leaders %}<li><span class="pos">#{{ l.rank }}</span><a class="ellip" href="https://apps.apple.com/{{ r.keyword.storefront }}/app/id{{ l.id }}" target="_blank" rel="noopener">{{ l.name }}</a>{% if l.ratings %}<small>{{ l.ratings|intcomma }}</small>{% endif %}</li>{% endfor %}</ol>
-    {% elif r.date %}<p class="mnote">No competitor in the top {{ limit }} today.</p>
+    <p class="mh">Top {{ r.top|length|default:10 }} today <span class="muted">· “{{ r.keyword.term }}”</span></p>
+    {% if r.top %}
+    <ol>{% for t in r.top %}<li{% if t.who %} class="{{ t.who }}"{% endif %}><span class="pos">#{{ t.rank }}</span><a class="ellip" href="https://apps.apple.com/{{ r.keyword.storefront }}/app/id{{ t.id }}" target="_blank" rel="noopener">{{ t.name }}</a>{% if t.who == "you" %}<small>You</small>{% elif t.who == "rival" %}<small>Following</small>{% elif t.ratings %}<small>{{ t.ratings|intcomma }}</small>{% endif %}</li>{% endfor %}</ol>
+    {% with r.further as further %}{% if further %}<p class="mnote">{% with further.0 as f %}Your competitors further down: {{ f.1 }} at #{{ f.0 }}{% endwith %}{% if further|length > 1 %} and {{ further|length|add:"-1" }} more{% endif %}</p>{% endif %}{% endwith %}
+    {% elif r.date %}<p class="mnote">No results for this term today.</p>
     {% else %}<p class="mnote">Not searched yet: the next daily search fills this in.</p>{% endif %}
     <hr>
     <button type="button" class="mi" data-show="{{ r.keyword.pk }}">{% icon "chart" %}Rank history and top results</button>
@@ -124,6 +121,7 @@
   .kwmenu .pos { width: 34px; flex: none; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
   .kwmenu a { flex: 1; color: inherit; text-decoration: none; } .kwmenu a:hover { text-decoration: underline; }
   .kwmenu small { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  .kwmenu li.you a { font-weight: 650; } .kwmenu li.you small, .kwmenu li.rival small { font-variant-numeric: normal; }
   .kwmenu hr { margin: 6px -6px; border: 0; border-top: 1px solid var(--border); }
   .mi { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: calc(var(--radius) - 4px);
         background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }

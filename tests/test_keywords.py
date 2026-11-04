@@ -134,13 +134,17 @@ def test_keywords_tab_ranks_you_and_your_competitors(client, seeded):
     assert all(r.rivals == sorted(r.rivals) for r in board["rows"])  # best placed first
     page = client.get(f"/app/{SNAKE}/keywords/").content.decode()
     assert "snake game" in page
-    # each row's menu lists its competitors, best first, and can stop tracking the keyword
+    # each row's menu lists the first page of results, whoever they are, with you and your
+    # competitors marked, and can stop tracking the keyword
     assert page.count('class="kwmenu" popover') == len(keywords.board(snake, "us")["rows"])
     placed = next(r for r in keywords.board(snake, "us")["rows"] if r.rivals)
-    rank, name, _ = placed.rivals[0]
+    assert [t["rank"] for t in placed.top] == list(range(1, len(placed.top) + 1))
+    assert len(placed.top) == min(keywords.FIRST_PAGE, placed.results)
+    rivals = {i for _, _, i in placed.rivals}
+    assert all((t["who"] == "rival") == (t["id"] in rivals) for t in placed.top)
     menu = page.split(f'id="kwm-{placed.keyword.pk}"')[1].split("</div>")[0]
-    assert f'<span class="pos">#{rank}</span>' in menu
-    assert name in menu
+    for t in placed.top:
+        assert f'<span class="pos">#{t["rank"]}</span>' in menu
     assert f'data-untrack="{placed.keyword.pk}"' in menu
     assert 'hx-get="/app/{app}/keywords/{keyword}/"' in page
     k = Keyword.objects.get(term="snake game", storefront="us")
