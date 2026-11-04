@@ -143,6 +143,43 @@ def test_keywords_tab_ranks_you_and_your_competitors(client, seeded):
 
 
 @pytest.mark.django_db
+def test_keyword_tiles_count_the_top_10_and_the_week_s_movement(apps):
+    snake, sudoku = apps[0], apps[1]
+    week = date(2026, 10, 3)
+    searches = {  # term: (ids a week before, ids on DAY); SNAKE's rank is its position
+        "climbs into top 10": ([9] * 11 + [SNAKE], [SNAKE]),
+        "falls out of top 10": ([SNAKE], [9] * 11 + [SNAKE]),
+        "enters the results": ([9], [9, SNAKE]),
+        "leaves the results": ([SNAKE], [9]),
+        "stays put": ([9, SNAKE], [9, SNAKE]),
+    }
+    for term, (old, now) in searches.items():
+        k = keywords.add(snake, term)[0]
+        KeywordSnapshot.objects.create(keyword=k, date=week, ids=old)
+        KeywordSnapshot.objects.create(keyword=k, date=DAY, ids=now)
+    keywords.add(snake, "never searched")
+    k = keywords.add(sudoku, "only today")[0]
+    KeywordSnapshot.objects.create(keyword=k, date=DAY, ids=[SUDOKU])
+    s = keywords.summary([snake])
+    assert (s.tracked, s.top10, s.compared, s.top10_change) == (6, 3, 5, 0)
+    assert (s.up, s.down, s.new, s.lost) == (2, 2, 1, 1)
+    assert s.date == DAY
+    s = keywords.summary([snake, sudoku])
+    assert (s.tracked, s.top10, s.compared) == (7, 4, 5)  # no week before: top 10 only
+    assert keywords.summary([snake], "gb").tracked == 0
+
+
+@pytest.mark.django_db
+def test_keyword_tiles_on_the_overview_and_the_keywords_tab(client, seeded):
+    overview = client.get("/").content.decode()
+    assert "Keywords in the top 10" in overview
+    assert "Keyword movement" in overview
+    tab = client.get(f"/app/{SNAKE}/keywords/us/").content.decode()
+    assert "Keywords in the top 10" in tab
+    assert "in 7 days" in tab  # 30 seeded days: a week to compare against
+
+
+@pytest.mark.django_db
 def test_storefront_tabs_put_the_us_first_then_the_most_keywords(apps):
     app = apps[0]
     keywords.add(app, "química alberca", "mx")

@@ -82,6 +82,7 @@ def app_keywords(request, apple_id, storefront=None):
     front = storefront or (codes[0] if codes else None)
     context = _tab(app, "keywords") | kw.board(app, front)
     context |= {"fronts": fronts, "front": front, "total": sum(f.count for f in fronts)}
+    context["kw_summary"] = kw.summary([app], front) if front else None
     return render(request, "aso/app_keywords.html", context)
 
 
@@ -170,6 +171,12 @@ def app_keywords_manage(request, apple_id):
         "picked": request.POST.get("storefront", "us"),
     }
     return render(request, "aso/app_keywords_manage.html", context)
+
+
+def dashboard_tiles(apps: list[App]) -> tuple[str, kw.Summary] | None:
+    """The Overview's keyword tiles, across every app; none until some app tracks a keyword."""
+    found = kw.summary(apps)
+    return ("aso/_keyword_tiles.html", found) if found.tracked else None
 
 
 def export_paths(app: App) -> list[str]:

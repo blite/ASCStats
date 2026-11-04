@@ -37,6 +37,7 @@
       </div>
       <div class="note">downloads vs each app's own pre-release trend</div>
     </div>
+    {% for template, more in more_tiles %}{% include template with tile=more %}{% endfor %}
   </div>
 
   <section class="card fade">

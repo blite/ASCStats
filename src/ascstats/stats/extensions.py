@@ -3,7 +3,7 @@
 ``aso`` (competitors, keywords) uses them all: its competitors ride in the ratings snapshot's
 Lookup requests, its keyword searches follow it in the daily store job, its tables refresh
 cached pages, the synthetic seed creates its demo data, and the static export renders its
-pages.
+pages, and its keyword tiles join the Overview's.
 """
 
 from __future__ import annotations
@@ -34,3 +34,6 @@ synthetic_setup: list[Callable[[], None]] = []  # seed_synthetic, once before th
 synthetic_day: list[Callable[[date], None]] = []  # seed_synthetic, for every day seeded
 export_paths: list[Callable[[object], list[str]]] = []  # export_site, per app: more pages
 daily_store_steps: list[Callable[[], None]] = []  # jobs.store_daily, after the ratings
+# the Overview, after its tiles: (template, tile) for more, given the active apps; None: none.
+# The template is included with ``tile`` set.
+dashboard_tiles: list[Callable[[list], tuple[str, object] | None]] = []

@@ -6,6 +6,7 @@ from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from . import dashboard as d
+from . import extensions
 from . import funnel as f
 from . import rating_trends as rtr
 from . import ratings as rt
@@ -33,6 +34,7 @@ def dashboard(request, days=DEFAULT_PERIOD):
     period = _period(end, days)
     tiles = d.tiles(end, period)
     board = d.scoreboard(end)
+    apps = list(App.objects.active())
     context = {
         "page": "overview",
         "end": end,
@@ -40,8 +42,9 @@ def dashboard(request, days=DEFAULT_PERIOD):
         "tiles": tiles,
         "board": board,
         "calendar": d.pipeline_calendar(end),
-        "activity": rt.recent_activity(list(App.objects.active()), end, period.days),
-        "app_count": App.objects.active().count(),
+        "activity": rt.recent_activity(apps, end, period.days),
+        "app_count": len(apps),
+        "more_tiles": [t for hook in extensions.dashboard_tiles if (t := hook(apps))],
         "best": max(
             (r for r in board.releases if r["kind"] == "up"),
             key=lambda r: r["impact"].deltas[1].change_pct,

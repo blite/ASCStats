@@ -31,3 +31,4 @@ class AsoConfig(AppConfig):
         extensions.synthetic_setup += [competitors.seed_synthetic, keywords.seed_synthetic]
         extensions.synthetic_day += [keywords.seed_day, suggestions.seed_day]
         extensions.export_paths.append(views.export_paths)
+        extensions.dashboard_tiles.append(views.dashboard_tiles)

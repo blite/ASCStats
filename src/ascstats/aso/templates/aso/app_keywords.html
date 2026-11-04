@@ -1,6 +1,7 @@
 {% extends "stats/app_base.html" %}{% load humanize stats_extras %}
 {% block tab_title %}Keywords{% endblock %}
 {% block tab %}
+{% if kw_summary.tracked %}<div class="grid4">{% include "aso/_keyword_tiles.html" with tile=kw_summary %}</div>{% endif %}
 <section class="card fade">
   <div class="card-head">
     <div>

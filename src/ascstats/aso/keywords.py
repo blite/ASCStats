@@ -346,6 +346,65 @@ def board(app: App, storefront: str | None = None) -> dict:
     }  # fmt: skip
 
 
+@dataclass
+class Summary:
+    """The keyword tiles: how many tracked keywords an app
+    ranks in the top 10 for, and how many climbed or fell since a week before."""
+
+    tracked: int = 0  # (app, keyword) pairs
+    top10: int = 0
+    compared: int = 0  # pairs with a search a week before their latest
+    top10_change: int = 0  # among those compared
+    up: int = 0  # climbed, counting the new
+    down: int = 0  # fell, counting the lost
+    new: int = 0  # in the results now, not a week before
+    lost: int = 0  # in the results a week before, not now
+    date: date | None = None
+
+
+def summary(apps: list[App], storefront: str | None = None) -> Summary:
+    """The keyword tiles for ``apps`` (in ``storefront``, or in every storefront): each pair's
+    latest search against its latest a week or more before, as the Keywords tab's 7-day
+    column compares them."""
+    pairs = Keyword.tracked_for.through.objects.filter(app__in=apps)
+    if storefront is not None:
+        pairs = pairs.filter(keyword__storefront=storefront)
+    pairs = list(pairs.values_list("keyword_id", "app__apple_id"))
+    out = Summary(tracked=len(pairs))
+    if not pairs:
+        return out
+    searches: dict[int, list[tuple[date, list[int]]]] = {}
+    snaps = KeywordSnapshot.objects.filter(keyword_id__in={k for k, _ in pairs}).order_by("date")
+    last = snaps.values_list("date", flat=True).last()
+    if last is None:
+        return out
+    since = last - timedelta(days=SPARK_DAYS)  # a keyword not searched for a month is left out
+    for k, day, ids in snaps.filter(date__gte=since).values_list("keyword_id", "date", "ids"):
+        searches.setdefault(k, []).append((day, ids))
+    out.date = last
+
+    def rank(ids: list[int], apple_id: int) -> int | None:
+        return ids.index(apple_id) + 1 if apple_id in ids else None
+
+    for k, you in pairs:
+        if k not in searches:
+            continue
+        day, ids = searches[k][-1]
+        now = rank(ids, you)
+        out.top10 += bool(now and now <= 10)
+        before = [s for s in searches[k] if s[0] <= day - timedelta(days=WEEK)]
+        if not before:
+            continue
+        old = rank(before[-1][1], you)
+        out.compared += 1
+        out.top10_change += bool(now and now <= 10) - bool(old and old <= 10)
+        out.new += bool(now and not old)
+        out.lost += bool(old and not now)
+        out.up += bool(now and (not old or now < old))
+        out.down += bool(old and (not now or now > old))
+    return out
+
+
 W, H, PAD_L, PAD_R, PAD_T, PAD_B = 1000, 240, 40, 12, 12, 22
 
 

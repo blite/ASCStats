@@ -1,0 +1,16 @@
+{% load humanize %}{% with s=tile %}
+  <div class="card tile kwtile fade">
+    <div class="label">Keywords in the top 10</div>
+    <div class="value">{{ s.top10|intcomma }}{% if s.compared %} <span class="chip {% if s.top10_change > 0 %}up{% elif s.top10_change < 0 %}down{% else %}flat{% endif %}">{% if s.top10_change > 0 %}▲ {{ s.top10_change }}{% elif s.top10_change < 0 %}▼ {{ s.top10_change|stringformat:"d"|cut:"-" }}{% else %}● 0{% endif %}</span>{% endif %}</div>
+    <div class="note">of {{ s.tracked|intcomma }} tracked{% if s.compared %} · change in 7 days{% elif s.date %} · no 7-day data yet{% endif %}</div>
+  </div>
+  <div class="card tile kwtile fade" style="animation-delay: 100ms">
+    <div class="label">Keyword movement</div>
+    <div class="value">{% if s.compared %}<span class="mv up" aria-label="{{ s.up }} climbed">↑{{ s.up }}</span> <span class="mv down" aria-label="{{ s.down }} fell">↓{{ s.down }}</span>{% else %}<span class="muted">–</span>{% endif %}</div>
+    <div class="note">{% if s.compared %}{{ s.new }} new · {{ s.lost }} lost in 7 days{% else %}starts a week after the first search{% endif %}</div>
+  </div>
+{% endwith %}
+<style>
+  .kwtile .value .chip { font-size: 13px; vertical-align: middle; letter-spacing: 0; }
+  .kwtile .mv.up { color: var(--up); } .kwtile .mv.down { color: var(--down); }
+</style>
