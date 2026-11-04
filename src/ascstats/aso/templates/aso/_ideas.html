@@ -1,8 +1,8 @@
-<div class="ideas" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+{% load stats_extras %}<div class="ideas" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   <div class="card-head">
     <div>
-      <h2>Suggestions</h2>
-      <p class="sub">What the App Store suggests as people type {{ app.name }}'s keywords{% if front %} in {{ front|upper }}{% endif %}, and the phrases several of its competitors put in their names. Only suggestions with a word from the app's name are kept, so “offline music” never comes from “spades offline”. Asking is live, so a look takes a few seconds and is kept for the day.</p>
+      <h2>Suggestions<button type="button" class="info" aria-label="About suggestions" data-tip="Suggestions&#10;What the App Store suggests as people type {{ app.name }}'s keywords, and the phrases several of its competitors put in their names.&#10;Only suggestions with a word from the app's name are kept, so “offline music” never comes from “spades offline”.&#10;Asking is live: a look takes a few seconds, a deep look about half a minute, and each is kept for the day.">{% icon "info" %}</button></h2>
+      <p class="sub">App Store autocomplete{% if front %} · {{ front|upper }}{% endif %}</p>
     </div>
     <form class="filters" hx-post="{% url 'app_keyword_ideas_look' app.apple_id front %}" hx-target="closest section" hx-disabled-elt="find button" hx-indicator="closest .ideas">
       <button class="btn outline sm" type="submit">{% if looked %}Look again{% else %}Find suggestions{% endif %}</button>

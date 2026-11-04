@@ -5,8 +5,8 @@
 <section class="card fade">
   <div class="card-head">
     <div>
-      <h2>Search ranks</h2>
-      <p class="sub">Where {{ app.name }} comes up in App Store search for each term, among the top {{ limit }}{% if date %}, as of {{ date|date:"M j, Y" }}{% endif %}. ▲ is a climb since a week before. Ranks come from iTunes Search, which follows the App Store's order closely but not exactly. Popularity, difficulty and opportunity are 0–100 estimates from the results and the store's search suggestions; <span class="est">~</span> marks a popularity read from the results alone, before its weekly look at the suggestions.</p>
+      <h2>Search ranks<button type="button" class="info" aria-label="About search ranks" data-tip="Search ranks&#10;Where {{ app.name }} comes up in App Store search for each term, among the top {{ limit }}. Ranks come from iTunes Search, which follows the App Store's order closely but not exactly.&#10;Popularity, difficulty and opportunity are 0–100 estimates from the results and the store's search suggestions. ~ marks a popularity read from the results alone, before its weekly look at the suggestions.">{% icon "info" %}</button></h2>
+      <p class="sub">Top {{ limit }} in App Store search{% if date %} · {{ date|date:"M j, Y" }}{% endif %}</p>
     </div>
     <div class="filters">
       {% if rows %}<div class="seg" role="radiogroup" aria-label="Sort by">
@@ -30,7 +30,7 @@
     <input type="hidden" name="app" value="{{ app.apple_id }}">
     <div class="scroll">
     <div class="kwt" role="radiogroup" aria-label="Keyword">
-      <div class="kwh">{% if not demo %}<input type="checkbox" class="pick" data-pick-all aria-label="Select all keywords">{% endif %}<span>Keyword</span><span class="num">Rank</span><span class="num">7 days</span><span>Last 30 days</span><span class="num">Popularity</span><span class="num">Difficulty</span><span class="num">Opportunity</span><span>Best competitor</span></div>
+      <div class="kwh">{% if not demo %}<input type="checkbox" class="pick" data-pick-all aria-label="Select all keywords">{% endif %}<span>Keyword</span><span class="num">Rank</span><span class="num" data-tip="7 days&#10;Places gained (▲) or lost (▼) since a week before">7 days</span><span>Last 30 days</span><span class="num" data-tip="Popularity&#10;How much people search for the term, 0–100: how early the store suggests it as they type, and what the results look like. ~ means read from the results alone so far.">Popularity</span><span class="num" data-tip="Difficulty&#10;How hard the top 10 are to pass, 0–100: their ratings and how many aim their titles at the term">Difficulty</span><span class="num" data-tip="Opportunity&#10;Popular and not too hard, 0–100: the terms worth working on first">Opportunity</span><span data-tip="Best competitor&#10;The app you follow that ranks highest for the term today">Best competitor</span></div>
       {% for r in rows %}
       {% with sc=r.scores %}
       <label class="kwr" data-rank="{{ r.rank|default:'' }}" data-opportunity="{{ sc.opportunity|default:'' }}" data-popularity="{{ sc.popularity|default:'' }}" data-difficulty="{{ sc.difficulty|default:'' }}"><input type="radio" name="keyword" value="{{ r.keyword.pk }}"{% if forloop.first %} checked{% endif %}>

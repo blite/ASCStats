@@ -139,6 +139,12 @@
            border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-size: 12.5px; line-height: 1.45;
            box-shadow: 0 8px 28px rgba(0,0,0,.18); max-width: 300px; }
     #tip .t { font-weight: 650; }
+    #tip div + div { margin-top: 4px; }
+    /* an ⓘ next to a heading: its explanation shows in #tip on hover or focus */
+    .info { display: inline-flex; vertical-align: middle; margin-left: 4px; padding: 2px; border: 0; border-radius: 6px; background: none;
+            color: var(--muted-foreground); cursor: help; }
+    .info:hover, .info:focus-visible { color: var(--foreground); }
+    .info svg { width: 15px; height: 15px; }
     footer { color: var(--muted-foreground); font-size: 12px; margin-top: 28px; }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(12,163,12,.45); } 70% { box-shadow: 0 0 0 7px rgba(12,163,12,0); } 100% { box-shadow: 0 0 0 0 rgba(12,163,12,0); } }
     @keyframes reveal { from { clip-path: inset(0 100% 0 0); } }
