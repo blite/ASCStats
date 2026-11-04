@@ -1,8 +1,8 @@
 """The import pipeline: check -> download -> validate -> load -> quality.
 
-Each step is callable on its own (Airflow runs them as separate tasks) and they hand state to
-each other only through the raw store, so any step can be retried in isolation. Every call is
-recorded in IngestionRun.
+Each step is callable on its own (``import_asc --step``) and they hand state to each other only
+through the raw store, so any step can be retried in isolation. Every call is recorded in
+IngestionRun.
 """
 
 from __future__ import annotations

@@ -13,7 +13,7 @@ resources:
   - web.yaml
   - jobs.yaml
 
-# Stable names: Airflow's KubernetesPodOperator pods reference these from outside Kustomize.
+# Stable names, so hand-run kubectl commands and the README can name them.
 # Without the hash suffix a config change no longer rolls the Deployment by itself:
 # run `kubectl -n ascstats rollout restart deploy/web` after changing them.
 generatorOptions:
@@ -33,8 +33,7 @@ configMapGenerator:
       - AWS_DEFAULT_REGION=us-east-1
       - DJANGO_ALLOWED_HOSTS=*
       - DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost:8000
-      # The jobs the schedule CronJob queues (stats/schedule.py); the others still run in
-      # Airflow while they move over, one at a time.
+      # The jobs the schedule CronJob queues (stats/schedule.py).
       - SCHEDULED_JOBS=sales,analytics,derived,restatement,asc_daily,store_daily
 
 # Dev-only credentials so the stack comes up with one command. For any shared cluster delete

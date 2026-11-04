@@ -48,8 +48,9 @@ iOS apps into Postgres and serves them through Django.
   button.
 - **Serve**: behind a sign-in (only `/api/health` is open), Django admin, a JSON API (Django Ninja, OpenAPI at `/api/docs`) and one
   server-rendered htmx page with a chart.
-- **Run**: Docker Compose for development, Kustomize manifests for Kubernetes (a CronJob per
-  report), and Airflow 3 DAGs that orchestrate the same container as Kubernetes pods.
+- **Run**: Docker Compose for development, Kustomize manifests for Kubernetes. Background jobs
+  queue in Postgres (django-tasks), one worker per queue, and a schedule run every 15 minutes
+  queues whatever is due.
 
 > The repository contains **no real sales numbers**. `seed_synthetic` generates
 > deterministic, realistic files in Apple's exact format, and every demo below uses it.
@@ -60,7 +61,7 @@ iOS apps into Postgres and serves them through Django.
 %%{init: {"flowchart": {"wrappingWidth": 400}}}%%
 flowchart TB
     SRC["<b>Sources</b> · read-only<br/>App Store Connect API · iTunes Lookup · ECB rates"]
-    SCHED["<b>Schedulers</b><br/>Kubernetes CronJobs · Airflow 3 DAGs"]
+    SCHED["<b>Schedule</b><br/>15-minute CronJob · django-tasks workers"]
     PIPE["<b>Pipeline</b> · Django management commands<br/>check → download → validate → load → quality"]
     S3[("<b>Raw bucket</b><br/>MinIO · S3 · GCS<br/>files kept as-is, replayable")]
     PG[("<b>Postgres</b><br/>sales rows + daily rollups")]
@@ -200,19 +201,28 @@ python manage.py import_asc --report analytics --from today-7 --to yesterday
 Backfill is the same command over a range: each day is independent, so a failed day is
 reported and the rest continue (exit code 1 if any day failed, 3 if any were not yet
 published). Because every load is a delete+insert of exactly one `(app, report, day)`,
-running a day twice gives the same rows: restating the last week is just a re-run. In
-Airflow, backfill is `airflow backfill create` over data intervals (see below).
+running a day twice gives the same rows: restating the last week is just a re-run.
 
-## Why no Celery (or Redis)
+## Background jobs (and why no Celery or Redis)
 
-A daily import is a CronJob, not a queue. There is one job per report per day, it takes
-seconds, and the only concurrency that matters is "never two imports of the same report at
-once", which `concurrencyPolicy: Forbid` gives for free. A broker and a worker fleet would add
-two stateful services to operate, a second retry mechanism next to Kubernetes' Job
-`backoffLimit`, and a place for work to disappear (an acknowledged-but-lost message), all to
-schedule something cron already schedules. When orchestration grows real dependencies
-(wait for Apple, fan out over apps, run metrics when both reports land), that is a workflow
-problem and Airflow handles it, still launching the same container as a pod.
+Every job is a django-tasks task queued in Postgres (`stats/jobs.py`), and `manage.py
+db_worker` runs one worker per queue, so jobs in a queue never overlap: `asc` for everything
+that calls App Store Connect, `store` for the public App Store, `default` for the rest.
+`manage.py schedule` runs every 15 minutes and queues each job that is due, judging by the
+data and the jobs' own results rather than a calendar (`stats/schedule.py`):
+
+- `sales` / `analytics`: each of the last 7 days not imported yet, so a day Apple publishes
+  late, or a day the machine was off, is picked up on the next run.
+- `derived`: conversion metrics, FX and versions, whenever an import finished since the last.
+- `asc_daily` / `store_daily`: once a UTC day from 17:00 (versions and reviews; rating
+  totals, keyword searches and search suggestions). Ratings history cannot be backfilled.
+- `restatement`: the previous 7 complete days again, Mondays from 18:00.
+
+A failed job is queued again two hours later, a report Apple has not published yet half an
+hour later. `SCHEDULED_JOBS` names the jobs the schedule queues.
+
+The queue is the database the app already has: no broker, no second stateful service, and a
+job's state sits next to the data it wrote, in the same backups and the same admin.
 
 ## Kubernetes (Docker Desktop)
 
@@ -224,14 +234,13 @@ kubectl apply -k k8s/
 kubectl -n ascstats rollout status deploy/web
 kubectl -n ascstats exec deploy/web -- python manage.py seed_synthetic --days 30
 open http://localhost:8000
-kubectl -n ascstats create job --from=cronjob/import-sales import-sales-now   # run the CronJob once
+kubectl -n ascstats create job --from=cronjob/schedule schedule-now   # queue what is due now
 ```
 
 `k8s/` contains: a Postgres StatefulSet, MinIO, the web Deployment (migrations run in an init
-container), the `import-sales`, `import-analytics` and `ratings` CronJobs with `concurrencyPolicy: Forbid`
-(the two imports reload the last three days each run, so a day Apple publishes late is picked up
-the next day rather than lost),
-and Secret templates in `k8s/secrets/`. For local convenience Kustomize generates dev-only
+container), the two `db_worker` Deployments (`worker` for the `asc` and `default` queues,
+`worker-store` for `store`), the `schedule` CronJob every 15 minutes, a `prune-jobs` CronJob
+that drops job results older than 30 days, and Secret templates in `k8s/secrets/`. For local convenience Kustomize generates dev-only
 Secrets from `k8s/secrets/dev-*.env`; on a shared cluster delete that generator and create
 the Secrets from the templates (or External Secrets).
 
@@ -266,48 +275,6 @@ The client cannot write: it has no POST/PATCH/DELETE method at all, and a test a
 every recorded request is a GET. The one-time ONGOING Analytics report request is created by
 hand in App Store Connect, outside the pipeline.
 
-## Airflow
-
-`airflow/` is a separate uv project and Compose stack (Airflow 3, LocalExecutor, its own
-metadata Postgres). Airflow only orchestrates: every task is a `KubernetesPodOperator` running
-the ascstats image's management command on the cluster above.
-
-| DAG                           | Schedule                         | Shape                                                                                         |
-|-------------------------------|----------------------------------|-----------------------------------------------------------------------------------------------|
-| `ascstats_daily_sales`        | daily data intervals, catchup    | `wait_for_report` (deferrable) → `download_raw` → `validate` → `load_day`[apps] → `quality_checks`[apps] |
-| `ascstats_daily_analytics`    | daily data intervals, catchup    | task group mapped over apps: `wait_for_report` → `download_raw` → `validate` → `load_day` → `quality_checks` |
-| `ascstats_conversion_metrics` | assets: sales **and** analytics  | rebuild the last 7 days of `ConversionMetric` → `build_versions`; `import_fx` alongside       |
-| `ascstats_daily_ratings`      | daily, no catchup                | `snapshot_ratings` (public lookup, extra retries: a missed day is lost) → `snapshot_keywords` (public search) → `probe_suggestions` (search hints); `build_versions` → `import_reviews`; `check_report_requests` |
-| `ascstats_weekly_restatement` | Mondays                          | re-import the previous 7 complete days of both reports, rebuild metrics                     |
-
-- **Deferrable sensor**: `wait_for_report` hands off to the triggerer, which polls Apple with
-  read-only GETs until the report exists, without holding a worker slot.
-- **Retries**: a failed task tries again 2 hours later, up to three times. A report that is not published yet is not a failure: the
-  sensor waits for it (up to 36 hours). This is why Airflow, not the CronJobs in
-  `k8s/cronjobs.yaml` (now suspended), schedules the imports.
-- **Pool**: every task that calls App Store Connect runs in the `asc_api` pool (2 slots),
-  across all DAGs, including backfills.
-- **Connection**: the key is the `asc_default` Airflow connection;
-  `airflow/scripts/asc-conn-from-k8s.sh` builds it from the same Kubernetes Secret.
-  `airflow/defaults.env` sets it to `{"synthetic": true}`, so nothing calls Apple by default.
-- **Composer compatible**: no top-level Variable lookups, no custom Airflow config; the image,
-  namespace, Kubernetes connection and start date (`ASCSTATS_START_DATE`) come from
-  environment variables. The local stack sets the start date near today so unpausing a DAG
-  catches up a few days rather than months; older days are a `backfill create`.
-
-```bash
-cd airflow
-./scripts/kubeconfig.sh                                    # kubeconfig for the containers
-docker compose up -d                                       # UI: http://localhost:8080
-./scripts/asc-conn-from-k8s.sh                             # real data: asc_default from the cluster Secret
-for d in ascstats_daily_sales ascstats_daily_analytics ascstats_conversion_metrics \
-         ascstats_daily_ratings ascstats_weekly_restatement; do
-  docker compose exec airflow-scheduler airflow dags unpause $d; done
-docker compose exec airflow-scheduler \
-  airflow backfill create --dag-id ascstats_daily_sales --from-date 2026-09-01 --to-date 2026-09-07
-uv run pytest                                              # DAG-integrity tests
-```
-
 ## Mapping to EKS / GKE
 
 | Here (Docker Desktop)              | EKS                                                         | GKE                                                                    |
@@ -319,7 +286,6 @@ uv run pytest                                              # DAG-integrity tests
 | `web` `LoadBalancer` Service       | AWS Load Balancer Controller Ingress (ALB)                   | GKE Ingress / Gateway                                                  |
 | local `ascstats:dev` image         | ECR                                                         | Artifact Registry                                                      |
 | CronJobs                           | unchanged                                                   | unchanged                                                              |
-| Airflow in Docker Compose          | Amazon MWAA (KubernetesPodOperator into EKS)                | Cloud Composer (DAGs as-is; pods into the Composer or another cluster) |
 
 Only configuration changes: `DATABASE_URL`, `RAW_STORAGE_URL`/`S3_ENDPOINT_URL`, the image
 name in `kustomization.yaml`, and an overlay that drops `minio.yaml`/`postgres.yaml`.
@@ -330,7 +296,6 @@ name in `kustomization.yaml`, and an overlay that drops `minio.yaml`/`postgres.y
 uv sync
 uv run ruff check && uv run ruff format --check
 uv run pytest                 # SQLite by default; set DATABASE_URL for Postgres
-(cd airflow && uv sync && uv run pytest)
 ```
 
 Tests never touch the network: the ASC client is exercised against recorded JSON:API
@@ -356,5 +321,4 @@ src/ascstats/
                         snapshot_keywords, probe_suggestions)
   api.py                Django Ninja API
 k8s/                    Kustomize manifests
-airflow/                Airflow 3 DAGs, Compose stack, DAG-integrity tests
 ```

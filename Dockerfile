@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
-# Slim, multi-arch (arm64 + amd64) image: one image runs the web app, the CronJob and the
-# Airflow KubernetesPodOperator tasks; only the command differs.
+# Slim, multi-arch (arm64 + amd64) image: one image runs the web app, the workers and the
+# schedule CronJob; only the command differs.
 
 FROM ghcr.io/astral-sh/uv:0.12.6 AS uv
 

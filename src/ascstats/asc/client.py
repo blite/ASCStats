@@ -32,7 +32,7 @@ class ASCError(Exception):
 
 
 class ReportNotReady(Exception):
-    """The report for that date does not exist (yet). Sensors poke again later."""
+    """The report for that date does not exist (yet). The schedule asks again later."""
 
 
 @dataclass(frozen=True)

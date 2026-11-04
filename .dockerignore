@@ -3,7 +3,6 @@
 **/__pycache__
 .pytest_cache
 .ruff_cache
-airflow
 k8s
 tests
 *.p8

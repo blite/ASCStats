@@ -30,17 +30,6 @@ jobs:
       - run: uv run python manage.py makemigrations --check --dry-run
       - run: uv run pytest
 
-  airflow:
-    runs-on: ubuntu-latest
-    defaults:
-      run: {working-directory: airflow}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v7
-        with: {enable-cache: true, cache-dependency-glob: airflow/uv.lock}
-      - run: uv sync --locked
-      - run: uv run ruff check
-      - run: uv run pytest
 
   image:
     runs-on: ubuntu-latest

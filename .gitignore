@@ -7,8 +7,6 @@ __pycache__/
 staticfiles/
 *.sqlite3
 .env
-airflow/.env
-airflow/logs/
 # never commit a real App Store Connect key or real report files
 *.p8
 # k8s/secrets/ keeps only *.example.yaml templates and the dev-only .env files
@@ -16,7 +14,6 @@ airflow/logs/
 !k8s/secrets/*.example.yaml
 !k8s/secrets/dev-*.env
 k8s/**/*.secret.yaml
-airflow/.kube/
 # local real-data setup: the Compose override and the data folder it stores into
 compose.override.yaml
 /data/

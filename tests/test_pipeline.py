@@ -156,7 +156,7 @@ def test_seed_synthetic_is_repeatable():
 
 
 @pytest.mark.django_db
-def test_list_apps_emits_string_ids_for_pod_args(apps, capsys):
+def test_list_apps_emits_string_ids(apps, capsys):
     import json
 
     call_command("list_apps")
