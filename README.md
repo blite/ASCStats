@@ -31,14 +31,21 @@ iOS apps into Postgres and serves them through Django.
   Store link or ID (`add_competitor`, or the app's Competitors tab). They ride in the same
   daily Lookup requests as your own apps, so following them costs no extra calls; their tab
   compares ratings, recent ratings, new ratings per week and releases with their notes. Up to
-  50 keywords per app (`add_keyword`, or the Keywords tab), each searched once a day with
+  150 keywords per app (`add_keyword`, or the Keywords tab), each searched once a day with
   iTunes Search, top 200; the whole result order is kept, so your rank and every
   competitor's come from the same searches. The public Search API's order follows the App
   Store's own closely but not exactly. Each keyword also gets scores, 0-100
   (`aso/scoring.py`): difficulty from the top 10 (rating strength, titles aiming at the
   term), popularity from a fitted App Store model (the first 25 results plus a weekly
   look at the store's search suggestions, `probe_suggestions`), and opportunity from the two.
-  Popularity is an estimate: Apple publishes real search volume only through Apple Ads.
+  Popularity is an estimate: Apple publishes real search volume only through Apple Ads; the
+  tab explains each score in a tip on its column header. Below the ranks, a Suggestions card
+  (`aso/ideas.py`) asks the store's autocomplete, live, what follows the app's own keywords
+  and the phrases two or more of its competitors put in their names, and keeps only terms
+  holding a word of the app's name ("spades" for Spades: No Ads), so a seed like "spades
+  offline" never offers "offline music". A look asks 12 seeds in a few seconds, a deep look
+  40, and each is kept for the day; a term is tracked only when someone presses its Track
+  button.
 - **Serve**: behind a sign-in (only `/api/health` is open), Django admin, a JSON API (Django Ninja, OpenAPI at `/api/docs`) and one
   server-rendered htmx page with a chart.
 - **Run**: Docker Compose for development, Kustomize manifests for Kubernetes (a CronJob per
@@ -345,8 +352,8 @@ src/ascstats/
                         ensure_report_requests, ensure_raw_bucket, list_apps
   stats/extensions.py   hooks other apps register with, so stats never imports them
   aso/                  competitors and keywords (models, daily search, tabs,
-                        scoring, add_competitor, add_keyword, snapshot_keywords,
-                        probe_suggestions)
+                        scoring, keyword suggestions, add_competitor, add_keyword,
+                        snapshot_keywords, probe_suggestions)
   api.py                Django Ninja API
 k8s/                    Kustomize manifests
 airflow/                Airflow 3 DAGs, Compose stack, DAG-integrity tests
