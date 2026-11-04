@@ -104,7 +104,7 @@ class Command(BaseCommand):
         broken = set()
         for page in [*out.rglob("index.html"), out / "404.html"]:
             for url in LINK.findall(page.read_text()):
-                if url.startswith(("http://", "https://", "#")) or "{" in url:
+                if url.startswith(("http://", "https://", "#", "data:")) or "{" in url:
                     continue
                 if (
                     "?" in url
