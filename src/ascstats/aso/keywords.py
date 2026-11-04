@@ -42,6 +42,7 @@ FAILURES_TO_STOP = 2  # searches failing in a row before the run stops for the d
 TOP = 25  # results kept with their names: the popularity model reads 25, the list shows 10
 WEEK = 7
 SPARK_DAYS = 30
+LEADERS = 5  # first results a keyword's menu lists when no competitor places
 HISTORY_DAYS = 90  # days in the rank chart
 
 
@@ -267,8 +268,8 @@ class Row:
     rank: int | None = None
     change: int | None = None  # positions gained since a week before (negative: lost)
     best: int | None = None  # best rank in the sparkline window
-    rival: tuple[str, int] | None = None  # best-placed competitor today
-    leader: str = ""  # the first result today
+    rivals: list[tuple[int, str, int]] = field(default_factory=list)  # (rank, name, apple_id)
+    leaders: list[dict] = field(default_factory=list)  # today's first results, when no rival places
     results: int = 0
     spark: list[str] = field(default_factory=list)
     scores: Scores = field(default_factory=Scores)
@@ -306,8 +307,8 @@ def storefronts(app: App) -> list[Storefront]:
 
 def board(app: App, storefront: str | None = None) -> dict:
     """One row per keyword the app tracks (in ``storefront``, or in every storefront): its rank
-    today, the change since a week before, a 30-day sparkline, the best-placed competitor and
-    who leads."""
+    today, the change since a week before, a 30-day sparkline, the competitors placed today
+    (best first) and, when none is, the first results."""
     you = app.apple_id
     rivals = {p.apple_id: p.name for p in players(app)[1:]}
     rows = []
@@ -329,11 +330,10 @@ def board(app: App, storefront: str | None = None) -> dict:
             ranks = [s.rank(you) for s in window]
             row.best = min(filter(None, ranks), default=None)
             row.spark = _spark(ranks)
-            placed = [(latest.rank(i), n) for i, n in rivals.items() if latest.rank(i)]
-            if placed:
-                rank, rival = min(placed)
-                row.rival = (rival, rank)
-            row.leader = latest.top[0]["name"] if latest.top else ""
+            row.rivals = sorted((r, n, i) for i, n in rivals.items() if (r := latest.rank(i)))
+            if not row.rivals:
+                others = [(n, r) for n, r in enumerate(latest.top, 1) if r["id"] != you]
+                row.leaders = [r | {"rank": n} for n, r in others[:LEADERS]]
         rows.append(row)
     rows.sort(key=lambda r: (r.rank is None, r.rank or 0, r.keyword.term))
     return {
@@ -341,9 +341,7 @@ def board(app: App, storefront: str | None = None) -> dict:
         "date": max((r.date for r in rows if r.date), default=None),
         "max": MAX_PER_APP,
         "limit": store.SEARCH_LIMIT,
-        "sorts": [("rank", "Rank"), ("opportunity", "Opportunity"),
-                  ("popularity", "Popularity"), ("difficulty", "Difficulty")],
-    }  # fmt: skip
+    }
 
 
 @dataclass

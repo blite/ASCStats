@@ -130,9 +130,18 @@ def test_keywords_tab_ranks_you_and_your_competitors(client, seeded):
     assert ranked
     assert ranked == sorted(ranked, key=lambda r: r.rank)
     assert all(r.spark for r in ranked)
-    assert any(r.rival for r in board["rows"])  # its synthetic competitors show up too
+    assert any(r.rivals for r in board["rows"])  # its synthetic competitors show up too
+    assert all(r.rivals == sorted(r.rivals) for r in board["rows"])  # best placed first
     page = client.get(f"/app/{SNAKE}/keywords/").content.decode()
     assert "snake game" in page
+    # each row's menu lists its competitors, best first, and can stop tracking the keyword
+    assert page.count('class="kwmenu" popover') == len(keywords.board(snake, "us")["rows"])
+    placed = next(r for r in keywords.board(snake, "us")["rows"] if r.rivals)
+    rank, name, _ = placed.rivals[0]
+    menu = page.split(f'id="kwm-{placed.keyword.pk}"')[1].split("</div>")[0]
+    assert f'<span class="pos">#{rank}</span>' in menu
+    assert name in menu
+    assert f'data-untrack="{placed.keyword.pk}"' in menu
     assert 'hx-get="/app/{app}/keywords/{keyword}/"' in page
     k = Keyword.objects.get(term="snake game", storefront="us")
     detail = client.get(f"/app/{SNAKE}/keywords/{k.pk}/").content.decode()

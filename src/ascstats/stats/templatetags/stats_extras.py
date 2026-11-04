@@ -122,6 +122,17 @@ ICONS = {
     '<circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/>'
     '<circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>',
     "up": '<path d="m18 15-6-6-6 6"/>',
+    "sort": '<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/>'
+    '<path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>',
+    "sort-up": '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+    "sort-down": '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+    "more": '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>'
+    '<circle cx="5" cy="12" r="1"/>',
+    "trash": '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>'
+    '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    "chart": '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/>',
+    "external": '<path d="M15 3h6v6"/><path d="M10 14 21 3"/>'
+    '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
     "down": '<path d="m6 9 6 6 6-6"/>',
     "hide": '<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 '
     '10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/>'

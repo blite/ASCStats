@@ -9,9 +9,6 @@
       <p class="sub">Top {{ limit }} in App Store search{% if date %} · {{ date|date:"M j, Y" }}{% endif %}</p>
     </div>
     <div class="filters">
-      {% if rows %}<div class="seg" role="radiogroup" aria-label="Sort by">
-        {% for key, label in sorts %}<input type="radio" name="kwsort" id="sort-{{ key }}" value="{{ key }}"{% if forloop.first %} checked{% endif %}><label for="sort-{{ key }}">{{ label }}</label>{% endfor %}
-      </div>{% endif %}
       {% if not demo %}<a class="btn outline sm" href="{% url 'app_keywords_manage' app.apple_id %}">{% icon "keywords" %}Manage keywords</a>{% endif %}
     </div>
   </div>
@@ -30,10 +27,18 @@
     <input type="hidden" name="app" value="{{ app.apple_id }}">
     <div class="scroll">
     <div class="kwt" role="radiogroup" aria-label="Keyword">
-      <div class="kwh">{% if not demo %}<input type="checkbox" class="pick" data-pick-all aria-label="Select all keywords">{% endif %}<span>Keyword</span><span class="num">Rank</span><span class="num" data-tip="7 days&#10;Places gained (▲) or lost (▼) since a week before">7 days</span><span>Last 30 days</span><span class="num" data-tip="Popularity&#10;How much people search for the term, 0–100: how early the store suggests it as they type, and what the results look like. ~ means read from the results alone so far.">Popularity</span><span class="num" data-tip="Difficulty&#10;How hard the top 10 are to pass, 0–100: their ratings and how many aim their titles at the term">Difficulty</span><span class="num" data-tip="Opportunity&#10;Popular and not too hard, 0–100: the terms worth working on first">Opportunity</span><span data-tip="Best competitor&#10;The app you follow that ranks highest for the term today">Best competitor</span></div>
+      <div class="kwh">{% if not demo %}<input type="checkbox" class="pick" data-pick-all aria-label="Select all keywords">{% endif %}
+        {% include "aso/_sort.html" with key="term" dir=1 label="Keyword" %}
+        {% include "aso/_sort.html" with key="rank" dir=1 label="Rank" num=1 %}
+        {% include "aso/_sort.html" with key="change" dir=-1 label="7 days" num=1 tip="7 days&#10;Places gained (▲) or lost (▼) since a week before" %}
+        {% include "aso/_sort.html" with key="best" dir=1 label="Last 30 days" tip="Last 30 days&#10;Rank over the month; sorts by its best rank" %}
+        {% include "aso/_sort.html" with key="popularity" dir=-1 label="Popularity" num=1 tip="Popularity&#10;How much people search for the term, 0–100: how early the store suggests it as they type, and what the results look like. ~ means read from the results alone so far." %}
+        {% include "aso/_sort.html" with key="difficulty" dir=1 label="Difficulty" num=1 tip="Difficulty&#10;How hard the top 10 are to pass, 0–100: their ratings and how many aim their titles at the term" %}
+        {% include "aso/_sort.html" with key="opportunity" dir=-1 label="Opportunity" num=1 tip="Opportunity&#10;Popular and not too hard, 0–100: the terms worth working on first" %}
+        <span class="sr-only">Actions</span></div>
       {% for r in rows %}
       {% with sc=r.scores %}
-      <label class="kwr" data-rank="{{ r.rank|default:'' }}" data-opportunity="{{ sc.opportunity|default:'' }}" data-popularity="{{ sc.popularity|default:'' }}" data-difficulty="{{ sc.difficulty|default:'' }}"><input type="radio" name="keyword" value="{{ r.keyword.pk }}"{% if forloop.first %} checked{% endif %}>
+      <label class="kwr" data-term="{{ r.keyword.term }}" data-rank="{{ r.rank|default:'' }}" data-change="{% if r.change is not None %}{{ r.change }}{% endif %}" data-best="{{ r.best|default:'' }}" data-opportunity="{{ sc.opportunity|default:'' }}" data-popularity="{{ sc.popularity|default:'' }}" data-difficulty="{{ sc.difficulty|default:'' }}"><input type="radio" name="keyword" value="{{ r.keyword.pk }}"{% if forloop.first %} checked{% endif %}>
         {% if not demo %}<input type="checkbox" class="pick" name="delete" value="{{ r.keyword.pk }}" form="kwdelete" aria-label="Select {{ r.keyword.term }}">{% endif %}
         <span class="term">{{ r.keyword.term }}</span>
         <span class="num rank">{% if r.rank %}#{{ r.rank }}{% elif r.date %}<span class="muted">{{ limit }}+</span>{% else %}<span class="muted">next search</span>{% endif %}</span>
@@ -42,13 +47,29 @@
         <span class="num score" title="{% if sc.estimated %}From the results alone: the suggestions are looked at weekly{% else %}Suggestions looked at {{ sc.suggestion.date|date:'M j' }}{% endif %}">{% if sc.popularity is not None %}{% if sc.estimated %}<span class="est">~</span>{% endif %}{{ sc.popularity }}<i style="--v:{{ sc.popularity }}"></i>{% else %}<span class="muted">–</span>{% endif %}</span>
         <span class="num score">{% if sc.difficulty is not None %}{{ sc.difficulty }}<i class="hard" style="--v:{{ sc.difficulty }}"></i>{% else %}<span class="muted">–</span>{% endif %}</span>
         <span class="num score">{% if sc.opportunity is not None %}<strong>{{ sc.opportunity }}</strong><i class="opp" style="--v:{{ sc.opportunity }}"></i>{% else %}<span class="muted">–</span>{% endif %}</span>
-        <span class="ellip">{% if r.rival %}{{ r.rival.0 }} <strong>#{{ r.rival.1 }}</strong>{% else %}<span class="muted">–</span>{% endif %}</span>
+        <button type="button" class="iconbtn" popovertarget="kwm-{{ r.keyword.pk }}" aria-label="Competitors and actions for {{ r.keyword.term }}" title="Competitors and actions">{% icon "more" %}</button>
       </label>
       {% endwith %}
       {% endfor %}
     </div>
     </div>
   </form>
+  {% for r in rows %}
+  <div id="kwm-{{ r.keyword.pk }}" class="kwmenu" popover>
+    <p class="mh">Best competitors <span class="muted">· “{{ r.keyword.term }}”</span></p>
+    {% if r.rivals %}
+    <ol>{% for rank, name, id in r.rivals|slice:":8" %}<li><span class="pos">#{{ rank }}</span><a class="ellip" href="https://apps.apple.com/{{ r.keyword.storefront }}/app/id{{ id }}" target="_blank" rel="noopener">{{ name }}</a></li>{% endfor %}</ol>
+    {% if r.rivals|length > 8 %}<p class="mnote">and {{ r.rivals|length|add:"-8" }} more in the top {{ limit }}</p>{% endif %}
+    {% elif r.leaders %}
+    <p class="mnote">None of your competitors is in the top {{ limit }}. Leading today:</p>
+    <ol>{% for l in r.leaders %}<li><span class="pos">#{{ l.rank }}</span><a class="ellip" href="https://apps.apple.com/{{ r.keyword.storefront }}/app/id{{ l.id }}" target="_blank" rel="noopener">{{ l.name }}</a>{% if l.ratings %}<small>{{ l.ratings|intcomma }}</small>{% endif %}</li>{% endfor %}</ol>
+    {% elif r.date %}<p class="mnote">No competitor in the top {{ limit }} today.</p>
+    {% else %}<p class="mnote">Not searched yet: the next daily search fills this in.</p>{% endif %}
+    <hr>
+    <button type="button" class="mi" data-show="{{ r.keyword.pk }}">{% icon "chart" %}Rank history and top results</button>
+    {% if not demo %}<button type="button" class="mi danger" data-untrack="{{ r.keyword.pk }}">{% icon "trash" %}Stop tracking</button>{% endif %}
+  </div>
+  {% endfor %}
   {% if not demo %}
   <form id="kwdelete" class="kwbar" method="post" action="{% url 'app_keywords_delete' app.apple_id %}">
     <input type="hidden" name="storefront" value="{{ front }}">
@@ -73,21 +94,50 @@
   .fronts .count { font-size: 12px; font-weight: 400; opacity: .65; font-variant-numeric: tabular-nums; }
   .fronts .add { width: 32px; padding: 0; justify-content: center; font-weight: 400; font-size: 16px; color: var(--muted-foreground); }
   .fronts .total { font-size: 13px; color: var(--muted-foreground); } .fronts .total strong { color: var(--foreground); font-weight: 600; }
-  .kwt { min-width: 880px; }
-  .kwh, .kwr { display: grid; grid-template-columns: minmax(150px, 1.4fr) 56px 64px 108px 76px 76px 84px minmax(130px, 1fr); gap: 10px; align-items: center; padding: 0 10px; }
+  .kwt { min-width: 820px; }
+  .kwh, .kwr { display: grid; grid-template-columns: minmax(150px, 1fr) 64px 72px 116px 92px 88px 100px 32px; gap: 10px; align-items: center; padding: 0 10px; }
   .score { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
   .score i { display: block; width: 100%; max-width: 64px; height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--chart-1) calc(var(--v) * 1%), var(--muted) 0); }
   .score i.hard { background: linear-gradient(to right, var(--chart-2) calc(var(--v) * 1%), var(--muted) 0); }
   .score i.opp { background: linear-gradient(to right, var(--chart-3) calc(var(--v) * 1%), var(--muted) 0); }
   .est { color: var(--muted-foreground); font-weight: 400; }
   .kwh { height: 34px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); border-bottom: 1px solid var(--border); }
+  /* every column sorts: arrows up and down until it is the one sorted, then the direction */
+  .sort { display: inline-flex; align-items: center; gap: 4px; min-width: 0; padding: 0; border: 0; background: none;
+          font: inherit; color: inherit; cursor: pointer; white-space: nowrap; }
+  .sort.num { justify-content: flex-end; }
+  .sort:hover, .sort[data-state] { color: var(--foreground); }
+  .sort .si { display: none; } .sort .lucide { width: 13px; height: 13px; }
+  .sort:not([data-state]) .si.none { display: inline-flex; opacity: .55; }
+  .sort[data-state=asc] .si.asc, .sort[data-state=desc] .si.desc { display: inline-flex; }
+  .iconbtn { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px;
+             background: none; color: var(--muted-foreground); cursor: pointer; }
+  .iconbtn:hover, .iconbtn:focus-visible { background: var(--background); color: var(--foreground); }
+  .iconbtn .lucide { width: 16px; height: 16px; }
+  .kwmenu { position: fixed; inset: auto; margin: 0; width: 280px; padding: 6px; border: 1px solid var(--border); border-radius: var(--radius);
+            background: var(--popover); color: var(--foreground); box-shadow: 0 10px 30px -10px rgb(0 0 0 / .25); font-size: 13px; }
+  .kwmenu .mh { margin: 4px 8px 6px; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kwmenu .mnote { margin: 2px 8px 6px; font-size: 12px; color: var(--muted-foreground); }
+  .kwmenu ol { list-style: none; margin: 0; padding: 0; }
+  .kwmenu li { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: calc(var(--radius) - 4px); }
+  .kwmenu li:hover { background: var(--accent); }
+  .kwmenu .pos { width: 34px; flex: none; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+  .kwmenu a { flex: 1; color: inherit; text-decoration: none; } .kwmenu a:hover { text-decoration: underline; }
+  .kwmenu small { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  .kwmenu hr { margin: 6px -6px; border: 0; border-top: 1px solid var(--border); }
+  .mi { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: calc(var(--radius) - 4px);
+        background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+  .mi:hover, .mi:focus-visible { background: var(--accent); outline: none; }
+  .mi .lucide { width: 15px; height: 15px; color: var(--muted-foreground); }
+  .mi.danger, .mi.danger .lucide { color: var(--destructive); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .kwr { position: relative; min-height: 40px; border-radius: calc(var(--radius) - 4px); font-size: 14px; cursor: pointer; font-variant-numeric: tabular-nums; }
   .kwr:hover { background: var(--accent); }
   .kwr:has(.pick:checked) { background: var(--accent); }
   .kwr:has(input[type=radio]:checked) { background: color-mix(in oklch, var(--primary) 12%, transparent); }
   .kwr:has(input[type=radio]:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
   .kwr input[type=radio] { position: absolute; opacity: 0; pointer-events: none; }
-  .kwt:has(.pick) :is(.kwh, .kwr) { grid-template-columns: 16px minmax(150px, 1.4fr) 56px 64px 108px 76px 76px 84px minmax(130px, 1fr); }
+  .kwt:has(.pick) :is(.kwh, .kwr) { grid-template-columns: 16px minmax(150px, 1fr) 64px 72px 116px 92px 88px 100px 32px; }
   .pick { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); cursor: pointer; }
   .kwbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 13px; }
   .kwr .term { display: flex; align-items: center; gap: 8px; font-weight: 500; }
@@ -102,30 +152,81 @@
   // The storefront shown is where the next link to this app's Keywords tab lands (base.html).
   {% if front %}try { localStorage.setItem("kwFront:{{ app.apple_id }}", "{{ front }}/"); } catch (e) {}{% endif %}
 
-  // Sort the keyword rows in the page (so the static demo sorts too); the choice is kept per browser.
+  // Sort the keyword rows in the page (so the static demo sorts too) by any column: a click sorts
+  // by that column, a second click turns the direction round. Blanks always go last. The choice
+  // is kept per browser.
   (() => {
     const table = document.querySelector(".kwt");
     if (!table) return;
-    const order = {rank: 1, opportunity: -1, popularity: -1, difficulty: 1};  // 1: low first
-    function sortBy(key) {
+    const buttons = [...table.querySelectorAll(".kwh [data-sort]")];
+    let current = {key: "rank", dir: 1};  // as the server orders them
+    function sortBy(key, dir) {
+      const value = r => key === "term" ? r.dataset.term : r.dataset[key] === "" ? null : Number(r.dataset[key]);
       const rows = [...table.querySelectorAll(".kwr")];
-      const value = r => r.dataset[key] === "" ? null : Number(r.dataset[key]);
       rows.sort((a, b) => {
         const x = value(a), y = value(b);
         if (x === null || y === null) return (x === null) - (y === null);
-        return order[key] * (x - y);
+        return dir * (key === "term" ? x.localeCompare(y) : x - y);
       });
       rows.forEach(r => table.append(r));
-    }
-    const radios = document.querySelectorAll("input[name=kwsort]");
-    let saved = "rank";
-    try { saved = localStorage.getItem("kwsort") || "rank"; } catch (e) {}
-    radios.forEach(r => {
-      if (r.value === saved) { r.checked = true; sortBy(saved); }
-      r.addEventListener("change", () => {
-        sortBy(r.value);
-        try { localStorage.setItem("kwsort", r.value); } catch (e) {}
+      current = {key, dir};
+      buttons.forEach(b => {
+        if (b.dataset.sort === key) b.dataset.state = dir > 0 ? "asc" : "desc";
+        else delete b.dataset.state;
       });
+    }
+    buttons.forEach(b => b.addEventListener("click", () => {
+      const dir = b.dataset.sort === current.key ? -current.dir : Number(b.dataset.dir);
+      sortBy(b.dataset.sort, dir);
+      try { localStorage.setItem("kwsort", `${b.dataset.sort}:${dir}`); } catch (e) {}
+    }));
+    let saved = null;
+    try { saved = localStorage.getItem("kwsort"); } catch (e) {}
+    const [key, dir] = (saved || "rank:1").split(":");
+    const known = buttons.find(b => b.dataset.sort === key);
+    if (known) sortBy(key, Number(dir) || Number(known.dataset.dir)); else sortBy("rank", 1);
+  })();
+
+  // Each row's menu: placed under its button, closed on scroll; "Rank history" opens the keyword
+  // in the card below, "Stop tracking" sends just that keyword through the delete form.
+  (() => {
+    let opener = null;
+    document.addEventListener("click", e => { opener = e.target.closest("[popovertarget]") || opener; }, true);
+    document.querySelectorAll(".kwmenu").forEach(menu => {
+      menu.addEventListener("beforetoggle", e => {
+        if (e.newState !== "open" || !opener) return;
+        const at = opener.getBoundingClientRect();
+        const top = at.bottom + 4 + 320 > innerHeight ? Math.max(8, at.top - 4 - menu.offsetHeight) : at.bottom + 4;
+        menu.style.top = `${top}px`;
+        menu.style.left = `${Math.max(8, at.right - 280)}px`;
+      });
+      menu.addEventListener("toggle", e => {  // flip above once its real height is known
+        if (e.newState !== "open" || !opener) return;
+        const at = opener.getBoundingClientRect();
+        if (at.bottom + 4 + menu.offsetHeight > innerHeight) menu.style.top = `${Math.max(8, at.top - 4 - menu.offsetHeight)}px`;
+      });
+    });
+    addEventListener("scroll", () => document.querySelector(".kwmenu:popover-open")?.hidePopover(), {passive: true, capture: true});
+    document.addEventListener("click", e => {
+      const show = e.target.closest("[data-show]"), untrack = e.target.closest("[data-untrack]");
+      if (!show && !untrack) return;
+      e.target.closest(".kwmenu").hidePopover();
+      if (show) {
+        const radio = document.querySelector(`input[name=keyword][value="${show.dataset.show}"]`);
+        radio.checked = true;
+        radio.dispatchEvent(new Event("change", {bubbles: true}));
+        document.getElementById("keyword").scrollIntoView({behavior: "smooth", block: "start"});
+      } else {
+        const picks = [...document.querySelectorAll("input[name=delete]")];
+        const before = picks.map(p => p.checked);
+        picks.forEach(p => p.checked = p.value === untrack.dataset.untrack);
+        picks[0].dispatchEvent(new Event("change"));
+        const form = document.getElementById("kwdelete");
+        form.addEventListener("submit", e => { if (e.defaultPrevented) {
+          picks.forEach((p, i) => p.checked = before[i]); picks[0].dispatchEvent(new Event("change"));
+        } }, {once: true});
+        form.requestSubmit();
+      }
     });
   })();
 

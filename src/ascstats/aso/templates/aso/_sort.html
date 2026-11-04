@@ -1,0 +1,1 @@
+{% load stats_extras %}<button type="button" class="sort{% if num %} num{% endif %}" data-sort="{{ key }}" data-dir="{{ dir }}"{% if tip %} data-tip="{{ tip|safe }}"{% endif %}>{{ label }}<span class="si none">{% icon "sort" %}</span><span class="si asc">{% icon "sort-up" %}</span><span class="si desc">{% icon "sort-down" %}</span></button>

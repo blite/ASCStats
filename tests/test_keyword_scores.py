@@ -123,7 +123,8 @@ def test_keywords_tab_shows_scores(client, db):
     assert all(r.scores.popularity is not None for r in rows)
     assert all(not r.scores.estimated for r in rows)  # the seed looks at the suggestions too
     page = client.get(f"/app/{SNAKE}/keywords/").content.decode()
-    assert 'name="kwsort"' in page
+    for key in ("term", "rank", "change", "best", "popularity", "difficulty", "opportunity"):
+        assert f'data-sort="{key}"' in page  # every column sorts
     assert "data-opportunity=" in page
     k = Keyword.objects.get(term="snake game", storefront="us")
     detail = client.get(f"/app/{SNAKE}/keywords/{k.pk}/").content.decode()
