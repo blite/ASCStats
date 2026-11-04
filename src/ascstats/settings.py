@@ -32,6 +32,7 @@ def database_from_url(url: str) -> dict:
 
 DEBUG = env_bool("DJANGO_DEBUG")
 # Compose and k8s always set this; the fallback only exists so tests and one-off commands run.
+# wsgi.py refuses to serve with it unless DEBUG is on.
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "insecure-dev-only-key")
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 CSRF_TRUSTED_ORIGINS = [
