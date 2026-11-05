@@ -3,7 +3,6 @@ from datetime import date
 import pytest
 
 from ascstats.aso import idea_apps, keywords, suggestions
-from ascstats.aso.competitors import CompetitorError
 from ascstats.aso.models import Competitor, KeywordSuggestion
 from ascstats.stats.cache import data_version
 from ascstats.stats.models import App
@@ -22,7 +21,7 @@ def test_an_idea_is_research_only(apps):
     assert idea not in App.objects.active()  # no imports, rating snapshots or stats
     assert idea in App.objects.ideas()
     assert idea in App.objects.researched()
-    with pytest.raises(CompetitorError, match="name"):
+    with pytest.raises(idea_apps.IdeaError, match="name"):
         idea_apps.create("   ")
 
 
@@ -72,7 +71,11 @@ def test_an_idea_becomes_an_app_the_site_does_not_have_yet(apps):
     assert real in App.objects.active()  # imported and snapshotted from now on
     assert not real.competitors.exists()  # an app never follows itself
     assert [k.term for k in keywords.tracked()] == ["worm garden"]
-    with pytest.raises(CompetitorError, match="App Store link"):
+    assert real.name == "Worm Garden"  # the store doesn't list it yet: its name stays
+    listed = idea_apps.make_real(idea_apps.create("Wriggle working title"), str(RIVAL))
+    assert listed.name == "Synthetic Worm Rush"  # the store's name, not the working title
+    assert listed.primary_genre == "Games"
+    with pytest.raises(idea_apps.IdeaError, match="App Store link"):
         idea_apps.make_real(idea_apps.create("Another"), "not a link")
 
 

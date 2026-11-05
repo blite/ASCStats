@@ -4,7 +4,7 @@ import httpx
 import pytest
 from django.test import override_settings
 
-from ascstats.aso import ideas, keywords
+from ascstats.aso import finder, keywords
 from ascstats.aso.models import Competitor, Keyword
 from ascstats.stats.models import App
 
@@ -40,27 +40,27 @@ def store(asked: list[str]) -> httpx.MockTransport:
 
 
 def test_seeds_are_short_keywords_and_shared_competitor_phrases(spades):
-    assert ideas.core_words(spades) == {"spades"}  # "no" and "ads" are filler
-    assert ideas.phrases(
+    assert finder.core_words(spades) == {"spades"}  # "no" and "ads" are filler
+    assert finder.phrases(
         ["Spades - Classic Cards", "Spades Classic Card Game", "Card Game Rules"], {"spades"}
     ) == {"spades classic": 2}  # "card game" is in two names, but says nothing about spades
-    seeds = ideas.seeds(spades, "us", ideas.SEEDS)
+    seeds = finder.seeds(spades, "us", finder.SEEDS)
     assert seeds == [("spades", 0), ("spades classic", 2), ("spades offline", 0)]
-    assert ideas.seeds(spades, "us", 1) == [("spades", 0)]
+    assert finder.seeds(spades, "us", 1) == [("spades", 0)]
 
 
 def test_look_keeps_what_names_the_app(spades, settings):
     settings.ASC_SOURCE = "asc"
     asked = []
-    found = ideas.look(spades, "us", transport=store(asked), pause=0)
+    found = finder.look(spades, "us", transport=store(asked), pause=0)
     assert asked == ["spades", "spades classic", "spades offline"]
-    terms = [i.term for i in found["ideas"]]
+    terms = [i.term for i in found["candidates"]]
     assert "offline music" not in terms
     assert "classic games" not in terms
     assert "spades" not in terms
     assert "spades offline" not in terms
     assert terms[:2] == ["spades classic card game", "spades classic cards"]  # best placed first
-    by = {i.term: i for i in found["ideas"]}
+    by = {i.term: i for i in found["candidates"]}
     assert by["spades offline card game"].seeds == ["spades offline"]  # punctuation gone
     assert by["spades classic card game"].competitors == 2
     assert by["spades plus"].brand  # "Spades Plus - Card Game" starts with it
@@ -71,40 +71,41 @@ def test_look_keeps_what_names_the_app(spades, settings):
 
 def test_look_is_kept_for_the_day_less_what_gets_tracked(spades, settings):
     settings.ASC_SOURCE = "asc"
-    ideas.look(spades, "us", transport=store([]), pause=0)
+    finder.look(spades, "us", transport=store([]), pause=0)
     keywords.add(spades, "spades plus")
-    kept = ideas.cached(spades, "us", deep=False)
-    assert "spades plus" not in [i.term for i in kept["ideas"]]
-    assert ideas.cached(spades, "us", deep=True) is None
+    kept = finder.cached(spades, "us", deep=False)
+    assert "spades plus" not in [i.term for i in kept["candidates"]]
+    assert finder.cached(spades, "us", deep=True) is None
 
 
 def test_a_refusing_store_says_so(spades, settings, monkeypatch):
     settings.ASC_SOURCE = "asc"
     monkeypatch.setattr("ascstats.store.itunes.time.sleep", lambda _: None)
     refuse = httpx.MockTransport(lambda request: httpx.Response(503))
-    found = ideas.look(spades, "us", transport=refuse, pause=0)
-    assert found["ideas"] == []
+    found = finder.look(spades, "us", transport=refuse, pause=0)
+    assert found["candidates"] == []
     assert "isn't answering" in found["error"]
-    assert ideas.cached(spades, "us", deep=False) is None  # a failure is not kept
-    assert "no suggestions" in ideas.look(spades, "zz")["error"]
+    assert finder.cached(spades, "us", deep=False) is None  # a failure is not kept
+    assert "no suggestions" in finder.look(spades, "zz")["error"]
 
 
 def test_suggestions_card_looks_and_tracks(client, spades):
     page = client.get(f"/app/{SPADES}/keywords/").content.decode()
-    assert f'hx-get="/app/{SPADES}/keywords/us/ideas/"' in page
-    card = client.get(f"/app/{SPADES}/keywords/us/ideas/").content.decode()
+    assert f'hx-get="/app/{SPADES}/keywords/us/suggest/"' in page
+    card = client.get(f"/app/{SPADES}/keywords/us/suggest/").content.decode()
     assert "Find suggestions" in card
-    assert 'class="idea"' not in card
-    looked = client.post(f"/app/{SPADES}/keywords/us/ideas/look/").content.decode()  # synthetic
-    assert 'class="idea"' in looked
+    assert 'class="candidate"' not in card
+    looked = client.post(f"/app/{SPADES}/keywords/us/suggest/look/").content.decode()  # synthetic
+    assert 'class="candidate"' in looked
     assert "+ Track" in looked
-    term = ideas.cached(spades, "us", deep=False)["ideas"][0].term
-    done = client.post(f"/app/{SPADES}/keywords/us/ideas/track/", {"term": term})
+    term = finder.cached(spades, "us", deep=False)["candidates"][0].term
+    done = client.post(f"/app/{SPADES}/keywords/us/suggest/track/", {"term": term})
     assert "Tracking" in done.content.decode()
     assert spades.keywords.filter(term=term, storefront="us").exists()
-    again = client.post(f"/app/{SPADES}/keywords/us/ideas/track/", {"term": term})
+    again = client.post(f"/app/{SPADES}/keywords/us/suggest/track/", {"term": term})
     assert "already tracks" in again.content.decode()
-    assert f'value="{term}"' not in client.get(f"/app/{SPADES}/keywords/us/ideas/").content.decode()
-    assert client.get(f"/app/{SPADES}/keywords/us/ideas/look/").status_code == 405
+    card = client.get(f"/app/{SPADES}/keywords/us/suggest/").content.decode()
+    assert f'value="{term}"' not in card
+    assert client.get(f"/app/{SPADES}/keywords/us/suggest/look/").status_code == 405
     with override_settings(DEMO_SITE=True):
-        assert client.get(f"/app/{SPADES}/keywords/us/ideas/").status_code == 404
+        assert client.get(f"/app/{SPADES}/keywords/us/suggest/").status_code == 404

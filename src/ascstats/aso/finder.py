@@ -52,7 +52,7 @@ TRAILING = {"a", "an", "and", "by", "for", "in", "no", "of", "on", "or", "the", 
 
 
 @dataclass
-class Idea:
+class Candidate:
     term: str
     seeds: list[str] = field(default_factory=list)  # the seeds that offered it, first first
     position: int = 99  # best place among a seed's suggestions, from 1
@@ -112,13 +112,13 @@ def seeds(app: App, storefront: str, limit: int) -> list[tuple[str, int]]:
 
 def gather(
     app: App, storefront: str, ask: Callable[[str], list[str]], limit: int = SEEDS
-) -> tuple[list[Idea], int]:
-    """The ideas, most offered first, and how many seeds were asked. ``ask`` returns the
+) -> tuple[list[Candidate], int]:
+    """The candidates, most offered first, and how many seeds were asked. ``ask`` returns the
     store's suggestions for what has been typed."""
     core = core_words(app)
     tracked = _tracked(app, storefront)
     names = {search_key(n) for n in app.competitors.values_list("name", flat=True)}
-    ideas: dict[str, Idea] = {}
+    found: dict[str, Candidate] = {}
     asked = seeds(app, storefront, limit)
     for seed, used in asked:
         for at, offered in enumerate(ask(seed), 1):
@@ -129,17 +129,17 @@ def gather(
             if len(words) == 1 or term in FILLER:
                 continue
             brand = any(n == term or n.startswith(f"{term} ") for n in names) and len(words) > 1
-            idea = ideas.setdefault(term, Idea(term, brand=brand))
-            if seed not in idea.seeds:
-                idea.seeds.append(seed)
-            idea.position = min(idea.position, at)
-            idea.competitors = max(idea.competitors, used)
-    ranked = sorted(ideas.values(), key=lambda i: (-len(i.seeds), i.position, i.term))
+            candidate = found.setdefault(term, Candidate(term, brand=brand))
+            if seed not in candidate.seeds:
+                candidate.seeds.append(seed)
+            candidate.position = min(candidate.position, at)
+            candidate.competitors = max(candidate.competitors, used)
+    ranked = sorted(found.values(), key=lambda i: (-len(i.seeds), i.position, i.term))
     return ranked, len(asked)
 
 
 def _key(app: App, storefront: str, deep: bool) -> str:
-    return f"ideas:{app.apple_id}:{storefront}:{int(deep)}:{timezone.localdate()}"
+    return f"suggest:{app.apple_id}:{storefront}:{int(deep)}:{timezone.localdate()}"
 
 
 def cached(app: App, storefront: str, deep: bool) -> dict | None:
@@ -149,7 +149,7 @@ def cached(app: App, storefront: str, deep: bool) -> dict | None:
         return None
     tracked = _tracked(app, storefront)
     return out | {
-        "ideas": [i for i in out["ideas"] if i.term not in tracked],
+        "candidates": [i for i in out["candidates"] if i.term not in tracked],
         "room": MAX_PER_APP - app.keywords.count(),
     }
 
@@ -161,14 +161,14 @@ def look(
     transport: httpx.BaseTransport | None = None,
     pause: float = PAUSE,
 ) -> dict:
-    """Ask the store for ideas now and keep the answer for the day; ``error`` says why there
+    """Ask the store for candidates now and keep the answer for the day; ``error`` says why there
     are none when the store would not answer."""
     limit = DEEP_SEEDS if deep else SEEDS
     if settings.ASC_SOURCE == "synthetic":
         found, asked = gather(app, storefront, lambda t: synthetic.hints(t, storefront), limit)
-        out = {"ideas": found, "asked": asked, "error": ""}
+        out = {"candidates": found, "asked": asked, "error": ""}
     elif storefront not in store.STOREFRONT_IDS:
-        return {"ideas": [], "asked": 0, "error": NO_STOREFRONT}
+        return {"candidates": [], "asked": 0, "error": NO_STOREFRONT}
     else:
         requests = 0
         with store.client(transport) as client:
@@ -183,9 +183,9 @@ def look(
             try:
                 found, asked = gather(app, storefront, ask, limit)
             except store.StoreError as error:
-                log.warning("ideas: %s", error)
-                return {"ideas": [], "asked": 0, "error": NOT_ANSWERING}
-        out = {"ideas": found, "asked": asked, "error": ""}
+                log.warning("suggest: %s", error)
+                return {"candidates": [], "asked": 0, "error": NOT_ANSWERING}
+        out = {"candidates": found, "asked": asked, "error": ""}
     out["room"] = MAX_PER_APP - app.keywords.count()
     cache.set(_key(app, storefront, deep), out, 24 * 3600)
     return out

@@ -78,7 +78,7 @@
 </section>
 {% if rows %}
 <section class="card fade"><div id="keyword"><p class="muted">Loading…</p></div></section>
-{% if not demo %}<section class="card fade" hx-get="{% url 'app_keyword_ideas' app.apple_id front %}" hx-trigger="load"><p class="muted">Loading suggestions…</p></section>{% endif %}
+{% if not demo %}<section class="card fade" hx-get="{% url 'app_keyword_suggest' app.apple_id front %}" hx-trigger="load"><p class="muted">Loading suggestions…</p></section>{% endif %}
 {% endif %}
 <style>
   /* a pill per storefront, the one shown filled */

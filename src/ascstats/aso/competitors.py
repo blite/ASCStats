@@ -55,7 +55,10 @@ def parse(text: str) -> tuple[int, str]:
     raise CompetitorError("Paste an App Store link (apps.apple.com/…/id123…) or an app's ID.")
 
 
-def _listing(apple_id: int, storefront: str, transport: httpx.BaseTransport | None) -> dict:
+def lookup_listing(
+    apple_id: int, storefront: str, transport: httpx.BaseTransport | None = None
+) -> dict:
+    """One app's Lookup result in ``storefront``; CompetitorError when the store has none."""
     if settings.ASC_SOURCE == "synthetic":
         try:
             rival = synthetic.rival_by_apple_id(apple_id)
@@ -88,7 +91,7 @@ def add(
         raise CompetitorError(f"{app.name} already follows {MAX_PER_APP} competitors; remove one.")
     competitor = Competitor.objects.filter(apple_id=apple_id).first()
     if competitor is None:
-        listing = listing or _listing(apple_id, storefront, transport)
+        listing = listing or lookup_listing(apple_id, storefront, transport)
         competitor = Competitor.objects.create(
             apple_id=apple_id, name=listing.get("trackName") or str(apple_id)
         )

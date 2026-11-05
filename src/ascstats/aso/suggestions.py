@@ -16,7 +16,7 @@ from datetime import date
 
 import httpx
 from django.conf import settings
-from django.db.models import Max
+from django.db.models import Count, Max, Q
 from django.utils import timezone
 
 from ascstats import store
@@ -67,18 +67,18 @@ def look(term: str, ask: Callable[[str], list[str]]) -> dict:
 def due(day: date, limit: int = MAX_PER_RUN) -> list[Keyword]:
     """Tracked keywords not looked at this week, never-seen first, then the oldest. An idea's
     keywords are looked at once, like their one search, so their popularity has its evidence."""
-    from .keywords import tracked
-
     last = dict(
         KeywordSuggestion.objects.values("keyword")
         .annotate(d=Max("date"))
         .values_list("keyword", "d")
     )
-    daily = {k.pk for k in tracked()}
-    every = Keyword.objects.filter(tracked_for__is_active=True).distinct()
+    # one query: every keyword an active app or idea tracks, with how many real apps track it
+    every = Keyword.objects.filter(tracked_for__is_active=True).annotate(
+        live=Count("tracked_for", filter=Q(tracked_for__is_idea=False))
+    )
     waiting = [
         k for k in every
-        if k.pk not in last or (k.pk in daily and (day - last[k.pk]).days >= WEEK)
+        if k.pk not in last or (k.live and (day - last[k.pk]).days >= WEEK)
     ]  # fmt: skip
     waiting.sort(key=lambda k: (k.pk in last, last.get(k.pk) or date.min, k.term))
     return waiting[:limit]

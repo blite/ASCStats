@@ -17,7 +17,7 @@ from ascstats.stats.ratings import storefronts
 from ascstats.stats.territories import name
 
 from . import competitors as cp
-from . import idea_apps, ideas, jobs
+from . import finder, idea_apps, jobs
 from . import keywords as kw
 
 
@@ -95,7 +95,7 @@ def idea_new(request):
     if request.method == "POST":
         try:
             idea = idea_apps.create(request.POST.get("name", ""))
-        except cp.CompetitorError as error:
+        except idea_apps.IdeaError as error:
             messages.error(request, str(error))
         else:
             return redirect("app_keywords_manage", idea.apple_id)
@@ -111,7 +111,7 @@ def app_make_real(request, apple_id):
     if request.method == "POST":
         try:
             app = idea_apps.make_real(idea, request.POST.get("app", ""))
-        except cp.CompetitorError as error:
+        except idea_apps.IdeaError as error:
             messages.error(request, str(error))
         else:
             return redirect("app_keywords", app.apple_id)
@@ -158,41 +158,41 @@ def app_keywords_delete(request, apple_id):
     return redirect("app_keywords", apple_id)
 
 
-def _ideas(request, app, storefront, found: dict | None, deep: bool = False):
+def _suggest(request, app, storefront, found: dict | None, deep: bool = False):
     context = {"app": app, "front": storefront, "deep": deep} | (found or {})
-    return render(request, "aso/_ideas.html", context | {"looked": found is not None})
+    return render(request, "aso/_suggest.html", context | {"looked": found is not None})
 
 
-def app_keyword_ideas(request, apple_id, storefront):
+def app_keyword_suggest(request, apple_id, storefront):
     """The Suggestions card: today's look if there was one, else the button that looks. Not
     cached: it carries this session's CSRF token, and the look is kept for the day anyway."""
     app = _editable(apple_id)
-    found = ideas.cached(app, storefront, deep=True)
+    found = finder.cached(app, storefront, deep=True)
     deep = found is not None
-    return _ideas(
-        request, app, storefront, found or ideas.cached(app, storefront, deep=False), deep
+    return _suggest(
+        request, app, storefront, found or finder.cached(app, storefront, deep=False), deep
     )
 
 
 @require_POST
-def app_keyword_ideas_look(request, apple_id, storefront):
-    """Ask the store for ideas now: a few seconds, or longer for a deep look."""
+def app_keyword_suggest_look(request, apple_id, storefront):
+    """Ask the store for suggestions now: a few seconds, or longer for a deep look."""
     app = _editable(apple_id)
     deep = bool(request.POST.get("deep"))
-    return _ideas(request, app, storefront, ideas.look(app, storefront, deep=deep), deep)
+    return _suggest(request, app, storefront, finder.look(app, storefront, deep=deep), deep)
 
 
 @require_POST
-def app_keyword_ideas_track(request, apple_id, storefront):
+def app_keyword_suggest_track(request, apple_id, storefront):
     """Track one suggested term, then show its row as tracked."""
     app = _editable(apple_id)
     term = request.POST.get("term", "")
     try:
         keyword = kw.add(app, term.replace(",", " "), storefront)[0]  # one term, never a list
     except kw.KeywordError as error:
-        return render(request, "aso/_idea_tracked.html", {"term": term, "error": str(error)})
+        return render(request, "aso/_suggest_tracked.html", {"term": term, "error": str(error)})
     jobs.search_keyword.enqueue(keyword.pk)
-    return render(request, "aso/_idea_tracked.html", {"term": keyword.term})
+    return render(request, "aso/_suggest_tracked.html", {"term": keyword.term})
 
 
 def app_keywords_manage(request, apple_id):

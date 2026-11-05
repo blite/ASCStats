@@ -40,7 +40,7 @@ iOS apps into Postgres and serves them through Django.
   look at the store's search suggestions, `probe_suggestions`), and opportunity from the two.
   Popularity is an estimate: Apple publishes real search volume only through Apple Ads; the
   tab explains each score in a tip on its column header. Below the ranks, a Suggestions card
-  (`aso/ideas.py`) asks the store's autocomplete, live, what follows the app's own keywords
+  (`aso/finder.py`) asks the store's autocomplete, live, what follows the app's own keywords
   and the phrases two or more of its competitors put in their names, and keeps only terms
   holding a word of the app's name ("spades" for Spades: No Ads), so a seed like "spades
   offline" never offers "offline music". A look asks 12 seeds in a few seconds, a deep look

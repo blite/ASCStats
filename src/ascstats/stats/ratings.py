@@ -129,7 +129,7 @@ def snapshot(
             RatingSnapshot.objects.filter(date=day, app__in=apps.values()).delete()
             RatingSnapshot.objects.bulk_create(rows)
             for apple_id, listing in listings.items():
-                _store_listing(apps[apple_id], listing)
+                store_listing(apps[apple_id], listing)
             return len(rows) + sum(rider.synthetic(day) for rider in riders)
 
     today = RatingSnapshot.objects.filter(date=day, app__in=apps.values())
@@ -207,7 +207,7 @@ def snapshot(
                     break
     with transaction.atomic():
         for apple_id, listing in listings.items():
-            _store_listing(apps[apple_id], listing)
+            store_listing(apps[apple_id], listing)
         for rider in riders:
             rider.finish(day)
     log.info(
@@ -217,9 +217,10 @@ def snapshot(
     return written
 
 
-def _store_listing(app: App, r: dict) -> None:
+def store_listing(app: App, r: dict) -> None:
     """Copy the release date, icon and category from a Lookup result onto the app. A field
-    the result leaves out keeps its last value."""
+    the result leaves out keeps its last value. The name is the caller's call: an imported
+    app keeps the one App Store Connect gave it."""
     released = r.get("releaseDate")
     found = {
         "released_on": datetime.fromisoformat(released).date() if released else None,
