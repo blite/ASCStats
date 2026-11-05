@@ -43,6 +43,11 @@ class Competitor(models.Model):
     def __str__(self) -> str:
         return f"{self.name} ({self.apple_id})"
 
+    @property
+    def store_url(self) -> str:
+        """Its App Store page, in the storefront its kept listing is from."""
+        return f"https://apps.apple.com/{self.listing_storefront or 'us'}/app/id{self.apple_id}"
+
 
 class CompetitorSnapshot(models.Model):
     """A competitor's public rating totals in one storefront on one day: the same snapshot as

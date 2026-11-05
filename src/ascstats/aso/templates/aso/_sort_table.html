@@ -1,0 +1,52 @@
+<style>
+  /* every column sorts: arrows up and down until it is the one sorted, then the direction */
+  table[data-sort-table] th { white-space: nowrap; }
+  table[data-sort-table] .sort { display: inline-flex; align-items: center; gap: 4px; min-width: 0; padding: 0; border: 0; background: none;
+          font: inherit; color: inherit; cursor: pointer; white-space: nowrap; }
+  table[data-sort-table] .sort:hover, table[data-sort-table] .sort[data-state] { color: var(--foreground); }
+  table[data-sort-table] .sort .si { display: none; } table[data-sort-table] .sort .lucide { width: 13px; height: 13px; }
+  table[data-sort-table] .sort:not([data-state]) .si.none { display: inline-flex; opacity: .55; }
+  table[data-sort-table] .sort[data-state=asc] .si.asc, table[data-sort-table] .sort[data-state=desc] .si.desc { display: inline-flex; }
+</style>
+<script>
+  // Sort a table's rows in the page (so the static demo sorts too) by any column: a click sorts
+  // by that column, a second click turns the direction round. Each row carries a data- value per
+  // column; blanks always go last. The choice is kept per browser, per table.
+  (() => {
+    document.querySelectorAll("table[data-sort-table]:not([data-sorting])").forEach(table => {
+      table.dataset.sorting = "";
+      const body = table.tBodies[0], saveAs = `sort:${table.dataset.sortTable}`;
+      const buttons = [...table.tHead.querySelectorAll("[data-sort]")];
+      let current = null;
+      function sortBy(key, dir) {
+        const text = buttons.find(b => b.dataset.sort === key)?.hasAttribute("data-text");
+        const value = r => {
+          const v = r.dataset[key] ?? "";
+          return v === "" ? null : text ? v : Number(v);
+        };
+        const rows = [...body.rows];
+        rows.sort((a, b) => {
+          const x = value(a), y = value(b);
+          if (x === null || y === null) return (x === null) - (y === null);
+          return dir * (text ? x.localeCompare(y) : x - y);
+        });
+        rows.forEach(r => body.append(r));
+        current = {key, dir};
+        buttons.forEach(b => {
+          if (b.dataset.sort === key) b.dataset.state = dir > 0 ? "asc" : "desc";
+          else delete b.dataset.state;
+        });
+      }
+      buttons.forEach(b => b.addEventListener("click", () => {
+        const dir = b.dataset.sort === current?.key ? -current.dir : Number(b.dataset.dir);
+        sortBy(b.dataset.sort, dir);
+        try { localStorage.setItem(saveAs, `${b.dataset.sort}:${dir}`); } catch (e) {}
+      }));
+      let saved = null;
+      try { saved = localStorage.getItem(saveAs); } catch (e) {}
+      const [key, dir] = (saved || "").split(":");
+      const known = buttons.find(b => b.dataset.sort === key);
+      if (known) sortBy(key, Number(dir) || Number(known.dataset.dir));  // else as the server ordered them
+    });
+  })();
+</script>

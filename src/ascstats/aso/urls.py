@@ -9,6 +9,11 @@ urlpatterns = [
     path("app/<appid:apple_id>/real/", views.app_make_real, name="app_make_real"),
     path("app/<appid:apple_id>/competitors/", views.app_competitors, name="app_competitors"),
     path(
+        "app/<appid:apple_id>/competitors/<int:rival_id>/",
+        views.app_competitor,
+        name="app_competitor",
+    ),
+    path(
         "app/<appid:apple_id>/competitors/manage/",
         views.app_competitors_manage,
         name="app_competitors_manage",

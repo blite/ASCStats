@@ -429,7 +429,14 @@ class Member:
 
     @property
     def store_url(self) -> str:
+        if self.competitor is not None:
+            return self.competitor.store_url
         return f"https://apps.apple.com/us/app/id{self.apple_id}"
+
+    @property
+    def price_value(self) -> float | None:
+        """The price as a number to sort by: "Free" is 0, "$4.99" is 4.99."""
+        return price_value(self.price)
 
     @property
     def grade(self) -> str:
@@ -442,6 +449,20 @@ class Member:
     @property
     def per_day(self) -> float | None:
         return self.new / RECENT if self.new is not None else None
+
+
+def price_value(price: str) -> float | None:
+    """A listing's price as a number to sort by: 0 for "Free" (in any language), 4.99 for
+    "$4.99" or "4,99 €"; None when there is none."""
+    if not price:
+        return None
+    digits = re.sub(r"[^\d.,]", "", price)
+    if not re.search(r"\d", digits):
+        return 0.0
+    if m := re.fullmatch(r"(.*?)[.,](\d{1,2})", digits):
+        whole = re.sub(r"\D", "", m[1]) or "0"
+        return float(f"{whole}.{m[2]}")
+    return float(re.sub(r"\D", "", digits))
 
 
 def _ratings(member: Member, snaps, end: date) -> None:
@@ -490,7 +511,7 @@ def compare(app: App) -> dict:
         ))  # fmt: skip
     if end is None:
         return {"members": members, "end": None, "max": MAX_PER_APP, "charted": members,
-                "changes": []}  # fmt: skip
+                "changes": [], "new_label": f"New, {RECENT} days"}  # fmt: skip
 
     _ratings(you, RatingSnapshot.objects.filter(app=app), end)
     for m in members[1:]:
@@ -520,6 +541,7 @@ def compare(app: App) -> dict:
         "weekly": _weekly_chart(charted, end),
         "timeline": _timeline(charted, since, end),
         "recent": RECENT,
+        "new_label": f"New, {RECENT} days",
         "weeks": WEEKS,
         "changes": listing_changes(rivals, end),
         "changes_days": CHANGES_DAYS,
@@ -676,11 +698,14 @@ def listing_changes(rivals: list[Competitor], end: date, days: int = CHANGES_DAY
     """The listing changes of ``rivals`` over the ``days`` to ``end``, newest first, one entry
     per competitor and day."""
     since = end - timedelta(days=days - 1)
-    found = ListingChange.objects.filter(
-        competitor__in=rivals, date__gte=since, date__lte=end
-    ).select_related("competitor")
+    return _grouped(
+        ListingChange.objects.filter(competitor__in=rivals, date__gte=since, date__lte=end)
+    )
+
+
+def _grouped(found) -> list[dict]:
     groups: dict[tuple[date, int], dict] = {}
-    for change in found:
+    for change in found.select_related("competitor"):
         key = (change.date, change.competitor_id)
         group = groups.setdefault(key, {
             "date": change.date, "competitor": change.competitor, "version": change.version,
@@ -690,3 +715,51 @@ def listing_changes(rivals: list[Competitor], end: date, days: int = CHANGES_DAY
     for g in groups.values():
         g["items"].sort(key=lambda i: ORDER.index(i["field"]))
     return sorted(groups.values(), key=lambda g: (g["date"], g["competitor"].name), reverse=True)
+
+
+# --- one competitor's page ------------------------------------------------------------------
+
+
+def history(competitor: Competitor) -> list[dict]:
+    """Everything recorded about ``competitor``, newest first: each version it shipped (dated
+    by Apple's release date, with its notes) and each day its listing changed."""
+    events = [
+        {"kind": "changes", "date": g["date"], "version": g["version"], "items": g["items"]}
+        for g in _grouped(ListingChange.objects.filter(competitor=competitor))
+    ]
+    for r in CompetitorRelease.objects.filter(competitor=competitor):
+        events.append({
+            "kind": "release", "date": r.released_on or r.first_seen, "version": r.version,
+            "notes": r.notes.strip(), "seen": r.first_seen,
+        })  # fmt: skip
+    # A release before the change it brought, on the same day
+    return sorted(events, key=lambda e: (e["date"], e["kind"] == "changes"), reverse=True)
+
+
+def profile(app: App, competitor: Competitor) -> dict:
+    """One competitor of ``app``: its listing and ratings, the searches it comes up in, and
+    the history of its versions and listing changes."""
+    from . import rival_keywords
+
+    member = Member(
+        competitor.name, competitor.apple_id, competitor.icon_url, competitor.seller,
+        COLORS[-1], False, competitor=competitor, version=competitor.version,
+        version_on=competitor.version_released_on, price=competitor.price,
+        subtitle=competitor.subtitle,
+    )  # fmt: skip
+    snaps = CompetitorSnapshot.objects.filter(competitor=competitor)
+    end = snaps.aggregate(d=Max("date"))["d"]
+    if end is not None:
+        _ratings(member, snaps, end)
+    events = history(competitor)
+    seen = [e.get("seen") or e["date"] for e in events]
+    return {
+        "since": min([competitor.created_at.date(), *seen]),
+        "rival": competitor,
+        "member": member,
+        "recent": RECENT,
+        "history": events,
+        "releases": sum(e["kind"] == "release" for e in events),
+        "changed_days": sum(e["kind"] == "changes" for e in events),
+        "ranks": rival_keywords.ranks(app, competitor),
+    }

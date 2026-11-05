@@ -34,6 +34,7 @@ from django.utils import timezone
 
 from ascstats import store
 from ascstats.stats.models import App
+from ascstats.stats.territories import flag, name
 
 from . import keywords as kw
 from . import synthetic
@@ -379,3 +380,69 @@ def status(app: App, storefront: str) -> dict:
     # Never scanned first, then the longest ago
     rows.sort(key=lambda r: (r[1] is not None, r[1].created_at if r[1] else 0, r[0].name))
     return {"rows": rows, "busy": busy, "front": storefront, "app": app, "terms": SCAN_TERMS}
+
+
+# --- one competitor's page ---------------------------------------------------------------------
+
+
+@dataclass
+class Placing:
+    """One search a competitor comes up in, on its page."""
+
+    keyword: Keyword
+    date: date
+    rank: int
+    change: int | None = None  # places gained since a week before (negative: lost)
+    best: int | None = None  # best rank in the sparkline window
+    spark: list[str] = field(default_factory=list)
+    you: int | None = None
+    tracked: bool = False  # by the app whose page this is
+    scores: kw.Scores = field(default_factory=kw.Scores)
+
+    @property
+    def flag(self) -> str:
+        return flag(self.keyword.storefront)
+
+    @property
+    def country(self) -> str:
+        return name(self.keyword.storefront)
+
+
+def ranks(app: App, competitor: Competitor) -> dict:
+    """Every search of the last ``FRESH_DAYS`` whose latest results place ``competitor``, in
+    any storefront, tracked or scanned: its rank, the change since a week before, a 30-day
+    sparkline, and where ``app`` stands in the same search. Best rank first."""
+    last = KeywordSnapshot.objects.aggregate(d=Max("date"))["d"]
+    out = {"placings": [], "date": last, "limit": store.SEARCH_LIMIT}
+    if last is None:
+        return out
+    since = last - timedelta(days=FRESH_DAYS - 1)
+    them, you = competitor.apple_id, app.apple_id
+    by_keyword: dict[int, list[KeywordSnapshot]] = {}
+    for snap in (
+        KeywordSnapshot.objects.filter(date__gte=since).select_related("keyword").order_by("date")
+    ):
+        by_keyword.setdefault(snap.keyword_id, []).append(snap)
+    tracked = set(app.keywords.values_list("pk", flat=True))
+    placings = []
+    for snaps in by_keyword.values():
+        latest = snaps[-1]
+        rank = latest.rank(them)
+        if rank is None:
+            continue
+        p = Placing(latest.keyword, latest.date, rank, you=latest.rank(you),
+                    tracked=latest.keyword_id in tracked)  # fmt: skip
+        before = [s for s in snaps if s.date <= latest.date - timedelta(days=kw.WEEK)]
+        if before and (old := before[-1].rank(them)):
+            p.change = old - rank
+        window = [s for s in snaps if s.date > latest.date - timedelta(days=kw.SPARK_DAYS)]
+        series = [s.rank(them) for s in window]
+        p.best, p.spark = min(filter(None, series), default=None), kw._spark(series)
+        placings.append((p, latest))
+    looks = kw.latest_suggestions([p.keyword for p, _ in placings])
+    for p, latest in placings:
+        p.scores = kw.scores(p.keyword, latest, looks.get(p.keyword.pk))
+    out["placings"] = sorted(
+        (p for p, _ in placings), key=lambda p: (p.rank, p.keyword.term, p.keyword.storefront)
+    )
+    return out

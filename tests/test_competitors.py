@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 import httpx
 import pytest
@@ -7,7 +7,7 @@ from django.core.management.base import CommandError
 from django.test import override_settings
 
 from ascstats.aso import competitors
-from ascstats.aso.models import Competitor, CompetitorRelease, CompetitorSnapshot
+from ascstats.aso.models import Competitor, CompetitorRelease, CompetitorSnapshot, ListingChange
 from ascstats.stats.cache import data_version
 from ascstats.stats.models import App, RatingSnapshot
 from ascstats.stats.ratings import snapshot
@@ -228,3 +228,70 @@ def test_add_competitor_command(seeded):
         .count()
         == 2
     )
+
+
+def test_competitors_tab_links_each_competitor_to_its_page_and_store(client, seeded):
+    page = client.get(f"/app/{SNAKE}/competitors/").content.decode()
+    snake = App.objects.get(apple_id=SNAKE)
+    for rival in snake.competitors.all():
+        assert f'href="/app/{SNAKE}/competitors/{rival.apple_id}/"' in page
+        assert f'href="{rival.store_url}"' in page
+    assert 'data-sort-table="competitors"' in page
+    for key in ("name", "count", "average", "new", "perday", "newaverage", "released", "price"):
+        assert f'data-sort="{key}"' in page
+
+
+def test_a_competitors_page_shows_its_ranks_and_history(client, seeded):
+    snake = App.objects.get(apple_id=SNAKE)
+    worm = snake.competitors.get(name="Synthetic Worm Rush")
+    page = client.get(f"/app/{SNAKE}/competitors/{worm.apple_id}/")
+    assert page.status_code == 200
+    html = page.content.decode()
+    assert "Synthetic Worm Rush" in html
+    assert f'href="{worm.store_url}"' in html
+    assert "Search ranks" in html
+    assert "History" in html
+    assert f"Version {worm.version}" in html  # the release first seen when following began
+
+    data = competitors.profile(snake, worm)
+    placings = data["ranks"]["placings"]
+    assert placings, "the synthetic searches place it somewhere"
+    assert [p.rank for p in placings] == sorted(p.rank for p in placings)
+    tracked = set(snake.keywords.values_list("pk", flat=True))
+    assert all(p.tracked == (p.keyword.pk in tracked) for p in placings)
+    dates = [e["date"] for e in data["history"]]
+    assert dates == sorted(dates, reverse=True)
+    assert data["releases"] == worm.releases.count()
+
+    # Only the app's own competitors have a page under it
+    other = Competitor.objects.exclude(tracked_for=snake).first()
+    assert client.get(f"/app/{SNAKE}/competitors/{other.apple_id}/").status_code == 404
+    assert client.get(f"/app/{SNAKE}/competitors/123/").status_code == 404
+
+
+def test_history_merges_releases_and_listing_changes(apps):
+    rival = Competitor.objects.create(apple_id=555000222, name="Rival")
+    rival.tracked_for.add(apps[0])
+    day = date(2026, 10, 1)
+    rival.releases.create(version="1.0", released_on=day, notes="First", first_seen=day)
+    rival.releases.create(
+        version="1.1", released_on=day + timedelta(days=5), first_seen=day + timedelta(days=6)
+    )
+    ListingChange.objects.create(
+        competitor=rival, date=day + timedelta(days=6), field="name", before="Rival",
+        after="Rival: Spades", storefront="us", version="1.1",
+    )  # fmt: skip
+    events = competitors.history(rival)
+    assert [(e["kind"], e["version"]) for e in events] == [
+        ("changes", "1.1"), ("release", "1.1"), ("release", "1.0"),
+    ]  # fmt: skip
+    assert events[0]["items"][0]["gained"] == ["spades"]
+
+
+@pytest.mark.parametrize(
+    ("price", "value"),
+    [("Free", 0.0), ("Gratis", 0.0), ("$4.99", 4.99), ("4,99 €", 4.99), ("¥1,200", 1200.0),
+     ("", None)],
+)  # fmt: skip
+def test_price_value_sorts_prices(price, value):
+    assert competitors.price_value(price) == value

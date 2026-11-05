@@ -1,0 +1,18 @@
+{% for i in items %}
+<div class="chg-row">
+  <span class="chg-label">{{ i.label }}</span>
+  <div class="chg-body">
+    {% if i.kind == "text" %}
+      {% if i.long %}<details><summary>{% if i.added %}{{ i.added }} word{{ i.added|pluralize }} added{% endif %}{% if i.added and i.removed %}, {% endif %}{% if i.removed %}{{ i.removed }} removed{% endif %}{% if not i.added and not i.removed %}Reworded{% endif %}</summary>{% endif %}
+      <p class="diff{% if i.long %} long{% endif %}">{% for r in i.runs %}{% if r.op == "gap" %}<span class="gap" title="Unchanged text">…</span>{% elif r.op == "ins" %}<ins>{{ r.text|linebreaksbr }}</ins>{% elif r.op == "del" %}<del>{{ r.text|linebreaksbr }}</del>{% else %}{{ r.text|linebreaksbr }}{% endif %} {% endfor %}</p>
+      {% if i.long %}</details>{% endif %}
+      {% if i.gained or i.dropped %}<p class="words">{% if i.gained %}New words: {% for w in i.gained %}<span class="chip ins">{{ w }}</span>{% endfor %}{% endif %}{% if i.dropped %} Dropped: {% for w in i.dropped %}<span class="chip del">{{ w }}</span>{% endfor %}{% endif %}</p>{% endif %}
+    {% elif i.kind == "shots" %}
+      <div class="shots"><span class="muted">Before{% if i.count.0 > 6 %} (6 of {{ i.count.0 }}){% endif %}</span>{% for u in i.before %}<img src="{{ u }}" alt="" loading="lazy">{% empty %}<span class="muted">none</span>{% endfor %}</div>
+      <div class="shots"><span class="muted">After{% if i.count.1 > 6 %} (6 of {{ i.count.1 }}){% endif %}</span>{% for u in i.after %}<img src="{{ u }}" alt="" loading="lazy">{% empty %}<span class="muted">none</span>{% endfor %}</div>
+    {% elif i.kind == "list" %}
+      <p class="diff">{% if i.added %}Added {% for c in i.added %}<span class="chip ins">{{ c }}</span>{% endfor %}{% endif %}{% if i.removed %} Removed {% for c in i.removed %}<span class="chip del">{{ c }}</span>{% endfor %}{% endif %}</p>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}

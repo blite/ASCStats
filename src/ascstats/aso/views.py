@@ -47,6 +47,17 @@ def app_competitors(request, apple_id):
     return render(request, "aso/app_competitors.html", _tab(app, "competitors") | cp.compare(app))
 
 
+@ensure_csrf_cookie  # outside the cache: the Track buttons read the token from the cookie
+@cached_page
+def app_competitor(request, apple_id, rival_id):
+    """One competitor of an app: its listing, the searches it ranks in, and the history of its
+    versions and listing changes."""
+    app = _app(apple_id)
+    rival = get_object_or_404(app.competitors, apple_id=rival_id)
+    context = _tab(app, "competitors") | cp.profile(app, rival)
+    return render(request, "aso/app_competitor.html", context)
+
+
 def app_competitors_manage(request, apple_id):
     app = _editable(apple_id)
     if request.method == "POST":
@@ -264,6 +275,7 @@ def export_paths(app: App) -> list[str]:
     tab = f"app/{app.apple_id}/"
     return (
         [f"{tab}competitors/", f"{tab}keywords/"]
+        + [f"{tab}competitors/{c.apple_id}/" for c in app.competitors.all()]
         + [f"{tab}keywords/{f.code}/" for f in kw.storefronts(app)]
         + [f"{tab}keywords/{k.pk}/" for k in app.keywords.all()]
     )

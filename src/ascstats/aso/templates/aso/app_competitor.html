@@ -1,0 +1,146 @@
+{% extends "stats/app_base.html" %}{% load humanize l10n stats_extras %}
+{% block tab_title %}{{ rival.name }} · Competitors{% endblock %}
+{% block tab %}
+<p class="crumb"><a href="{% url 'app_competitors' app.apple_id %}">← All competitors</a></p>
+<section class="card fade rival">
+  <div class="rh">
+    <a class="rh-icon" href="{{ rival.store_url }}" target="_blank" rel="noopener" aria-label="Open {{ rival.name }} in the App Store">{% if rival.icon_url %}<img src="{{ rival.icon_url }}" alt="" width="64" height="64">{% else %}<span class="noicon">{% icon "app" %}</span>{% endif %}</a>
+    <div class="rh-text">
+      <h2>{{ rival.name }}</h2>
+      {% if rival.subtitle %}<p class="rh-sub">{{ rival.subtitle }}</p>{% endif %}
+      <p class="muted">{{ rival.seller }}{% if rival.primary_genre %} · {{ rival.primary_genre }}{% endif %}{% if rival.price %} · {{ rival.price }}{% endif %}</p>
+    </div>
+    <a class="btn outline sm" href="{{ rival.store_url }}" target="_blank" rel="noopener">{% icon "external" %}Open in the App Store</a>
+  </div>
+  <dl class="facts">
+    <div><dt>Ratings</dt><dd>{% if member.count is not None %}{{ member.count|intcomma }}{% else %}<span class="muted">–</span>{% endif %}</dd></div>
+    <div><dt>Average</dt><dd>{% if member.average is not None %}{{ member.average|floatformat:2 }}<span class="star {{ member.grade }}">★</span>{% else %}<span class="muted">–</span>{% endif %}</dd></div>
+    <div><dt>New, {{ recent }} days</dt><dd>{% if member.new is not None %}{{ member.new|intcomma }}{% if member.new_average is not None %} <span class="muted">· {{ member.new_average|floatformat:2 }}★</span>{% endif %}{% else %}<span class="muted">–</span>{% endif %}</dd></div>
+    <div><dt>Version</dt><dd>{% if rival.version %}{{ rival.version }}{% if rival.version_released_on %} <span class="muted">· {{ rival.version_released_on|date:"M j, Y" }}</span>{% endif %}{% else %}<span class="muted">–</span>{% endif %}</dd></div>
+    <div><dt>On the App Store since</dt><dd>{% if rival.released_on %}{{ rival.released_on|date:"M j, Y" }}{% else %}<span class="muted">–</span>{% endif %}</dd></div>
+    <div><dt>Followed since</dt><dd>{{ rival.created_at|date:"M j, Y" }}</dd></div>
+  </dl>
+</section>
+
+<section class="card fade">
+  <div class="card-head">
+    <div>
+      <h2>Search ranks<button type="button" class="info" aria-label="About search ranks" data-tip="Search ranks&#10;Every search of the last month whose latest results place {{ rival.name }} in the top {{ ranks.limit }}, in any storefront: the terms your apps track and the terms a competitor scan looked at. A term only a scan searched is not searched again until someone tracks it, so its rank is from that day.&#10;Popularity and difficulty are the same 0–100 estimates as on the Keywords tab; ~ means read from the results alone.">{% icon "info" %}</button></h2>
+      <p class="sub">Where {{ rival.name }} comes up in App Store search{% if ranks.placings %} · {{ ranks.placings|length }} term{{ ranks.placings|length|pluralize }}{% endif %}{% if ranks.date %} · searches up to {{ ranks.date|date:"M j, Y" }}{% endif %}</p>
+    </div>
+    {% if not demo %}<a class="btn outline sm" href="{% url 'app_keywords' app.apple_id %}#rival-keywords">{% icon "keywords" %}Scan for more</a>{% endif %}
+  </div>
+  {% if ranks.placings %}
+  <div class="scroll">
+  <table class="ranks" style="min-width: 860px" data-sort-table="competitor-ranks">
+    <thead><tr>
+      <th>{% include "aso/_sort.html" with key="term" dir=1 label="Keyword" text=1 %}</th>
+      <th>{% include "aso/_sort.html" with key="front" dir=1 label="Store" text=1 %}</th>
+      <th class="num">{% include "aso/_sort.html" with key="rank" dir=1 label="Rank" num=1 %}</th>
+      <th class="num">{% include "aso/_sort.html" with key="change" dir=-1 label="7 days" num=1 tip="7 days&#10;Places gained (▲) or lost (▼) since a week before" %}</th>
+      <th>{% include "aso/_sort.html" with key="best" dir=1 label="Last 30 days" tip="Last 30 days&#10;Its rank over the month; sorts by its best rank" %}</th>
+      <th class="num">{% include "aso/_sort.html" with key="you" dir=1 label=app.name num=1 tip="Where your app comes up in the same search" %}</th>
+      <th class="num">{% include "aso/_sort.html" with key="popularity" dir=-1 label="Popularity" num=1 %}</th>
+      <th class="num">{% include "aso/_sort.html" with key="difficulty" dir=1 label="Difficulty" num=1 %}</th>
+      <th class="num">{% include "aso/_sort.html" with key="tracked" dir=-1 label="Tracked" num=1 tip="Tracked&#10;Whether {{ app.name }} tracks the term" %}</th>
+    </tr></thead>
+    <tbody>
+    {% for p in ranks.placings %}{% with sc=p.scores %}
+    <tr data-term="{{ p.keyword.term }}" data-front="{{ p.keyword.storefront }}" data-rank="{{ p.rank }}" data-change="{% if p.change is not None %}{{ p.change }}{% endif %}" data-best="{{ p.best|default_if_none:'' }}" data-you="{{ p.you|default_if_none:'' }}" data-popularity="{{ sc.popularity|default_if_none:'' }}" data-difficulty="{{ sc.difficulty|default_if_none:'' }}" data-tracked="{% if p.tracked %}1{% else %}0{% endif %}">
+      <td class="term">{{ p.keyword.term }}</td>
+      <td><span title="{{ p.country }}">{{ p.flag }} {{ p.keyword.storefront|upper }}</span></td>
+      <td class="num rank{% if p.rank <= 10 %} top{% endif %}" title="On {{ p.date|date:'M j, Y' }}">#{{ p.rank }}</td>
+      <td class="num">{% if p.change %}<span class="mv {% if p.change > 0 %}up{% else %}down{% endif %}">{% if p.change > 0 %}▲ {{ p.change }}{% else %}▼ {{ p.change|stringformat:"d"|cut:"-" }}{% endif %}</span>{% elif p.change == 0 %}<span class="muted">–</span>{% endif %}</td>
+      <td>{% if p.spark %}<svg viewBox="0 0 100 24" width="100" height="24" aria-label="Rank over the last 30 days{% if p.best %}, best #{{ p.best }}{% endif %}">{% for l in p.spark %}<polyline points="{{ l }}" fill="none" stroke="var(--chart-2)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>{% endfor %}</svg>{% elif p.best %}<span class="muted">one search</span>{% endif %}</td>
+      <td class="num">{% if p.you %}#{{ p.you }}{% else %}<span class="muted" title="Not in the top {{ ranks.limit }}">–</span>{% endif %}</td>
+      <td class="num">{% if sc.popularity is not None %}{% if sc.estimated %}<span class="muted">~</span>{% endif %}{{ sc.popularity }}{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td class="num">{% if sc.difficulty is not None %}{{ sc.difficulty }}{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td class="num">{% if p.tracked %}<span class="muted">✓ Tracked</span>{% elif not demo %}<button type="button" class="btn outline sm" data-track="{{ p.keyword.term }}" data-url="{% url 'app_keyword_suggest_track' app.apple_id p.keyword.storefront %}">+ Track</button>{% else %}<span class="muted">–</span>{% endif %}</td>
+    </tr>
+    {% endwith %}{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No search of the last month places {{ rival.name }} in the top {{ ranks.limit }} yet. Track terms it might rank for, or scan it from the Keywords tab's Competitors' keywords card.</p>
+  {% endif %}
+</section>
+
+<section class="card fade">
+  <div class="card-head">
+    <div>
+      <h2>History<button type="button" class="info" aria-label="About the history" data-tip="History&#10;The versions {{ rival.name }} shipped, dated by the release date its listing gives, with their notes; and each day its listing changed: name, subtitle, description, screenshots, price, category, seller and languages.&#10;The listing only carries the current version, and changes count from the day after it was first seen, so the history starts when you began following it.">{% icon "info" %}</button></h2>
+      <p class="sub">Everything recorded since {{ since|date:"M j, Y" }}, newest first: {{ releases }} version{{ releases|pluralize }} and {{ changed_days }} day{{ changed_days|pluralize }} of listing changes.</p>
+    </div>
+  </div>
+  {% if history %}
+  <ol class="hist">
+    {% for e in history %}
+    <li class="ev {{ e.kind }}">
+      <div class="ev-head">
+        <span class="ev-dot" aria-hidden="true"></span>
+        <strong>{% if e.kind == "release" %}Version {{ e.version }}{% else %}Listing changed{% endif %}</strong>
+        <span class="muted">{{ e.date|date:"M j, Y" }}{% if e.kind == "changes" and e.version %} · on version {{ e.version }}{% endif %}{% if e.kind == "release" and e.seen != e.date %} · first seen {{ e.seen|date:"M j" }}{% endif %}</span>
+      </div>
+      <div class="ev-body">
+        {% if e.kind == "release" %}
+          {% if e.notes %}{% if e.notes|length > 280 %}<details><summary>Release notes</summary><p class="notes">{{ e.notes|linebreaksbr }}</p></details>{% else %}<p class="notes">{{ e.notes|linebreaksbr }}</p>{% endif %}{% else %}<p class="muted notes">No release notes.</p>{% endif %}
+        {% else %}
+          {% include "aso/_change_items.html" with items=e.items %}
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="muted">Nothing recorded yet. Its listing is compared every day, starting the day after it is first seen.</p>
+  {% endif %}
+</section>
+<style>
+  .crumb { margin: 0 0 10px; font-size: 14px; } .crumb a { color: var(--muted-foreground); text-decoration: none; } .crumb a:hover { color: var(--foreground); }
+  .rh { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .rh-icon img, .rh-icon .noicon { display: block; width: 64px; height: 64px; border-radius: 15px; }
+  .rh-icon .noicon { display: grid; place-items: center; background: var(--muted); }
+  .rh-text { flex: 1; min-width: 200px; }
+  .rh-text h2 { margin: 0; font-size: 20px; }
+  .rh-text p { margin: 3px 0 0; font-size: 14px; }
+  .rh-sub { color: var(--foreground); }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--border); }
+  .facts dt { font-size: 12px; color: var(--muted-foreground); } .facts dd { margin: 2px 0 0; font-size: 15px; font-weight: 550; font-variant-numeric: tabular-nums; }
+  .star { margin-left: 3px; }
+  .star.good { color: var(--good-text); } .star.fair { color: var(--chart-4); } .star.poor { color: var(--bad-text); }
+  .ranks td { vertical-align: middle; font-size: 14px; }
+  .ranks .term { font-weight: 500; }
+  .ranks .rank { font-weight: 650; } .ranks .rank.top { color: var(--good-text); }
+  .ranks svg { display: block; }
+  .mv { font-size: 12px; font-weight: 600; } .mv.up { color: var(--good-text); } .mv.down { color: var(--bad-text); }
+  .candidate-note { font-size: 13px; } .candidate-note.ok { color: var(--muted-foreground); } .candidate-note.err { color: var(--bad-text); }
+  .hist { list-style: none; margin: 0; padding: 0; }
+  .ev { position: relative; padding: 0 0 18px 22px; }
+  .ev::before { content: ""; position: absolute; left: 5px; top: 14px; bottom: 0; width: 2px; background: var(--border); }
+  .ev:last-child::before { display: none; }
+  .ev-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+  .ev-dot { position: absolute; left: 0; top: 4px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--card); background: var(--chart-3); }
+  .ev.release .ev-dot { background: var(--chart-1); }
+  .ev-body .notes { margin: 6px 0 0; font-size: 13px; line-height: 1.55; max-width: 80ch; color: var(--ink-2, var(--foreground)); overflow-wrap: anywhere; }
+  .ev-body details summary { margin-top: 6px; }
+  .ev-body .chg-row:first-child { margin-top: 8px; }
+</style>
+{% include "aso/_change_style.html" %}
+{% include "aso/_sort_table.html" %}
+<script>
+  // Track a term: the same request as the Suggestions card's Track button. The page is cached,
+  // so the request reads this session's CSRF token from its cookie.
+  document.querySelector(".ranks")?.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-track]");
+    if (!button) return;
+    button.disabled = true;
+    const body = new FormData();
+    body.append("term", button.dataset.track);
+    const csrf = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/)?.[1] ?? "";
+    const r = await fetch(button.dataset.url, {method: "POST", body, headers: {"X-CSRFToken": csrf}});
+    if (r.ok) button.closest("tr").dataset.tracked = "1";
+    button.outerHTML = r.ok ? await r.text() : '<span class="candidate-note err">Try again</span>';
+  });
+</script>
+{% endblock %}
