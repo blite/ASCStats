@@ -64,7 +64,10 @@ def _app(apple_id) -> App:
 
 @cached_page
 def app_page(request, apple_id):
-    """An app's Stats tab: downloads, revenue and the store funnel together."""
+    """An app's Stats tab: downloads, revenue and the store funnel together. An idea has no
+    stats, so its link lands on its Keywords tab."""
+    if App.objects.ideas().filter(apple_id=apple_id).exists():
+        return redirect("app_keywords", apple_id)
     app = _app(apple_id)
     end = d.last_day()
     context = {

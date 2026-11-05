@@ -22,8 +22,16 @@ class Report(models.TextChoices):
 
 class AppQuerySet(models.QuerySet):
     def active(self):
-        """The apps every stat covers."""
+        """The apps every stat covers: on the App Store, so never an idea."""
+        return self.filter(is_active=True, is_idea=False)
+
+    def researched(self):
+        """The apps the Keywords and Competitors tabs cover: the active apps and the ideas."""
         return self.filter(is_active=True)
+
+    def ideas(self):
+        """Apps not built yet, kept to research their keywords and competitors."""
+        return self.filter(is_active=True, is_idea=True)
 
     def listed(self):
         """The apps the sidebar lists: active and not hidden, in the order the user chose."""
@@ -41,6 +49,12 @@ class AppQuerySet(models.QuerySet):
         self.model.objects.bulk_update(ordered, ["sort_order"])
 
 
+def next_idea_id() -> int:
+    """Ideas take negative IDs, which Apple never uses: -1, -2, ..."""
+    lowest = App.objects.filter(apple_id__lt=0).aggregate(models.Min("apple_id"))["apple_id__min"]
+    return min(lowest or 0, 0) - 1
+
+
 def next_sort_order() -> int:
     """New apps join the end of the list."""
     last = App.objects.aggregate(models.Max("sort_order"))["sort_order__max"]
@@ -56,6 +70,9 @@ class App(models.Model):
     # Display only: a hidden app is still imported and counted, just not listed in the sidebar.
     sort_order = models.PositiveIntegerField(default=next_sort_order, help_text="Sidebar position")
     is_hidden = models.BooleanField(default=False, help_text="Left out of the sidebar")
+    # An app not built yet: no listing, sales or ratings, only keywords and competitors to research.
+    # Its apple_id is negative until it becomes a real app (aso.idea_apps.make_real).
+    is_idea = models.BooleanField(default=False, help_text="Research only, not on the App Store")
     # From the public store listing (iTunes Lookup), refreshed by every rating snapshot.
     released_on = models.DateField(null=True, blank=True, help_text="First App Store release")
     icon_url = models.URLField(max_length=500, blank=True)

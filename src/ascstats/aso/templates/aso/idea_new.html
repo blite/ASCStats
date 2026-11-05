@@ -1,0 +1,26 @@
+{% extends "stats/base.html" %}{% load stats_extras %}
+{% block title %}New idea · ASCStats{% endblock %}
+{% block content %}
+<section class="hero fade">
+  <h1>New idea</h1>
+  <p class="sub">An app you haven't built yet. Track the keywords it would go after and follow the apps it would compete with, to see if it's worth making. Each keyword is searched once when you add it, not every day. When the app is on the App Store, its research moves over to it.</p>
+</section>
+<section class="card fade manage">
+  {% for m in messages %}<div class="alert{% if m.level_tag == 'error' %} destructive{% endif %}" role="{% if m.level_tag == 'error' %}alert{% else %}status{% endif %}">{% if m.level_tag == 'error' %}{% icon "alert" %}{% endif %}<div>{{ m }}</div></div>{% endfor %}
+  <form method="post" class="add">
+    {% csrf_token %}
+    <label class="label" for="idea-name">Name</label>
+    <div class="add-row">
+      <input class="input" id="idea-name" name="name" value="{{ typed }}" placeholder="Cribbage: No Ads" maxlength="255" autocomplete="off" required autofocus>
+      <button class="btn" type="submit">Create</button>
+    </div>
+    <p class="muted hint">The name seeds the Suggestions card's phrases, so use the words the app would be found by.</p>
+  </form>
+</section>
+<style>
+  .manage .alert { margin-bottom: 12px; }
+  .add { display: grid; gap: 8px; max-width: 640px; }
+  .add-row { display: flex; gap: 8px; }
+  .hint { font-size: 13px; margin: 0; }
+</style>
+{% endblock %}

@@ -128,8 +128,10 @@ def as_listing(result: dict) -> dict:
 
 
 def tracked() -> list[Keyword]:
-    """Keywords tracked for at least one active app: the ones searched."""
-    return list(Keyword.objects.filter(tracked_for__is_active=True).distinct())
+    """Keywords tracked for at least one active app on the App Store: the ones searched every
+    day. An idea's keywords are searched once, when added (``jobs.search_keyword``)."""
+    live = Keyword.objects.filter(tracked_for__is_active=True, tracked_for__is_idea=False)
+    return list(live.distinct())
 
 
 def snapshot(

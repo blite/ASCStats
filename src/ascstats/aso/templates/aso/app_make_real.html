@@ -1,0 +1,27 @@
+{% extends "stats/app_base.html" %}{% load stats_extras %}
+{% block tab_title %}Make it a real app{% endblock %}
+{% block tab %}
+<section class="card fade manage">
+  <div class="card-head">
+    <div>
+      <h2>Make it a real app</h2>
+      <p class="sub">Once {{ app.name }} is on the App Store, paste its link. Its {{ app.keywords.count }} keyword{{ app.keywords.count|pluralize }} and {{ app.competitors.count }} competitor{{ app.competitors.count|pluralize }} move to the app and are searched every day from then on. If App Store Connect has already imported the app, the research joins it and this idea goes; if not, the idea becomes the app, and the next import fills in its sales and listing.</p>
+    </div>
+    <a class="btn outline sm" href="{% url 'app_keywords' app.apple_id %}">Cancel</a>
+  </div>
+  {% for m in messages %}<div class="alert{% if m.level_tag == 'error' %} destructive{% endif %}" role="{% if m.level_tag == 'error' %}alert{% else %}status{% endif %}">{% if m.level_tag == 'error' %}{% icon "alert" %}{% endif %}<div>{{ m }}</div></div>{% endfor %}
+  <form method="post" class="add">
+    {% csrf_token %}
+    <label class="label" for="real-app">App Store link or ID</label>
+    <div class="add-row">
+      <input class="input" id="real-app" name="app" value="{{ typed }}" placeholder="https://apps.apple.com/us/app/…/id123456789" autocomplete="off" required autofocus>
+      <button class="btn" type="submit">Move the research</button>
+    </div>
+  </form>
+</section>
+<style>
+  .manage .alert { margin-bottom: 12px; }
+  .add { display: grid; gap: 8px; margin: 4px 0 6px; max-width: 640px; }
+  .add-row { display: flex; gap: 8px; }
+</style>
+{% endblock %}

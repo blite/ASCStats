@@ -3,7 +3,7 @@ from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
 from ascstats.api import api
-from ascstats.stats import views
+from ascstats.stats import converters, views  # noqa: F401  (registers <appid:…>)
 from ascstats.stats.charts import ALL
 
 urlpatterns = [
@@ -11,17 +11,17 @@ urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     path("<int:days>d/", views.dashboard, name="dashboard_period"),
     path("all/", views.dashboard, {"days": ALL}, name="dashboard_all"),
-    path("app/<int:apple_id>/", views.app_page, name="app"),
-    path("app/<int:apple_id>/funnel/", views.app_funnel, name="app_funnel"),
-    path("app/<int:apple_id>/ratings/", views.app_ratings, name="app_ratings"),
+    path("app/<appid:apple_id>/", views.app_page, name="app"),
+    path("app/<appid:apple_id>/funnel/", views.app_funnel, name="app_funnel"),
+    path("app/<appid:apple_id>/ratings/", views.app_ratings, name="app_ratings"),
     path(
-        "app/<int:apple_id>/ratings/<slug:country>/<slug:window>/",
+        "app/<appid:apple_id>/ratings/<slug:country>/<slug:window>/",
         views.app_ratings_chart,
         name="app_ratings_chart",
     ),
-    path("app/<int:apple_id>/reviews/", views.app_reviews, name="app_reviews"),
-    path("app/<int:apple_id>/reviews/<slug:state>/", views.app_reviews, name="app_reviews_state"),
-    path("chart/<int:apple_id>/<int:days>/", views.chart, name="chart"),
+    path("app/<appid:apple_id>/reviews/", views.app_reviews, name="app_reviews"),
+    path("app/<appid:apple_id>/reviews/<slug:state>/", views.app_reviews, name="app_reviews_state"),
+    path("chart/<appid:apple_id>/<int:days>/", views.chart, name="chart"),
     path("apps/", views.arrange_apps, name="arrange_apps"),
     path("revenue/", views.revenue, name="revenue"),
     path("revenue/<int:days>d/", views.revenue, name="revenue_period"),

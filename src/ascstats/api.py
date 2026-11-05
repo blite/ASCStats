@@ -126,8 +126,9 @@ def health(request):
 
 @api.get("/apps", response=list[AppOut], tags=["apps"])
 def list_apps(request, include_inactive: bool = False):
-    """Active apps (the ones every stat covers); ``include_inactive`` lists the rest too."""
-    return App.objects.all() if include_inactive else App.objects.active()
+    """Active apps (the ones every stat covers); ``include_inactive`` lists the rest too. Never
+    an idea: it is not on the App Store."""
+    return App.objects.filter(is_idea=False) if include_inactive else App.objects.active()
 
 
 def _range(start: date | None, end: date | None) -> tuple[date, date]:

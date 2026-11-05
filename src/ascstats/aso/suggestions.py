@@ -65,7 +65,8 @@ def look(term: str, ask: Callable[[str], list[str]]) -> dict:
 
 
 def due(day: date, limit: int = MAX_PER_RUN) -> list[Keyword]:
-    """Tracked keywords not looked at this week, never-seen first, then the oldest."""
+    """Tracked keywords not looked at this week, never-seen first, then the oldest. An idea's
+    keywords are looked at once, like their one search, so their popularity has its evidence."""
     from .keywords import tracked
 
     last = dict(
@@ -73,7 +74,12 @@ def due(day: date, limit: int = MAX_PER_RUN) -> list[Keyword]:
         .annotate(d=Max("date"))
         .values_list("keyword", "d")
     )
-    waiting = [k for k in tracked() if k.pk not in last or (day - last[k.pk]).days >= WEEK]
+    daily = {k.pk for k in tracked()}
+    every = Keyword.objects.filter(tracked_for__is_active=True).distinct()
+    waiting = [
+        k for k in every
+        if k.pk not in last or (k.pk in daily and (day - last[k.pk]).days >= WEEK)
+    ]  # fmt: skip
     waiting.sort(key=lambda k: (k.pk in last, last.get(k.pk) or date.min, k.term))
     return waiting[:limit]
 

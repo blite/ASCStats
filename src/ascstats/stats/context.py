@@ -10,4 +10,5 @@ def site(request):
         "demo": settings.DEMO_SITE,
         "source_url": settings.SOURCE_URL,
         "nav_apps": App.objects.listed().only("apple_id", "name", "icon_url"),  # read lazily
+        "nav_ideas": App.objects.ideas().only("apple_id", "name"),
     }

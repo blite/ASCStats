@@ -39,11 +39,12 @@ def _t(model) -> str:
 
 
 def _arrangement() -> str:
-    """Every app's sidebar position and hidden flag as one string, in the database's own words."""
+    """Every app's sidebar position, hidden flag and whether it is an idea as one string, in the
+    database's own words."""
     if connection.vendor == "postgresql":
-        row = "id::text || ':' || sort_order::text || ':' || is_hidden::text"
+        row = "id::text || ':' || sort_order::text || ':' || is_hidden::text || is_idea::text"
         return f"(SELECT string_agg({row}, ',' ORDER BY id) FROM {_t(App)})"
-    row = "id || ':' || sort_order || ':' || is_hidden"  # SQLite, for the tests
+    row = "id || ':' || sort_order || ':' || is_hidden || is_idea"  # SQLite, for the tests
     return f"(SELECT group_concat(r, ',') FROM (SELECT {row} AS r FROM {_t(App)} ORDER BY id))"
 
 

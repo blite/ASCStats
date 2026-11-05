@@ -3,13 +3,14 @@
 {% block content %}
 <section class="hero app-hero fade">
   <h1>{% if app.icon_url %}<img src="{{ app.icon_url }}" alt="" width="56" height="56">{% endif %}{{ app.name }}</h1>
-  {% if app.primary_genre or app.released_on %}<p class="sub">{{ app.primary_genre }}{% if app.primary_genre and app.released_on %} · {% endif %}{% if app.released_on %}On the App Store since {{ app.released_on|date:"M j, Y" }}{% endif %}</p>{% endif %}
+  {% if app.is_idea %}<p class="sub"><span class="badge">Idea</span> Research only: not on the App Store, keywords searched once when added.{% if not demo %} <a href="{% url 'app_make_real' app.apple_id %}">Make it a real app</a>{% endif %}</p>
+  {% elif app.primary_genre or app.released_on %}<p class="sub">{{ app.primary_genre }}{% if app.primary_genre and app.released_on %} · {% endif %}{% if app.released_on %}On the App Store since {{ app.released_on|date:"M j, Y" }}{% endif %}</p>{% endif %}
 </section>
 <nav class="tablist" aria-label="{{ app.name }}" data-app-tab="{% if tab != "stats" %}{{ tab }}/{% endif %}">
-  <a href="{% url 'app' app.apple_id %}"{% if tab == "stats" %} aria-current="page"{% endif %}>{% icon "stats" %}Stats</a>
+  {% if not app.is_idea %}<a href="{% url 'app' app.apple_id %}"{% if tab == "stats" %} aria-current="page"{% endif %}>{% icon "stats" %}Stats</a>
   <a href="{% url 'app_ratings' app.apple_id %}"{% if tab == "ratings" %} aria-current="page"{% endif %}>{% icon "ratings" %}Ratings</a>
   <a href="{% url 'app_reviews' app.apple_id %}"{% if tab == "reviews" %} aria-current="page"{% endif %}>{% icon "reviews" %}Reviews</a>
-  <a href="{% url 'app_keywords' app.apple_id %}"{% if tab == "keywords" %} aria-current="page"{% endif %}>{% icon "keywords" %}Keywords</a>
+  {% endif %}  <a href="{% url 'app_keywords' app.apple_id %}"{% if tab == "keywords" %} aria-current="page"{% endif %}>{% icon "keywords" %}Keywords</a>
   <a href="{% url 'app_competitors' app.apple_id %}"{% if tab == "competitors" %} aria-current="page"{% endif %}>{% icon "competitors" %}Competitors</a>
 </nav>
 {% block tab %}{% endblock %}
@@ -18,6 +19,8 @@
   .app-hero h1 { display: flex; align-items: center; gap: 14px; font-size: clamp(28px, 4vw, 40px); max-width: none; }
   .app-hero h1 img { border-radius: 13px; flex: none; }
   .app-hero .sub { color: var(--muted-foreground); font-size: 14px; margin: 8px 0 0; }
+  .app-hero .badge { display: inline-block; margin-right: 4px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600;
+                     background: var(--accent); color: var(--foreground); }
   /* shadcn Tabs: a muted track with the current tab raised */
   .tablist { display: flex; width: fit-content; max-width: 100%; overflow-x: auto; gap: 2px; padding: 3px; margin: 0 0 14px;
              background: var(--muted); border-radius: var(--radius); scrollbar-width: none; }

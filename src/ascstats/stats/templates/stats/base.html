@@ -187,6 +187,13 @@
         {% endfor %}
       </ul>
     </div>{% endif %}
+    {% if not demo %}<div class="sb-group">{# the static demo exports real apps only #}
+      <div class="sb-label">Ideas<a class="sb-action" href="{% url 'idea_new' %}" title="New idea"{% if page == "idea_new" %} aria-current="page"{% endif %}>{% icon "plus" %}<span class="sr-only">New idea</span></a></div>
+      <ul class="sb-menu">
+        {% for a in nav_ideas %}<li><a class="sb-btn" href="{% url 'app_keywords' a.apple_id %}" title="{{ a.name }}"{% if page == "app" and app.apple_id == a.apple_id %} aria-current="page"{% endif %}>{% icon "idea" %}<span>{{ a.name }}</span></a></li>
+        {% endfor %}
+      </ul>
+    </div>{% endif %}
     <div class="sb-group">
       <div class="sb-label">{% if demo %}Project{% else %}Developer{% endif %}</div>
       <ul class="sb-menu">

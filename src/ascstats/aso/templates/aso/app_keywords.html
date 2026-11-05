@@ -14,7 +14,7 @@
   </div>
   {% if not rows %}
   <div class="empty">
-    <p><strong>{{ app.name }} doesn't track any keywords yet.</strong><br>Add up to {{ max }} search terms, each searched once a day.</p>
+    <p><strong>{{ app.name }} doesn't track any keywords yet.</strong><br>Add up to {{ max }} search terms, each searched {% if app.is_idea %}once, when you add it{% else %}once a day{% endif %}.</p>
     {% if not demo %}<a class="btn" href="{% url 'app_keywords_manage' app.apple_id %}">Add keywords</a>{% endif %}
   </div>
   {% else %}
@@ -61,7 +61,7 @@
     <ol>{% for t in r.top %}<li{% if t.who %} class="{{ t.who }}"{% endif %}><span class="pos">#{{ t.rank }}</span><a class="ellip" href="https://apps.apple.com/{{ r.keyword.storefront }}/app/id{{ t.id }}" target="_blank" rel="noopener">{{ t.name }}</a>{% if t.who == "you" %}<small>You</small>{% elif t.who == "rival" %}<small>Following</small>{% else %}{% if t.ratings %}<small>{{ t.ratings|intcomma }}</small>{% endif %}{% if not demo %}<button type="button" class="follow" data-follow="{{ t.id }}" data-keyword="{{ r.keyword.pk }}" aria-label="Follow {{ t.name }} as a competitor" title="Follow as a competitor"></button>{% endif %}{% endif %}</li>{% endfor %}</ol>
     {% with r.further as further %}{% if further %}<p class="mnote">{% with further.0 as f %}Your competitors further down: {{ f.1 }} at #{{ f.0 }}{% endwith %}{% if further|length > 1 %} and {{ further|length|add:"-1" }} more{% endif %}</p>{% endif %}{% endwith %}
     {% elif r.date %}<p class="mnote">No results for this term today.</p>
-    {% else %}<p class="mnote">Not searched yet: the next daily search fills this in.</p>{% endif %}
+    {% else %}<p class="mnote">Not searched yet: {% if app.is_idea %}its search runs in a minute{% else %}the next daily search fills this in{% endif %}.</p>{% endif %}
     <hr>
     <button type="button" class="mi" data-show="{{ r.keyword.pk }}">{% icon "chart" %}Rank history and top results</button>
     {% if not demo %}<button type="button" class="mi danger" data-untrack="{{ r.keyword.pk }}">{% icon "trash" %}Stop tracking</button>{% endif %}

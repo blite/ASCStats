@@ -17,12 +17,12 @@ from ascstats.stats.ratings import storefronts
 from ascstats.stats.territories import name
 
 from . import competitors as cp
-from . import ideas, jobs
+from . import idea_apps, ideas, jobs
 from . import keywords as kw
 
 
 def _app(apple_id) -> App:
-    app = App.objects.active().filter(apple_id=apple_id).first()
+    app = App.objects.researched().filter(apple_id=apple_id).first()
     if app is None:
         raise Http404("no such app")
     return app
@@ -88,6 +88,37 @@ def app_competitors_follow(request, apple_id):
     return JsonResponse({"name": rival.name})
 
 
+def idea_new(request):
+    """Start an idea: an app not built yet, to research its keywords and competitors."""
+    if settings.DEMO_SITE:
+        raise Http404("the static demo is read-only")
+    if request.method == "POST":
+        try:
+            idea = idea_apps.create(request.POST.get("name", ""))
+        except cp.CompetitorError as error:
+            messages.error(request, str(error))
+        else:
+            return redirect("app_keywords_manage", idea.apple_id)
+    context = {"page": "idea_new", "typed": request.POST.get("name", "")}
+    return render(request, "aso/idea_new.html", context)
+
+
+def app_make_real(request, apple_id):
+    """Turn an idea into the app it became, keeping its keywords and competitors."""
+    idea = _editable(apple_id)
+    if not idea.is_idea:
+        return redirect("app_keywords", apple_id)
+    if request.method == "POST":
+        try:
+            app = idea_apps.make_real(idea, request.POST.get("app", ""))
+        except cp.CompetitorError as error:
+            messages.error(request, str(error))
+        else:
+            return redirect("app_keywords", app.apple_id)
+    context = _tab(idea, "real") | {"typed": request.POST.get("app", "")}
+    return render(request, "aso/app_make_real.html", context)
+
+
 @ensure_csrf_cookie  # outside the cache: the delete form reads its token from the cookie
 @cached_page
 def app_keywords(request, apple_id, storefront=None):
@@ -101,7 +132,8 @@ def app_keywords(request, apple_id, storefront=None):
     front = storefront or (codes[0] if codes else None)
     context = _tab(app, "keywords") | kw.board(app, front)
     context |= {"fronts": fronts, "front": front, "total": sum(f.count for f in fronts)}
-    context["kw_summary"] = kw.summary([app], front) if front else None
+    # an idea ranks for nothing, so its tiles would only count zeros
+    context["kw_summary"] = kw.summary([app], front) if front and not app.is_idea else None
     return render(request, "aso/app_keywords.html", context)
 
 

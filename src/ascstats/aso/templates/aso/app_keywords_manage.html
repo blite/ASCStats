@@ -5,7 +5,7 @@
   <div class="card-head">
     <div>
       <h2>Manage keywords</h2>
-      <p class="sub">Track up to {{ max }} search terms for {{ app.name }}. Each is searched once a day in its storefront, and the whole result order is kept, so your competitors' ranks come from the same searches.</p>
+      <p class="sub">Track up to {{ max }} search terms for {{ app.name }}. {% if app.is_idea %}Each is searched once, when you add it, since an idea ranks for nothing yet; the next daily job adds its popularity. The whole result order is kept, so its top results and your competitors' ranks come from the same search.{% else %}Each is searched once a day in its storefront, and the whole result order is kept, so your competitors' ranks come from the same searches.{% endif %}</p>
     </div>
     <a class="btn outline sm" href="{% url 'app_keywords' app.apple_id %}">Done</a>
   </div>
