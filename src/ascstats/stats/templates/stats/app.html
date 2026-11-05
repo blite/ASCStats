@@ -6,7 +6,7 @@
     <div class="label">{{ t.label }}</div>
     <div class="row">
       <div>
-        <div class="value">{{ t.value|intcomma }}</div>
+        <div class="value">{{ t.shown }}</div>
         <span class="chip {{ t.direction }}">{% if t.direction == "up" %}▲{% elif t.direction == "down" %}▼{% else %}●{% endif %}
           {% if t.change_pct is None %}new{% else %}{{ t.change_pct|floatformat:0|cut:"-" }}%{% endif %}</span>
       </div>

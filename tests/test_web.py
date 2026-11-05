@@ -335,3 +335,35 @@ def test_overview_shows_week_by_week(client, db):
     assert "Week by week" in page
     assert f"{full.downloads:,}" in page
     assert full.revenue_label in page
+
+
+def test_overview_tiles_show_revenue_not_updates(client, db):
+    from datetime import timedelta
+
+    from ascstats.stats import dashboard
+    from ascstats.stats.charts import Period
+    from ascstats.stats.models import App, FxDay
+    from ascstats.stats.revenue import revenue
+
+    call_command("seed_synthetic", "--days", "20")
+    end = dashboard.last_day()
+    FxDay.objects.create(
+        date=end - timedelta(days=60),
+        rates={"USD": 1, "GBP": 1.25, "EUR": 1.1, "CAD": 0.73, "AUD": 0.66, "JPY": 0.0067,
+               "BRL": 0.2},
+    )  # fmt: skip
+    week = Period(end, 7)
+    tiles = dashboard.tiles(end, week)
+    assert [t.label for t in tiles] == ["Downloads", "In-app purchases", "Revenue"]
+    money = tiles[2]
+    assert money.value == pytest.approx(revenue(end, week)["total"])  # agrees with Revenue page
+    assert money.change_pct is not None
+    assert money.shown.startswith("$")
+    app = App.objects.get(apple_id=1000000001)
+    assert [t.label for t in dashboard.tiles(end, week, app=app)] == [
+        "Downloads",
+        "In-app purchases",
+    ]
+    page = client.get("/7d/").content.decode()
+    assert money.shown in page
+    assert "Updates installed" not in page

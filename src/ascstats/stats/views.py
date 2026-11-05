@@ -77,7 +77,7 @@ def app_page(request, apple_id):
         "end": end,
         "app": app,
         "windows": WINDOWS,
-        "tiles": d.tiles(end, Period(end, 30), app=app)[:2] if end else [],
+        "tiles": d.tiles(end, Period(end, 30), app=app) if end else [],
         "revenue": r.app_revenue(app, end) if end else None,
         "funnel": f.app_funnel(app, funnel_end) if (funnel_end := f.last_day()) else None,
     }

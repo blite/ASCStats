@@ -54,10 +54,11 @@ def _effect(impact: VersionImpact) -> tuple[str, str]:
 @dataclass
 class Tile:
     label: str
-    value: int
-    previous: int
+    value: float
+    previous: float
     spark: str = ""  # polyline points, 120x32
     note: str = ""
+    usd: bool = False  # a dollar amount, not a count
 
     @property
     def change_pct(self) -> float | None:
@@ -69,25 +70,37 @@ class Tile:
             return "flat"
         return "up" if self.change_pct > 0 else "down"
 
+    @property
+    def shown(self) -> str:
+        return money(self.value) if self.usd else f"{self.value:,}"
+
 
 def tiles(end: date, period: Period | None = None, app: App | None = None) -> list[Tile]:
-    """The headline measures for every active app, or for one."""
+    """The headline measures for every active app (downloads, in-app purchases, proceeds), or
+    for one (downloads and in-app purchases: its page has a Revenue section of its own)."""
     period = period or Period(end)
     only = {"app": app} if app else {}
     start, prev_start = period.start, period.prev_start
     spark_days = _days(end - timedelta(days=89), end)
+    note = f"{period.label} {period.versus}"
     out = []
-    for label, measure in (
-        ("Downloads", "downloads"),
-        ("In-app purchases", "iap_units"),
-        ("Updates installed", "updates"),
-    ):
+    for label, measure in (("Downloads", "downloads"), ("In-app purchases", "iap_units")):
         daily = _daily(measure, min(spark_days[0], start), end, **only)  # all time reaches further
         current = sum(v for d, v in daily.items() if d >= start)
         previous = sum(_daily(measure, prev_start, start - timedelta(days=1), **only).values())
         series = smooth([daily.get(d, 0) for d in spark_days])
-        note = f"{period.label} {period.versus}"
         out.append(Tile(label, current, previous, spark(series, 120, 32), note))
+    if app is None:
+        proceeds: dict[date, float] = defaultdict(float)
+        for ln in revenue_lines(min(spark_days[0], prev_start), end):
+            if ln.usd is not None:  # the Revenue page lists what has no rate yet
+                proceeds[ln.day] += float(ln.usd)
+        current = sum(v for d, v in proceeds.items() if d >= start)
+        previous = sum(v for d, v in proceeds.items() if prev_start <= d < start)
+        series = smooth([proceeds.get(d, 0.0) for d in spark_days])
+        out.append(
+            Tile("Revenue", current, previous, spark(series, 120, 32), note + " · USD", usd=True)
+        )
     return out
 
 
