@@ -297,3 +297,34 @@ def test_add_keyword_command(seeded):
 def test_seeding_follows_rivals_and_tracks_keywords(seeded):
     assert Competitor.objects.filter(tracked_for__apple_id=SNAKE).count() == 2
     assert KeywordSnapshot.objects.filter(keyword__term="star map").count() == 30
+
+
+def _menu(client, keyword) -> str:
+    """The markup of one keyword's row menu on the Keywords tab."""
+    page = client.get(f"/app/{SNAKE}/keywords/").content.decode()
+    return page.split(f'id="kwm-{keyword.pk}"')[1].split("</div>")[0]
+
+
+def test_the_top_10_menu_follows_a_result_as_a_competitor(client, seeded):
+    snake = App.objects.get(apple_id=SNAKE)
+    row = next(r for r in keywords.board(snake, "us")["rows"] if any(not t["who"] for t in r.top))
+    stranger = next(t for t in row.top if not t["who"])
+    menu = _menu(client, row.keyword)
+    assert f'data-follow="{stranger["id"]}"' in menu  # a + for an app nobody follows
+    placed = [t for t in row.top if t["who"]]  # you and your competitors get no +
+    assert all(f'data-follow="{t["id"]}"' not in menu for t in placed)
+
+    url = f"/app/{SNAKE}/competitors/follow/"
+    answer = client.post(url, {"id": stranger["id"], "keyword": row.keyword.pk})
+    assert answer.status_code == 200
+    assert answer.json()["name"] == stranger["name"]
+    rival = Competitor.objects.get(apple_id=stranger["id"])
+    assert snake in rival.tracked_for.all()
+    assert rival.seller == stranger["seller"]
+    again = client.post(url, {"id": stranger["id"], "keyword": row.keyword.pk})
+    assert again.status_code == 400
+    assert "already follows" in again.json()["error"]
+    assert client.post(url, {"id": 1, "keyword": row.keyword.pk}).status_code == 400  # not a result
+    assert client.get(url).status_code == 405
+    # the cached tab shows it as followed straight away
+    assert f'data-follow="{stranger["id"]}"' not in _menu(client, row.keyword)

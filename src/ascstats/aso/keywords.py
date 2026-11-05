@@ -119,6 +119,14 @@ def _save(keyword: Keyword, day: date, results: list[dict]) -> None:
         KeywordSnapshot.objects.create(keyword=keyword, date=day, ids=ids, top=top)
 
 
+def as_listing(result: dict) -> dict:
+    """A result ``_save`` kept, back in the Lookup shape ``competitors.store_listing`` reads."""
+    return {
+        "trackId": result["id"], "trackName": result["name"],
+        "sellerName": result.get("seller", ""), "artworkUrl100": result.get("icon", ""),
+    }  # fmt: skip
+
+
 def tracked() -> list[Keyword]:
     """Keywords tracked for at least one active app: the ones searched."""
     return list(Keyword.objects.filter(tracked_for__is_active=True).distinct())

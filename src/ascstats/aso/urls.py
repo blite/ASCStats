@@ -9,6 +9,11 @@ urlpatterns = [
         views.app_competitors_manage,
         name="app_competitors_manage",
     ),
+    path(
+        "app/<int:apple_id>/competitors/follow/",
+        views.app_competitors_follow,
+        name="app_competitors_follow",
+    ),
     path("app/<int:apple_id>/keywords/", views.app_keywords, name="app_keywords"),
     path(
         "app/<int:apple_id>/keywords/manage/",

@@ -4,7 +4,7 @@ session's CSRF token."""
 
 from django.conf import settings
 from django.contrib import messages
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -67,6 +67,25 @@ def app_competitors_manage(request, apple_id):
         "typed": request.POST.get("app", ""),
     }
     return render(request, "aso/app_competitors_manage.html", context)
+
+
+@require_POST
+def app_competitors_follow(request, apple_id):
+    """Follow one of a keyword's top results, from the + in its row's menu on the Keywords
+    tab. Its name, seller and icon come from the search that listed it; the rest of its
+    listing fills in with the next daily snapshot."""
+    app = _editable(apple_id)
+    keyword = get_object_or_404(app.keywords, pk=request.POST.get("keyword", ""))
+    top = keyword.snapshots.order_by("-date").values_list("top", flat=True).first() or []
+    rid = request.POST.get("id", "")
+    hit = next((r for r in top if str(r["id"]) == rid), None)
+    if hit is None:
+        return JsonResponse({"error": "That app is not in this keyword's results."}, status=400)
+    try:
+        rival = cp.add(app, rid, listing=kw.as_listing(hit))
+    except cp.CompetitorError as error:
+        return JsonResponse({"error": str(error)}, status=400)
+    return JsonResponse({"name": rival.name})
 
 
 @ensure_csrf_cookie  # outside the cache: the delete form reads its token from the cookie
