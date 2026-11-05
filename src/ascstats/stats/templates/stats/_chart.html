@@ -65,7 +65,7 @@
     <p class="sub" style="margin:2px 0">{{ rating.count|intcomma }} ratings across storefronts{% if rating.us_count is not None %} · US {{ rating.us_average|floatformat:2 }}★ from {{ rating.us_count|intcomma }}{% endif %}{% if rating.week_new is not None %} · <strong>{{ rating.week_new }}</strong> new in the last {{ rating.week_days }} day{{ rating.week_days|pluralize }}{% endif %}</p>
     <p class="muted" style="font-size:12px">Apple publishes only current totals, so per-version rating velocity starts with the first daily snapshot ({{ rating.date|date:"M j, Y" }} is the latest).</p>
     {% endif %}
-    {% if rating.summary %}<blockquote style="margin:10px 0 0;padding:10px 14px;border-left:3px solid var(--series-1);background:var(--popover);border-radius:8px;font-size:14px">{{ rating.summary.text }}<div class="muted" style="font-size:12px;margin-top:4px">Apple's review summary · {{ rating.summary.territory|default:"all" }}</div></blockquote>{% endif %}
+    {% if rating.summary %}<blockquote style="margin:10px 0 0;padding:10px 14px;border-left:3px solid var(--series-1);background:var(--popover);border-radius:8px;font-size:14px">{{ rating.summary.text }}<div class="muted" style="font-size:12px;margin-top:4px">Apple's review summary · {{ rating.summary.territory|territory|default:"all" }}</div></blockquote>{% endif %}
   </div>
   <div>
     <h3 style="margin: 0 0 4px; font-size: 16px">Latest written reviews{% if rating.unanswered %} <a class="muted" style="font-size:13px;font-weight:400" href="{% reviews_url '' app %}">· {{ rating.unanswered|intcomma }} unanswered</a>{% endif %}</h3>
@@ -73,7 +73,7 @@
     <div style="padding:8px 0;border-bottom:1px solid var(--grid);font-size:13px">
       <div><span aria-label="{{ rv.rating }} of 5 stars" style="letter-spacing:1px">{% for i in "12345" %}{% if forloop.counter <= rv.rating %}★{% else %}<span class="muted">☆</span>{% endif %}{% endfor %}</span>
         <strong style="margin-left:6px">{{ rv.title|truncatechars:60 }}</strong></div>
-      <div class="muted" style="font-size:12px">{% if rv.reviewer_nickname %}{{ rv.reviewer_nickname }} · {% endif %}{{ rv.created|date:"M j, Y" }} · {{ rv.territory }}{% if rv.version %} · v{{ rv.version }}{% endif %}</div>
+      <div class="muted" style="font-size:12px">{% if rv.reviewer_nickname %}{{ rv.reviewer_nickname }} · {% endif %}{{ rv.created|date:"M j, Y" }} · {{ rv.territory|territory }}{% if rv.version %} · v{{ rv.version }}{% endif %}</div>
       {% if rv.body %}<div style="color:var(--ink-2);margin-top:2px">{{ rv.body|truncatechars:180 }}</div>{% endif %}
       {% if rv.response_body %}<div style="margin:4px 0 0 12px;padding-left:8px;border-left:2px solid var(--grid);color:var(--ink-2)"><span class="muted" style="font-size:12px">Your reply{% if rv.responded_at %} · {{ rv.responded_at|date:"M j" }}{% endif %}{% if rv.response_state and rv.response_state != "PUBLISHED" %} · not yet published{% endif %}</span><br>{{ rv.response_body|truncatechars:180 }}</div>{% else %}<div class="muted" style="font-size:12px;margin-top:2px">No reply yet</div>{% endif %}
     </div>

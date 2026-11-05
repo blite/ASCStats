@@ -5,7 +5,7 @@ from django.utils.safestring import mark_safe
 
 from ascstats.stats.charts import ALL, DEFAULT_PERIOD
 from ascstats.stats.revenue import money as _money
-from ascstats.stats.territories import store_page
+from ascstats.stats.territories import ALPHA2, flag, name, store_page
 
 register = template.Library()
 
@@ -42,6 +42,17 @@ def asc_reviews_href(review):
 def store_href(review):
     """The app's public App Store page in the storefront the review was written in."""
     return store_page(review.app.apple_id, review.territory)
+
+
+@register.filter
+def territory(code):
+    """An App Store Connect territory (alpha-3, ``CAN``) as a flag, with the country's name
+    and two-letter code on hover, the code the rest of the site uses."""
+    alpha2 = ALPHA2.get(code)
+    if alpha2 is None:
+        return code
+    label = f"{name(alpha2)} ({alpha2.upper()})"
+    return format_html('<span title="{}" aria-label="{}">{}</span>', label, label, flag(alpha2))
 
 
 @register.simple_tag
