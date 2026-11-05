@@ -296,3 +296,42 @@ def test_store_page_uses_the_review_storefront():
     assert store_page(42, "CAN") == "https://apps.apple.com/ca/app/id42"
     assert store_page(42, "GBR") == "https://apps.apple.com/gb/app/id42"
     assert store_page(42, "") == "https://apps.apple.com/us/app/id42"
+
+
+def test_overview_shows_week_by_week(client, db):
+    from datetime import date, timedelta
+
+    from ascstats.stats import dashboard
+    from ascstats.stats.models import FxDay, SalesDay
+
+    call_command("seed_synthetic", "--days", "40")
+    FxDay.objects.create(
+        date=date.today() - timedelta(days=60),
+        rates={"USD": 1, "GBP": 1.25, "EUR": 1.1, "CAD": 0.73, "AUD": 0.66, "JPY": 0.0067,
+               "BRL": 0.2},
+    )  # fmt: skip
+    end = dashboard.last_day()
+    data = dashboard.weekly(end)
+    weeks = data["weeks"]
+    assert weeks[0].start == end - timedelta(days=end.weekday())  # newest first, Monday-based
+    assert weeks[0].end == end
+    assert weeks[0].days == end.weekday() + 1
+    assert all(w.days == 7 and w.start.weekday() == 0 for w in weeks[1:])
+    assert weeks[-1].end >= dashboard.first_day()  # no empty weeks before the first import
+    assert len(weeks) <= 7  # 40 days span at most 7 calendar weeks
+    full = weeks[1]
+    days = [full.start + timedelta(days=i) for i in range(7)]
+    stored = sum(r.downloads for r in SalesDay.objects.filter(date__in=days))
+    assert full.downloads == stored
+    assert full.revenue > 0
+    assert full.per_1k is not None
+    assert data["unconverted"] == []
+    # a partial week is compared with the same weekdays of the week before
+    first_days = [weeks[1].start + timedelta(days=i) for i in range(weeks[0].days)]
+    before = sum(r.downloads for r in SalesDay.objects.filter(date__in=first_days))
+    assert weeks[0].downloads_change == pytest.approx(100 * (weeks[0].downloads - before) / before)
+
+    page = client.get("/").content.decode()
+    assert "Week by week" in page
+    assert f"{full.downloads:,}" in page
+    assert full.revenue_label in page

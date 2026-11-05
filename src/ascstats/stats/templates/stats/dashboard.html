@@ -40,6 +40,40 @@
     {% for template, more in more_tiles %}{% include template with tile=more %}{% endfor %}
   </div>
 
+  {% with wk=weekly %}
+  <section class="card fade" aria-labelledby="week-by-week">
+    <div class="card-head">
+      <div>
+        <h2 id="week-by-week">Week by week</h2>
+        <p class="sub">Downloads and proceeds (USD) for every app, Monday to Sunday. Each change is against the week before; an unfinished week is compared with the same days of the week before.{% if wk.best_downloads %} Best week for downloads: <strong>{{ wk.best_downloads.start|date:"M j" }}</strong> ({{ wk.best_downloads.downloads|intcomma }}){% if wk.best_revenue %}; for proceeds: <strong>{{ wk.best_revenue.start|date:"M j" }}</strong> ({{ wk.best_revenue.revenue_label }}){% endif %}.{% endif %}</p>
+      </div>
+      <a href="{% url 'revenue' %}" style="font-size:13px">Revenue →</a>
+    </div>
+    <div class="scroll">
+      <table class="weeks">
+        <thead><tr><th>Week</th><th class="num">Downloads</th><th class="num">Change</th><th class="num">Proceeds</th><th class="num">Change</th><th class="num">Per 1k downloads</th></tr></thead>
+        <tbody>
+        {% for w in wk.weeks|slice:":8" %}{% include "stats/_week_row.html" %}{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if wk.weeks|length > 8 %}
+    <details>
+      <summary>Earlier weeks: {{ wk.weeks|length|add:"-8" }} more</summary>
+      <div class="scroll">
+        <table class="weeks">
+          <thead><tr><th>Week</th><th class="num">Downloads</th><th class="num">Change</th><th class="num">Proceeds</th><th class="num">Change</th><th class="num">Per 1k downloads</th></tr></thead>
+          <tbody>
+          {% for w in wk.weeks|slice:"8:" %}{% include "stats/_week_row.html" %}{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    {% endif %}
+    {% if wk.unconverted %}<p class="sub">Proceeds in {{ wk.unconverted|join:", " }} are left out: no exchange rate for them yet.</p>{% endif %}
+  </section>
+  {% endwith %}
+
   <section class="card fade">
     <div class="card-head">
       <div>

@@ -41,6 +41,7 @@ def dashboard(request, days=DEFAULT_PERIOD):
         "period": period,
         "tiles": tiles,
         "board": board,
+        "weekly": d.weekly(end),
         "calendar": d.pipeline_calendar(end),
         "activity": rt.recent_activity(apps, end, period.days),
         "app_count": len(apps),

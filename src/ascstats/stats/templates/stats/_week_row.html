@@ -1,0 +1,8 @@
+{% load humanize %}<tr{% if w.partial %} class="partial"{% endif %}>
+  <td>{{ w.start|date:"M j" }}–{% if w.start.month == w.end.month %}{{ w.end|date:"j" }}{% else %}{{ w.end|date:"M j" }}{% endif %}{% if w.partial %} <span class="muted">· {{ w.days }} day{{ w.days|pluralize }} so far</span>{% endif %}</td>
+  <td class="num"><span class="wbar"><svg width="80" height="8" aria-hidden="true"><rect x="0" y="0" width="80" height="8" rx="3" fill="var(--grid)"/><rect x="0" y="0" width="{% widthratio w.downloads_w 100 80 %}" height="8" rx="3" fill="var(--chart-1)"/></svg>{{ w.downloads|intcomma }}</span></td>
+  <td class="num">{% include "stats/_week_change.html" with change=w.downloads_change %}</td>
+  <td class="num"><span class="wbar"><svg width="80" height="8" aria-hidden="true"><rect x="0" y="0" width="80" height="8" rx="3" fill="var(--grid)"/><rect x="0" y="0" width="{% widthratio w.revenue_w 100 80 %}" height="8" rx="3" fill="var(--chart-2)"/></svg>{{ w.revenue_label }}</span></td>
+  <td class="num">{% include "stats/_week_change.html" with change=w.revenue_change %}</td>
+  <td class="num">{% if w.per_1k is not None %}${{ w.per_1k|floatformat:2 }}{% else %}<span class="muted">–</span>{% endif %}</td>
+</tr>

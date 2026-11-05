@@ -3,17 +3,20 @@ shapes computed here, so every chart is plain server-rendered SVG (no JS chart l
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 from django.db.models import Max, Min, Sum
 
-from .charts import Period, nice_axis, smooth, spark
+from .charts import Period, nice_axis, pct_change, smooth, spark
 from .charts import days as _days
 from .charts import fmt_day as _fmt_day
 from .crashes import version_crashes
 from .models import ACTIVE_ROWS, IOS, App, AppEvent, IngestionRun, Report, SalesDay
 from .ratings import current, daily_new_ratings, version_ratings
+from .revenue import _lines as revenue_lines
+from .revenue import money
 from .versions import VersionImpact, version_impact
 
 
@@ -86,6 +89,83 @@ def tiles(end: date, period: Period | None = None, app: App | None = None) -> li
         note = f"{period.label} {period.versus}"
         out.append(Tile(label, current, previous, spark(series, 120, 32), note))
     return out
+
+
+# --- week by week ---------------------------------------------------------------------------
+
+WEEK_ROWS = 52  # weeks kept; the page shows the newest few and folds the rest away
+
+
+@dataclass
+class Week:
+    start: date  # a Monday
+    days: int  # days with data so far: 7, or fewer for the week ``end`` falls in
+    downloads: int
+    revenue: float  # USD
+    downloads_change: float | None = None  # vs the same days of the week before
+    revenue_change: float | None = None
+    downloads_w: float = 0  # inline bar widths, 0-100
+    revenue_w: float = 0
+
+    @property
+    def end(self) -> date:
+        return self.start + timedelta(days=self.days - 1)
+
+    @property
+    def partial(self) -> bool:
+        return self.days < 7
+
+    @property
+    def per_1k(self) -> float | None:
+        return 1000 * self.revenue / self.downloads if self.downloads > 0 else None
+
+    @property
+    def revenue_label(self) -> str:
+        return money(self.revenue)
+
+
+def weekly(end: date, weeks: int = WEEK_ROWS) -> dict:
+    """Downloads and proceeds (USD) per calendar week, Monday to Sunday, newest first, for
+    every active app. The week ``end`` falls in is usually unfinished: it is compared with
+    the same weekdays of the week before, never with a whole week."""
+    this_monday = end - timedelta(days=end.weekday())
+    first = this_monday - timedelta(weeks=weeks)  # one more week, for the oldest's change
+    downloads = _daily("downloads", first, end)
+    proceeds: dict[date, float] = defaultdict(float)
+    unconverted: set[str] = set()
+    for ln in revenue_lines(first, end):
+        if ln.usd is None:
+            unconverted.add(ln.currency)
+        else:
+            proceeds[ln.day] += float(ln.usd)
+
+    def totals(monday: date, n: int) -> tuple[int, float]:
+        span = _days(monday, monday + timedelta(days=n - 1))
+        return sum(downloads.get(d, 0) for d in span), sum(proceeds.get(d, 0.0) for d in span)
+
+    rows = []
+    for i in range(weeks):
+        monday = this_monday - timedelta(weeks=i)
+        n = (end - monday).days + 1 if i == 0 else 7
+        dl, usd = totals(monday, n)
+        dl_before, usd_before = totals(monday - timedelta(weeks=1), n)
+        week = Week(monday, n, dl, usd, pct_change(dl_before, dl), pct_change(usd_before, usd))
+        rows.append(week)
+    # the oldest weeks precede the first import: drop them rather than show a run of zeros
+    since = first_day()
+    rows = [w for w in rows if since is None or w.end >= since]
+    dl_peak = max([w.downloads for w in rows] + [1])
+    usd_peak = max([w.revenue for w in rows] + [1.0])
+    for w in rows:
+        w.downloads_w = round(100 * max(w.downloads, 0) / dl_peak, 1)
+        w.revenue_w = round(100 * max(w.revenue, 0) / usd_peak, 1)
+    full = [w for w in rows if not w.partial]
+    return {
+        "weeks": rows,
+        "best_downloads": max(full, key=lambda w: w.downloads, default=None),
+        "best_revenue": max(full, key=lambda w: w.revenue, default=None),
+        "unconverted": sorted(unconverted),
+    }
 
 
 # --- release scoreboard (one lane per app) -------------------------------------------------
