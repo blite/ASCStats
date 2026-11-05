@@ -153,7 +153,8 @@ def test_schedule_and_workers_run_the_pipeline(apps, settings, monkeypatch):
         assert IngestionRun.objects.filter(report="sales", report_date=day,
                                            status="succeeded").exists()  # fmt: skip
     assert RatingSnapshot.objects.filter(date=now.date()).exists()
-    assert KeywordSnapshot.objects.count() == Keyword.objects.count()
+    tracked = Keyword.objects.filter(tracked_for__isnull=False).distinct()  # not scans' terms
+    assert KeywordSnapshot.objects.filter(keyword__in=tracked).count() == tracked.count()
     assert DBTaskResult.objects.filter(task_path=jobs.rebuild.module_path).exists()
     assert DBTaskResult.objects.filter(task_path=jobs.versions.module_path).exists()
     again = [d.job for d in schedule.due(now + timedelta(minutes=15))]

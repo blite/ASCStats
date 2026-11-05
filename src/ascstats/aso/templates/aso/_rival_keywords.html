@@ -1,0 +1,81 @@
+{% load stats_extras %}<section class="card fade rk" id="rival-keywords">
+  <div class="card-head">
+    <div>
+      <h2>Competitors' keywords<button type="button" class="info" aria-label="About competitors' keywords" data-tip="Competitors' keywords&#10;Searches in this storefront where an app {{ app.name }} follows comes up in the top {{ rk.worst }}, from the last month's searches: terms your apps track and terms a scan looked at. Terms {{ app.name }} tracks already are left out.&#10;A scan guesses the terms a competitor aims at, from the phrases in its name and subtitle, what the store suggests for them, and phrases its description repeats, then searches each once (about {{ scan_terms }} searches, a few minutes).&#10;Popularity and difficulty are the same 0–100 estimates as above; ~ means read from the results alone.">{% icon "info" %}</button></h2>
+      <p class="sub">Where the apps you follow rank{% if rk.date %} · searches up to {{ rk.date|date:"M j, Y" }}{% endif %}{% if rk.total %} · {{ rk.total }} term{{ rk.total|pluralize }}{% endif %}</p>
+    </div>
+    {% if rk.terms %}<div class="seg" role="group" aria-label="Competitors ranked in">
+      <button type="button" data-tier="1">#1</button><button type="button" data-tier="5">Top 5</button><button type="button" data-tier="10" aria-pressed="true">Top 10</button><button type="button" data-tier="{{ rk.worst }}">Top {{ rk.worst }}</button>
+    </div>{% endif %}
+  </div>
+  {% if not demo %}<div class="rk-scan" hx-get="{% url 'app_keyword_scan' app.apple_id front %}" hx-trigger="load" hx-swap="innerHTML"><p class="muted">Loading scans…</p></div>{% endif %}
+  {% if rk.terms %}
+  <div class="scroll">
+  <div class="rkt">
+    <div class="rkh"><span>Keyword</span><span>Competitors ranked</span><span class="num">You</span><span class="num">Popularity</span><span class="num">Difficulty</span><span></span></div>
+    {% for t in rk.terms %}
+    <div class="rkr" data-best="{{ t.best }}">
+      <span class="term">{{ t.keyword.term }}</span>
+      <span class="spots">{% for s in t.rivals|slice:":3" %}<span class="spot{% if s.rank <= 10 %} top{% endif %}" title="{{ s.competitor.name }}: #{{ s.rank }} on {{ t.date|date:'M j' }}"><b>#{{ s.rank }}</b> {{ s.competitor.name|truncatechars:26 }}</span>{% endfor %}{% if t.rivals|length > 3 %}<span class="muted more" title="{% for s in t.rivals|slice:'3:' %}{{ s.competitor.name }}: #{{ s.rank }}&#10;{% endfor %}">+{{ t.rivals|length|add:"-3" }}</span>{% endif %}</span>
+      <span class="num you">{% if t.you %}#{{ t.you }}{% else %}<span class="muted" title="Not in the top {{ limit }}">–</span>{% endif %}</span>
+      {% with sc=t.scores %}
+      <span class="num score">{% if sc.popularity is not None %}<span><span class="est">~</span>{{ sc.popularity }}</span><i style="--v:{{ sc.popularity }}"></i>{% else %}<span class="muted">–</span>{% endif %}</span>
+      <span class="num score">{% if sc.difficulty is not None %}{{ sc.difficulty }}<i class="hard" style="--v:{{ sc.difficulty }}"></i>{% else %}<span class="muted">–</span>{% endif %}</span>
+      {% endwith %}
+      <span class="act">{% if not demo %}<button type="button" class="btn outline sm" data-track="{{ t.keyword.term }}">+ Track</button>{% endif %}</span>
+    </div>
+    {% endfor %}
+    <p class="muted rk-none" hidden>No competitor ranks this high for any term yet; try a wider tier.</p>
+  </div>
+  </div>
+  {% else %}
+  <p class="muted">No terms yet where a competitor ranks in the top {{ rk.worst }}{% if not demo %}. Scan a competitor to look for some{% endif %}.</p>
+  {% endif %}
+</section>
+<style>
+  .rk .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 2px; }
+  .rk .seg button { height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: none; font: inherit; font-size: 13px; color: var(--muted-foreground); cursor: pointer; }
+  .rk .seg button[aria-pressed=true] { background: var(--primary); color: var(--primary-foreground); }
+  .rkt { min-width: 760px; }
+  .rkh, .rkr { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(220px, 2fr) 56px 92px 88px 92px; gap: 10px; align-items: center; padding: 0 10px; }
+  .rkh { height: 34px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); border-bottom: 1px solid var(--border); }
+  .rkr { min-height: 42px; border-top: 1px solid var(--border); font-size: 14px; font-variant-numeric: tabular-nums; }
+  .rkr:first-of-type { border-top: 0; }
+  .rkr[hidden] { display: none; }
+  .rkr .term { font-weight: 500; }
+  .rkr .spots { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .rkr .spot { font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--muted); color: var(--muted-foreground); white-space: nowrap; }
+  .rkr .spot.top { background: color-mix(in oklch, var(--chart-2) 18%, transparent); color: var(--foreground); }
+  .rkr .spot b { font-weight: 650; }
+  .rkr .more { font-size: 12px; cursor: default; }
+  .rkr .you { font-weight: 650; }
+  .rkr .act { text-align: right; }
+  .rkr .candidate-note { font-size: 12px; }
+  .rk-scan { margin: 4px 0 10px; }
+</style>
+<script>
+  (() => {
+    const card = document.getElementById("rival-keywords");
+    const rows = [...card.querySelectorAll(".rkr")];
+    const none = card.querySelector(".rk-none");
+    const show = (tier) => {
+      let shown = 0;
+      for (const r of rows) { const on = +r.dataset.best <= tier; r.hidden = !on; shown += on; }
+      card.querySelectorAll("[data-tier]").forEach((b) => b.setAttribute("aria-pressed", +b.dataset.tier === tier));
+      if (none) none.hidden = shown > 0;
+    };
+    card.querySelectorAll("[data-tier]").forEach((b) => b.addEventListener("click", () => show(+b.dataset.tier)));
+    if (rows.length) show(10);
+    // Track a term: the same request as the Suggestions card's Track button
+    card.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-track]");
+      if (!button) return;
+      button.disabled = true;
+      const body = new FormData();
+      body.append("term", button.dataset.track);
+      const csrf = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/)?.[1] ?? "";
+      const r = await fetch("{% url 'app_keyword_suggest_track' app.apple_id front %}", {method: "POST", body, headers: {"X-CSRFToken": csrf}});
+      button.outerHTML = r.ok ? await r.text() : '<span class="candidate-note err">Try again</span>';
+    });
+  })();
+</script>

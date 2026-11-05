@@ -12,3 +12,16 @@ def search_keyword(keyword_id: int) -> int:
     search, which then skips it: a keyword is searched at most once a day."""
     keyword = Keyword.objects.filter(pk=keyword_id).first()
     return keywords.snapshot(only=[keyword]) if keyword else 0
+
+
+@task(queue_name="store", priority=40)  # after a just-added keyword's search
+def scan_competitor(scan_id: int) -> str:
+    """Search the terms a competitor seems to aim at (``rival_keywords.run``): about three
+    minutes at the store's pace."""
+    from . import rival_keywords
+    from .models import KeywordScan
+
+    scan = KeywordScan.objects.filter(pk=scan_id).select_related("competitor").first()
+    if scan is None or scan.status != KeywordScan.Status.QUEUED:
+        return "skipped"
+    return rival_keywords.run(scan).status

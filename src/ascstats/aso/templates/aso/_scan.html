@@ -1,0 +1,22 @@
+{% load stats_extras %}<div class="scanbox"{% if busy %} hx-get="{% url 'app_keyword_scan' app.apple_id front %}?polled=1" hx-trigger="every 5s" hx-swap="outerHTML"{% endif %}>
+  {% if rows %}
+  <form class="scanform" hx-post="{% url 'app_keyword_scan' app.apple_id front %}" hx-target="closest .scanbox" hx-swap="outerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}' hx-disabled-elt="find button">
+    <label class="sr-only" for="scan-rival">Competitor to scan</label>
+    <select id="scan-rival" name="competitor">
+      {% for c, s in rows %}<option value="{{ c.apple_id }}">{{ c.name|truncatechars:48 }} · {% if not s %}never scanned{% elif s.status == "done" %}scanned {{ s.finished_at|date:"M j" }}{% elif s.status == "failed" %}last scan failed{% else %}{{ s.get_status_display|lower }}{% endif %}</option>{% endfor %}
+    </select>
+    <button class="btn outline sm" type="submit">Scan its keywords</button>
+  </form>
+  {% endif %}
+  {% if error %}<p class="note err" role="alert">{{ error }}</p>{% endif %}
+  {% for s in busy %}<p class="note" role="status"><span class="spin"></span>{{ s.get_status_display }} {{ s.competitor.name }}{% if s.status == "queued" %}: it starts after the store jobs ahead of it{% else %}: about {{ terms }} searches, a few minutes{% endif %}</p>{% endfor %}
+  {% for s in finished %}<p class="note ok" role="status">{% if s.status == "done" %}✓ Scanned {{ s.competitor.name }}: {{ s.terms|length }} terms looked at, {{ s.searched }} searched. <a href="#rival-keywords" onclick="location.reload(); return false;">Reload to see them</a>{% else %}Scan of {{ s.competitor.name }} failed: {{ s.error }}{% endif %}</p>{% endfor %}
+</div>
+<style>
+  .scanform { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .scanform select { height: 32px; max-width: 100%; min-width: 0; flex: 0 1 380px; padding: 0 8px; border: 1px solid var(--border); border-radius: calc(var(--radius) - 4px); background: var(--background); color: var(--foreground); font: inherit; font-size: 13px; }
+  .scanbox .note { margin: 8px 0 0; font-size: 13px; color: var(--muted-foreground); display: flex; align-items: center; gap: 8px; }
+  .scanbox .note.ok { color: var(--foreground); } .scanbox .note.err { color: var(--bad-text); }
+  .scanbox .spin { width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: scanspin .8s linear infinite; }
+  @keyframes scanspin { to { transform: rotate(360deg); } }
+</style>

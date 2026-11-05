@@ -19,6 +19,21 @@ class Competitor(models.Model):
     price = models.CharField(max_length=30, blank=True, help_text="As the US store shows it")
     version = models.CharField(max_length=50, blank=True, help_text="Version on sale")
     version_released_on = models.DateField(null=True, blank=True)
+    # The listing's text, kept to notice changes (``ListingChange``)
+    subtitle = models.CharField(max_length=255, blank=True, help_text="From the store page")
+    description = models.TextField(blank=True)
+    screenshots = models.JSONField(default=list, blank=True, help_text="iPhone screenshot URLs")
+    languages = models.JSONField(default=list, blank=True, help_text="ISO codes, sorted")
+    listing_storefront = models.CharField(
+        max_length=2, blank=True, help_text="the storefront the kept listing is from"
+    )
+    listing_seen_on = models.DateField(
+        null=True, blank=True, help_text="last full Lookup listing; changes count from the first"
+    )
+    subtitle_read_on = models.DateField(null=True, blank=True)
+    subtitle_version = models.CharField(
+        max_length=50, blank=True, help_text="the version on sale when the subtitle was read"
+    )
     tracked_for = models.ManyToManyField(App, related_name="competitors", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -77,9 +92,48 @@ class CompetitorRelease(models.Model):
         return f"{self.competitor_id} {self.version}"
 
 
+class ListingChange(models.Model):
+    """One field of a competitor's listing that changed between two daily snapshots: its
+    name, subtitle, description, screenshots, price, category, seller or languages. The
+    first snapshot is the baseline, so a competitor's changes start the day after."""
+
+    class Field(models.TextChoices):
+        NAME = "name", "Name"
+        SUBTITLE = "subtitle", "Subtitle"
+        DESCRIPTION = "description", "Description"
+        SCREENSHOTS = "screenshots", "Screenshots"
+        PRICE = "price", "Price"
+        GENRE = "primary_genre", "Category"
+        SELLER = "seller", "Seller"
+        LANGUAGES = "languages", "Languages"
+
+    competitor = models.ForeignKey(
+        Competitor, on_delete=models.CASCADE, related_name="changes", db_index=False
+    )
+    date = models.DateField()
+    field = models.CharField(max_length=20, choices=Field.choices)
+    before = models.JSONField(help_text="text, or a list for screenshots and languages")
+    after = models.JSONField()
+    storefront = models.CharField(max_length=2)
+    version = models.CharField(max_length=50, blank=True, help_text="version on sale after")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["competitor", "date", "field"], name="uniq_listing_change"
+            )
+        ]
+        ordering = ["-date", "competitor", "field"]
+
+    def __str__(self) -> str:
+        return f"{self.competitor_id} {self.date} {self.field}"
+
+
 class Keyword(models.Model):
     """A search term in one storefront, tracked for one or more of your apps. One search a
-    day ranks every app at once, so a term two apps track is searched once."""
+    day ranks every app at once, so a term two apps track is searched once. A term no app
+    tracks was searched by a competitor's keyword scan (``KeywordScan``) and is not searched
+    again until someone tracks it."""
 
     term = models.CharField(max_length=100, help_text="lowercase, single-spaced")
     storefront = models.CharField(max_length=2, default="us", help_text="lowercase ISO code")
@@ -153,3 +207,34 @@ class KeywordSuggestion(models.Model):
 
     def __str__(self) -> str:
         return f"{self.keyword_id} {self.date} {self.reach}"
+
+
+class KeywordScan(models.Model):
+    """A look at which searches a competitor comes up for (``aso.rival_keywords``): terms
+    taken from its listing and the store's suggestions, each searched once. The searches are
+    saved as ordinary ``KeywordSnapshot`` rows of untracked keywords, so tracking one later
+    keeps its first day."""
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Queued"
+        RUNNING = "running", "Searching"
+        DONE = "done", "Done"
+        FAILED = "failed", "Failed"
+
+    competitor = models.ForeignKey(
+        Competitor, on_delete=models.CASCADE, related_name="scans", db_index=False
+    )
+    storefront = models.CharField(max_length=2)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.QUEUED)
+    terms = models.JSONField(default=list, help_text="the terms looked at, searched or reused")
+    searched = models.PositiveSmallIntegerField(default=0, help_text="new searches it asked")
+    error = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["competitor", "storefront", "-created_at"])]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.competitor_id} {self.storefront} {self.status}"

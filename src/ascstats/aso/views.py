@@ -2,6 +2,8 @@
 tabs are cached like every page; the manage pages are not, since their forms carry this
 session's CSRF token."""
 
+from datetime import timedelta
+
 from django.conf import settings
 from django.contrib import messages
 from django.http import Http404, JsonResponse
@@ -17,7 +19,7 @@ from ascstats.stats.ratings import storefronts
 from ascstats.stats.territories import name
 
 from . import competitors as cp
-from . import finder, idea_apps, jobs
+from . import finder, idea_apps, jobs, rival_keywords
 from . import keywords as kw
 
 
@@ -134,6 +136,7 @@ def app_keywords(request, apple_id, storefront=None):
     context |= {"fronts": fronts, "front": front, "total": sum(f.count for f in fronts)}
     # an idea ranks for nothing, so its tiles would only count zeros
     context["kw_summary"] = kw.summary([app], front) if front and not app.is_idea else None
+    context |= {"rk": rival_keywords.board(app, front), "scan_terms": rival_keywords.SCAN_TERMS}
     return render(request, "aso/app_keywords.html", context)
 
 
@@ -193,6 +196,32 @@ def app_keyword_suggest_track(request, apple_id, storefront):
         return render(request, "aso/_suggest_tracked.html", {"term": term, "error": str(error)})
     jobs.search_keyword.enqueue(keyword.pk)
     return render(request, "aso/_suggest_tracked.html", {"term": keyword.term})
+
+
+FINISHED_LATELY = 600  # seconds a finished scan is still announced under the form
+
+
+def app_keyword_scan(request, apple_id, storefront):
+    """The scan form above the Competitors' keywords card: GET shows it (and polls while a
+    scan runs), POST starts one. Not cached: it carries this session's CSRF token."""
+    app = _editable(apple_id)
+    error = ""
+    if request.method == "POST":
+        rival = app.competitors.filter(apple_id=request.POST.get("competitor", "")).first()
+        try:
+            if rival is None:
+                raise rival_keywords.ScanError("Pick one of the apps it follows.")
+            rival_keywords.start(app, rival, storefront)
+        except rival_keywords.ScanError as error_:
+            error = str(error_)
+    context = rival_keywords.status(app, storefront)
+    # A poll (sent only while a scan ran) announces the scans that finished since
+    since = timezone.now() - timedelta(seconds=FINISHED_LATELY)
+    context["finished"] = [
+        s for _, s in context["rows"]
+        if request.GET.get("polled") and s and s.finished_at and s.finished_at >= since
+    ]  # fmt: skip
+    return render(request, "aso/_scan.html", context | {"error": error})
 
 
 def app_keywords_manage(request, apple_id):

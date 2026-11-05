@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import functools
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
+from urllib.parse import quote
 
 from ascstats.stats.synthetic import APPS, COUNTRIES, EPOCH, _rng, version_on
 
@@ -28,6 +29,11 @@ class SyntheticRival:
     releases: tuple[tuple[str, date, float, str], ...]  # (version, day, star shift, notes)
     price: str = "Free"
     genre: str = "Games"
+    subtitle: str = ""
+    about: str = ""  # the description's opening line
+    # Listing edits: (day, {field: value}), each from that day on. Name, subtitle, description
+    # and screenshots only change with a release, as on the store; price any day.
+    edits: tuple[tuple[date, dict], ...] = field(default_factory=tuple)
 
 
 # Apple IDs next to the synthetic apps', names prefixed "Synthetic" like theirs.
@@ -39,6 +45,12 @@ RIVALS = [
             ("3.2", date(2026, 8, 17), -0.7, "Daily challenges and a redesigned shop."),
             ("3.2.1", date(2026, 8, 31), -0.2, "Fixes a crash on launch."),
         ),
+        subtitle="Arcade snake game", about="Guide your worm through 200 levels.",
+        edits=(
+            (date(2026, 8, 17), {"subtitle": "Snake game with daily challenges",
+                                 "about": "Guide your worm through 200 levels and a new "
+                                          "challenge every day.", "shots": 2}),
+        ),
     ),
     SyntheticRival(
         1000000202, "Synthetic Slither Classic", "Example Retro Games", (1000000001,), 3, 4.1,
@@ -46,7 +58,13 @@ RIVALS = [
             ("1.4", EPOCH, 0.0, "iPad support."),
             ("1.5", date(2026, 6, 1), 0.3, "Classic mode is back."),
         ),
-        price="$1.99",
+        price="$1.99", subtitle="Retro snake", about="The snake game you remember.",
+        edits=(
+            (date(2026, 6, 1), {"subtitle": "Classic snake game, no ads",
+                                "about": "The snake game you remember, with classic mode "
+                                         "back.\nNo ads, ever.", "shots": 1}),
+            (date(2026, 6, 15), {"price": "$0.99"}),
+        ),
     ),
     SyntheticRival(
         1000000203, "Synthetic Number Place", "Example Puzzles Inc.", (1000000002,), 5, 4.6, 2500, (
@@ -55,6 +73,12 @@ RIVALS = [
             ("5.2", date(2026, 7, 6), 0.1, "Hints that explain the next step."),
             ("5.3", date(2026, 10, 12), -0.5, "Free puzzles now show an ad between games."),
         ),
+        subtitle="Sudoku puzzles", about="Thousands of sudoku puzzles for every level.",
+        edits=(
+            (date(2026, 7, 6), {"subtitle": "Daily sudoku with hints", "shots": 1}),
+            (date(2026, 10, 12), {"about": "Thousands of sudoku puzzles for every level.\n"
+                                           "Free puzzles show an ad between games."}),
+        ),
     ),
     SyntheticRival(
         1000000204, "Synthetic Sky Atlas", "Example Science Apps", (1000000003,), 6, 4.3, 3000, (
@@ -62,12 +86,18 @@ RIVALS = [
             ("2.4", date(2026, 5, 4), 0.0, "Satellite passes."),
             ("3.0", date(2026, 9, 14), 0.3, "Point your phone at the sky: AR view."),
         ),
-        genre="Education",
+        genre="Education", subtitle="Star map and night sky guide",
+        about="Name every star, planet and constellation above you.",
+        edits=(
+            (date(2026, 5, 4), {"subtitle": "Star map & satellite tracker",
+                                "languages": ["DE", "EN", "FR"], "shots": 1}),
+        ),
     ),
     SyntheticRival(
         1000000205, "Synthetic Star Chart Lite", "Example Science Apps", (1000000003,), 1.5, 3.8,
         400, (("1.2", EPOCH, 0.0, "Constellation lines."),),
-        genre="Education",
+        genre="Education", subtitle="Star chart for beginners",
+        about="A simple star chart.",
     ),
 ]  # fmt: skip
 
@@ -111,19 +141,51 @@ def rival_rating_snapshot(rival: SyntheticRival, day: date) -> dict[str, tuple[i
     }
 
 
+_SHOT_COLORS = ["#5b8def", "#e5734a", "#53b27b", "#b07ad9", "#e2b33c"]
+
+
+def _screenshot(apple_id: int, set_no: int, n: int) -> str:
+    """A made-up screenshot: a tinted card numbered like the real thing, as an inline SVG so
+    the demo needs nothing from outside. ``set_no`` counts the times the set was replaced."""
+    color = _SHOT_COLORS[(apple_id + set_no + n) % len(_SHOT_COLORS)]
+    svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="392" height="696">'
+        f'<rect width="392" height="696" rx="36" fill="{color}"/>'
+        f'<text x="196" y="380" font-size="120" text-anchor="middle" fill="white" '
+        f'font-family="sans-serif">{n + 1}</text></svg>'
+    )
+    return f"data:image/svg+xml,{quote(svg)}#set{set_no}/392x696bb.png"
+
+
+def rival_text(rival: SyntheticRival, day: date) -> dict:
+    """The listing's text on ``day``: subtitle, description, screenshots, languages, price."""
+    out = {"subtitle": rival.subtitle, "about": rival.about, "shots": 0, "languages": ["EN"],
+           "price": rival.price}  # fmt: skip
+    for when, edit in rival.edits:
+        if when <= day:
+            out |= edit | {"shots": out["shots"] + edit.get("shots", 0)}
+    return out
+
+
 def rival_listing(rival: SyntheticRival, day: date) -> dict:
-    """An iTunes Lookup result for a competitor on ``day``."""
+    """An iTunes Lookup result for a competitor on ``day``, with its subtitle (which Lookup
+    leaves out: ``store.subtitle`` reads it from the web page)."""
     version, released, _, notes = rival_release_on(rival, day)
+    text = rival_text(rival, day)
     return {
         "trackId": rival.apple_id,
         "trackName": rival.name,
         "sellerName": rival.seller,
         "primaryGenreName": rival.genre,
-        "formattedPrice": rival.price,
+        "formattedPrice": text["price"],
         "releaseDate": f"{rival.releases[0][1].isoformat()}T08:00:00Z",
         "version": version,
         "currentVersionReleaseDate": f"{released.isoformat()}T08:00:00Z",
         "releaseNotes": notes,
+        "description": f"{text['about']}\n\n{rival.name} by {rival.seller}.",
+        "screenshotUrls": [_screenshot(rival.apple_id, text["shots"], n) for n in range(4)],
+        "languageCodesISO2A": text["languages"],
+        "subtitle": text["subtitle"],
     }
 
 
@@ -160,6 +222,16 @@ def _relevance(apple_id: int, term: str, storefront: str, day: date) -> float:
     return fit + drift + noise + boost
 
 
+# Words that match too much to place an app on their own: the made-up apps all start with
+# "Synthetic", and these say nothing about what an app is
+_GENERAL = {"synthetic", "game", "games", "app", "classic", "daily", "free", "no", "ads", "and",
+            "with", "for", "the", "a", "&"}  # fmt: skip
+
+
+def _name_words(text: str) -> set[str]:
+    return set(text.lower().replace(":", " ").replace(",", " ").split()) - _GENERAL
+
+
 def search_results(term: str, storefront: str, day: date) -> list[dict]:
     """The results a store search for ``term`` returns on ``day``, best match first, shaped
     like iTunes Search results. Apps that track or compete on the term always appear; about
@@ -170,6 +242,10 @@ def search_results(term: str, storefront: str, day: date) -> list[dict]:
     names |= {i: (n, s) for i, n, s in FILLER}
     pool = set(owners) | {r.apple_id for r in RIVALS if set(r.rival_of) & set(owners)}
     pool |= {i for i, _, _ in FILLER if _rng("in", i, term).random() < 0.5}
+    # Any app whose name or subtitle holds a word of the term, as the store would find it
+    words = set(term.lower().split()) - _GENERAL
+    pool |= {a.apple_id for a in APPS if words & _name_words(a.name)}
+    pool |= {r.apple_id for r in RIVALS if words & _name_words(f"{r.name} {r.subtitle}")}
     ranked = sorted(pool, key=lambda i: -_relevance(i, term, storefront, day))
     return [
         {

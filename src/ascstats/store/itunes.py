@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import html
+import json
 import plistlib
+import re
 import time
+from collections import Counter
 
 import httpx
 
 LOOKUP_URL = "https://itunes.apple.com/lookup"
 SEARCH_URL = "https://itunes.apple.com/search"
 HINTS_URL = "https://search.itunes.apple.com/WebObjects/MZSearchHints.woa/wa/hints"
+PAGE_URL = "https://apps.apple.com/{storefront}/app/id{apple_id}"
 PAUSE = 5.0  # seconds between requests, and the base of the backoff when Apple refuses one
 TIMEOUT = 15.0
 LOOKUP_IDS = 100  # apps per Lookup request; more are asked in further requests
@@ -40,14 +45,19 @@ def client(transport: httpx.BaseTransport | None = None) -> httpx.Client:
 
 
 def _get(
-    http: httpx.Client, url: str, params: dict, label: str, headers: dict | None = None
+    http: httpx.Client,
+    url: str,
+    params: dict,
+    label: str,
+    headers: dict | None = None,
+    follow: bool = False,
 ) -> httpx.Response:
     """One GET, asked up to four times with growing pauses while Apple refuses or the
     connection fails; raises ``StoreError`` after that."""
     for attempt in range(4):
         last = attempt == 3
         try:
-            response = http.get(url, params=params, headers=headers)
+            response = http.get(url, params=params, headers=headers, follow_redirects=follow)
         except httpx.TransportError as error:
             if last:
                 raise StoreError(f"{label}: {error!r}") from error
@@ -100,3 +110,53 @@ def hints(term: str, storefront: str, http: httpx.Client) -> list[str]:
     except (plistlib.InvalidFileException, ValueError, AttributeError) as error:
         raise StoreError(f"{storefront} hints {term!r}: unreadable answer") from error
     return [h["term"] for h in found if isinstance(h, dict) and h.get("term")]
+
+
+_SERVER_DATA = re.compile(r'<script[^>]*id="serialized-server-data"[^>]*>(.*?)</script>', re.S)
+_HEADER_SUBTITLE = re.compile(r'<h1[^>]*>.*?</h1>\s*<p class="subtitle[^"]*"[^>]*>(.*?)</p>', re.S)
+
+
+def _subtitles(data, apple_id: str) -> tuple[Counter, bool]:
+    """Every subtitle the page's data gives the app itself (its header and its own lockups;
+    the page also lists other apps, each with theirs), and whether the app is there at all."""
+    found: Counter = Counter()
+    seen = False
+    stack = [data]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            if str(node.get("adamId")) == apple_id:
+                seen = True
+                if isinstance(node.get("subtitle"), str):
+                    found[node["subtitle"].strip()] += 1
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+    return found, seen
+
+
+def subtitle(apple_id: int, storefront: str, http: httpx.Client) -> str | None:
+    """The subtitle under the app's name on its App Store page, "" when it has none, or None
+    when the page could not be read. Lookup leaves the subtitle out, so this reads the web
+    page: the data the page is built from, else its header."""
+    url = PAGE_URL.format(storefront=storefront, apple_id=apple_id)
+    response = _get(
+        http, url, {}, f"{storefront} page {apple_id}",
+        headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "en"},
+        follow=True,  # /app/id123 redirects to the page named after the app
+    )  # fmt: skip
+    text = response.text
+    if m := _SERVER_DATA.search(text):
+        try:
+            data = json.loads(m.group(1))
+        except ValueError:
+            data = None
+        if data is not None:
+            found, seen = _subtitles(data, str(apple_id))
+            if found:
+                return found.most_common(1)[0][0]
+            if seen:  # the app is there, with no subtitle
+                return ""
+    if m := _HEADER_SUBTITLE.search(text):
+        return html.unescape(re.sub(r"<[^>]+>", "", m.group(1))).strip()
+    return None

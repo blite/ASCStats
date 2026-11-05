@@ -49,6 +49,11 @@ urlpatterns = [
         views.app_keyword_suggest_track,
         name="app_keyword_suggest_track",
     ),
+    re_path(  # the scan form on the Competitors' keywords card
+        r"^app/(?P<apple_id>-?[0-9]+)/keywords/(?P<storefront>[a-z]{2})/scan/$",
+        views.app_keyword_scan,
+        name="app_keyword_scan",
+    ),
     path(
         "app/<appid:apple_id>/keywords/<int:keyword_id>/",
         views.app_keyword,

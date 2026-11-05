@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Competitor, CompetitorRelease, Keyword
+from .models import Competitor, CompetitorRelease, Keyword, KeywordScan, ListingChange
 
 
 @admin.register(Competitor)
@@ -22,3 +22,15 @@ class KeywordAdmin(admin.ModelAdmin):
     list_filter = ["storefront", "tracked_for"]
     search_fields = ["term"]
     filter_horizontal = ["tracked_for"]
+
+
+@admin.register(ListingChange)
+class ListingChangeAdmin(admin.ModelAdmin):
+    list_display = ["competitor", "date", "field", "version", "storefront"]
+    list_filter = ["field", "competitor"]
+
+
+@admin.register(KeywordScan)
+class KeywordScanAdmin(admin.ModelAdmin):
+    list_display = ["competitor", "storefront", "status", "searched", "created_at", "finished_at"]
+    list_filter = ["status", "storefront"]

@@ -23,7 +23,7 @@
       <td><div class="who">
         <span class="sw" style="background:{{ m.color }}"></span>
         {% if m.icon_url %}<img src="{{ m.icon_url }}" alt="" width="28" height="28">{% else %}<span class="noicon">{% icon "app" %}</span>{% endif %}
-        <div class="ellip"><a href="{{ m.store_url }}" target="_blank" rel="noopener">{{ m.name }}</a><div class="seller">{{ m.seller }}</div></div>
+        <div class="ellip"><a href="{{ m.store_url }}" target="_blank" rel="noopener">{{ m.name }}</a><div class="seller"{% if m.subtitle %} title="Subtitle: {{ m.subtitle }}"{% endif %}>{% if m.subtitle %}{{ m.subtitle }} · {% endif %}{{ m.seller }}</div></div>
       </div></td>
       {% if m.count is None %}
       <td class="num muted" colspan="5">From the next daily snapshot</td>
@@ -81,6 +81,44 @@
   </div>
 </section>
 {% endif %}
+{% if members|length > 1 %}
+<section class="card fade">
+  <div class="card-head">
+    <div>
+      <h2>Listing changes<button type="button" class="info" aria-label="About listing changes" data-tip="Listing changes&#10;Each competitor's App Store listing is compared with the day before: name, subtitle, description, screenshots, price, category, seller and languages, as the {{ app.name }} storefronts' daily snapshot sees them (the US listing when there is one).&#10;The subtitle comes from the store's web page, read when a competitor ships a version (a subtitle only changes with one) and monthly otherwise.&#10;A competitor's changes start the day after its listing is first seen.">{% icon "info" %}</button></h2>
+      <p class="sub">What competitors changed on their store pages over the last {{ changes_days }} days, newest first. In names and subtitles, the words added are the ones a search now reads.</p>
+    </div>
+  </div>
+  {% for g in changes %}
+  <article class="chg">
+    <div class="who">
+      {% if g.competitor.icon_url %}<img src="{{ g.competitor.icon_url }}" alt="" width="28" height="28">{% else %}<span class="noicon">{% icon "app" %}</span>{% endif %}
+      <div class="ellip"><a href="https://apps.apple.com/{{ g.competitor.listing_storefront|default:'us' }}/app/id{{ g.competitor.apple_id }}" target="_blank" rel="noopener">{{ g.competitor.name }}</a><div class="seller">{{ g.date|date:"M j, Y" }}{% if g.version %} · version {{ g.version }}{% endif %}</div></div>
+    </div>
+    {% for i in g.items %}
+    <div class="chg-row">
+      <span class="chg-label">{{ i.label }}</span>
+      <div class="chg-body">
+        {% if i.kind == "text" %}
+          {% if i.long %}<details><summary>{% if i.added %}{{ i.added }} word{{ i.added|pluralize }} added{% endif %}{% if i.added and i.removed %}, {% endif %}{% if i.removed %}{{ i.removed }} removed{% endif %}{% if not i.added and not i.removed %}Reworded{% endif %}</summary>{% endif %}
+          <p class="diff{% if i.long %} long{% endif %}">{% for r in i.runs %}{% if r.op == "gap" %}<span class="gap" title="Unchanged text">…</span>{% elif r.op == "ins" %}<ins>{{ r.text|linebreaksbr }}</ins>{% elif r.op == "del" %}<del>{{ r.text|linebreaksbr }}</del>{% else %}{{ r.text|linebreaksbr }}{% endif %} {% endfor %}</p>
+          {% if i.long %}</details>{% endif %}
+          {% if i.gained or i.dropped %}<p class="words">{% if i.gained %}New words: {% for w in i.gained %}<span class="chip ins">{{ w }}</span>{% endfor %}{% endif %}{% if i.dropped %} Dropped: {% for w in i.dropped %}<span class="chip del">{{ w }}</span>{% endfor %}{% endif %}</p>{% endif %}
+        {% elif i.kind == "shots" %}
+          <div class="shots"><span class="muted">Before{% if i.count.0 > 6 %} (6 of {{ i.count.0 }}){% endif %}</span>{% for u in i.before %}<img src="{{ u }}" alt="" loading="lazy">{% empty %}<span class="muted">none</span>{% endfor %}</div>
+          <div class="shots"><span class="muted">After{% if i.count.1 > 6 %} (6 of {{ i.count.1 }}){% endif %}</span>{% for u in i.after %}<img src="{{ u }}" alt="" loading="lazy">{% empty %}<span class="muted">none</span>{% endfor %}</div>
+        {% elif i.kind == "list" %}
+          <p class="diff">{% if i.added %}Added {% for c in i.added %}<span class="chip ins">{{ c }}</span>{% endfor %}{% endif %}{% if i.removed %} Removed {% for c in i.removed %}<span class="chip del">{{ c }}</span>{% endfor %}{% endif %}</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </article>
+  {% empty %}
+  <p class="muted">No changes {% if end %}in the last {{ changes_days }} days{% else %}yet{% endif %}. Each competitor's listing is compared every day, starting the day after it is first seen.</p>
+  {% endfor %}
+</section>
+{% endif %}
 <style>
   .cmp td { vertical-align: middle; }
   .cmp tr.you td { background: color-mix(in oklch, var(--primary) 7%, transparent); }
@@ -95,6 +133,22 @@
   .star.good { color: var(--good-text); } .star.fair { color: var(--chart-4); } .star.poor { color: var(--bad-text); }
   .legend { margin: 0 0 6px; }
   .empty { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 18px; border: 1px dashed var(--border); border-radius: var(--radius); }
+  .chg { padding: 14px 0; border-top: 1px solid var(--border); }
+  .chg:first-of-type { border-top: 0; padding-top: 4px; }
+  .chg-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; margin-top: 10px; font-size: 14px; }
+  .chg-label { color: var(--muted-foreground); font-size: 13px; padding-top: 1px; }
+  .chg-body p { margin: 0; } .chg-body .words { margin-top: 4px; font-size: 12px; color: var(--muted-foreground); }
+  .diff { line-height: 1.6; max-width: 80ch; overflow-wrap: anywhere; }
+  .diff.long { margin-top: 6px; font-size: 13px; color: var(--ink-2, var(--foreground)); }
+  .diff ins, .chip.ins { text-decoration: none; background: color-mix(in oklch, var(--good-text) 18%, transparent); color: var(--foreground); border-radius: 3px; padding: 0 2px; }
+  .diff del, .chip.del { background: color-mix(in oklch, var(--bad-text) 16%, transparent); color: var(--muted-foreground); border-radius: 3px; padding: 0 2px; }
+  .chip { display: inline-block; margin: 0 3px 2px 0; font-size: 12px; }
+  .diff .gap { color: var(--muted-foreground); }
+  .chg details summary { cursor: pointer; color: var(--foreground); }
+  .shots { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; overflow-x: auto; }
+  .shots .muted { width: 54px; flex: none; font-size: 12px; }
+  .shots img { height: 96px; width: auto; border-radius: 8px; border: 1px solid var(--border); background: var(--muted); }
+  @media (max-width: 640px) { .chg-row { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
   .empty p { margin: 0; font-size: 14px; color: var(--muted-foreground); } .empty strong { color: var(--foreground); }
 </style>
 {% endblock %}

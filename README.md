@@ -46,6 +46,22 @@ iOS apps into Postgres and serves them through Django.
   offline" never offers "offline music". A look asks 12 seeds in a few seconds, a deep look
   40, and each is kept for the day; a term is tracked only when someone presses its Track
   button.
+- **Competitors' listing changes**: each day's Lookup listing of a competitor is compared
+  with the day before, and every field that changed (name, description, screenshots, price,
+  category, seller, languages) is kept as a `ListingChange`. Lookup has no subtitle, so
+  `read_subtitles` reads it from the App Store web page: once for each competitor, again
+  when it ships a version (a subtitle only changes with one), monthly otherwise, at most 60
+  pages a day. The Competitors tab shows the changes as word diffs, screenshots before and
+  after, and the words a name or subtitle gained or dropped.
+- **Competitors' keywords**: Apple keeps an app's keyword field private, so a scan
+  (`aso/rival_keywords.py`, started from the Keywords tab, run by the `store` worker) guesses
+  the terms a competitor aims at (phrases in its name and subtitle, the store's suggestions
+  for them, phrases its description repeats) and searches each once, about 30 searches,
+  reusing any term searched in the last week. The searches are saved like tracked keywords'
+  under keywords no app tracks, so tracking one keeps its first day. The Keywords tab's
+  "Competitors' keywords" card lists every term searched in the last month where a followed
+  competitor ranks in the top 50 and the app doesn't track it, with your rank in the same
+  search and a Track button.
 - **Serve**: behind a sign-in (only `/api/health` is open), Django admin, a JSON API (Django Ninja, OpenAPI at `/api/docs`) and one
   server-rendered htmx page with a chart.
 - **Run**: Docker Compose for development, Kustomize manifests for Kubernetes. Background jobs

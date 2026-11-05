@@ -10,14 +10,16 @@ class AsoConfig(AppConfig):
     def ready(self):
         from ascstats.stats import extensions
 
-        from . import competitors, keywords, suggestions, views
+        from . import competitors, keywords, rival_keywords, suggestions, views
         from .models import (
             Competitor,
             CompetitorRelease,
             CompetitorSnapshot,
             Keyword,
+            KeywordScan,
             KeywordSnapshot,
             KeywordSuggestion,
+            ListingChange,
         )
 
         if competitors.Rider in extensions.snapshot_riders:
@@ -26,9 +28,19 @@ class AsoConfig(AppConfig):
         extensions.data_models += [
             Competitor, Competitor.tracked_for.through, CompetitorSnapshot, CompetitorRelease,
             Keyword, Keyword.tracked_for.through, KeywordSnapshot, KeywordSuggestion,
+            ListingChange, KeywordScan,
         ]  # fmt: skip
-        extensions.daily_store_steps += [keywords.snapshot, suggestions.probe]
+        extensions.daily_store_steps += [
+            keywords.snapshot,
+            suggestions.probe,
+            competitors.read_subtitles,
+        ]
         extensions.synthetic_setup += [competitors.seed_synthetic, keywords.seed_synthetic]
-        extensions.synthetic_day += [keywords.seed_day, suggestions.seed_day]
+        extensions.synthetic_day += [
+            keywords.seed_day,
+            suggestions.seed_day,
+            competitors.seed_subtitles,
+            rival_keywords.seed_day,
+        ]
         extensions.export_paths.append(views.export_paths)
         extensions.dashboard_tiles.append(views.dashboard_tiles)
