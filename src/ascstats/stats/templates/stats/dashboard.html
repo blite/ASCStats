@@ -51,7 +51,7 @@
     </div>
     <div class="scroll">
       <table class="weeks">
-        <thead><tr><th>Week</th><th class="num">Downloads</th><th class="num">Change</th><th class="num">Proceeds</th><th class="num">Change</th><th class="num">Per 1k downloads</th></tr></thead>
+        <thead><tr><th>Week</th><th class="num" colspan="2">Downloads</th><th class="num">Change</th><th class="num" colspan="2">Proceeds</th><th class="num">Change</th><th class="num">Per 1k downloads</th></tr></thead>
         <tbody>
         {% for w in wk.weeks|slice:":8" %}{% include "stats/_week_row.html" %}{% endfor %}
         </tbody>
@@ -62,7 +62,7 @@
       <summary>Earlier weeks: {{ wk.weeks|length|add:"-8" }} more</summary>
       <div class="scroll">
         <table class="weeks">
-          <thead><tr><th>Week</th><th class="num">Downloads</th><th class="num">Change</th><th class="num">Proceeds</th><th class="num">Change</th><th class="num">Per 1k downloads</th></tr></thead>
+          <thead><tr><th>Week</th><th class="num" colspan="2">Downloads</th><th class="num">Change</th><th class="num" colspan="2">Proceeds</th><th class="num">Change</th><th class="num">Per 1k downloads</th></tr></thead>
           <tbody>
           {% for w in wk.weeks|slice:"8:" %}{% include "stats/_week_row.html" %}{% endfor %}
           </tbody>

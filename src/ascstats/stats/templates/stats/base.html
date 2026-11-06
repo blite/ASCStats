@@ -134,7 +134,7 @@
     th { text-align: left; font-weight: 600; color: var(--ink-2); padding: 6px 8px; border-bottom: 1px solid var(--axis); }
     td { padding: 7px 8px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
     td.num, th.num { text-align: right; }
-    .wbar { display: inline-flex; align-items: center; gap: 8px; justify-content: flex-end; } .weeks td { white-space: nowrap; font-variant-numeric: tabular-nums; } .weeks tr.partial td { background: var(--muted); }
+    .weeks td:first-child, .weeks th:first-child { width: 13em; } .weeks td.wbar { text-align: right; padding-right: 0; width: 1%; } .weeks td.wbar svg { display: block; margin-left: auto; } .weeks td { white-space: nowrap; font-variant-numeric: tabular-nums; } .weeks tr.partial td { background: var(--muted); }
     .muted { color: var(--muted-foreground); }
     details summary { cursor: pointer; color: var(--ink-2); font-size: 13px; margin-top: 10px; }
     #tip { position: fixed; z-index: 10; pointer-events: none; background: var(--popover); color: var(--foreground);
