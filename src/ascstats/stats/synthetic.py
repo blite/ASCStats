@@ -21,7 +21,13 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import NamedTuple
 
-from .parsing import CRASHES_REPORT, DISCOVERY_REPORT, DOWNLOADS_REPORT, SESSIONS_REPORT
+from .parsing import (
+    CRASHES_REPORT,
+    DISCOVERY_REPORT,
+    DOWNLOADS_REPORT,
+    PURCHASES_REPORT,
+    SESSIONS_REPORT,
+)
 
 
 @dataclass(frozen=True)
@@ -134,6 +140,12 @@ SESSIONS_HEADER = [
     "Source Type", "Source Info", "Campaign", "Page Type", "Page Title", "App Download Date",
     "Territory", "Sessions", "Total Session Duration", "Unique Devices",
 ]  # fmt: skip
+PURCHASES_HEADER = [
+    "Date", "App Name", "App Apple Identifier", "Purchase Type", "Content Name",
+    "Content Apple Identifier", "Payment Method", "Device", "Platform Version", "Source Type",
+    "Page Type", "App Download Date", "Pre-Order", "Territory", "Purchases", "Proceeds in USD",
+    "Sales in USD", "Paying Users",
+]  # fmt: skip
 SESSIONS_PER_DOWNLOAD = 12  # daily sessions per first-time download: a proxy for active users
 
 
@@ -191,6 +203,38 @@ def downloads(app: SyntheticApp, day: date) -> dict[tuple[str, str], int]:
     return out
 
 
+def iap_purchases(app: SyntheticApp, day: date) -> dict[tuple[str, str], int]:
+    """In-app purchases split by (country, device): about 4% of the day's downloads. Shared
+    by sales and analytics."""
+    if not app.iap:
+        return {}
+    rng = _rng("iap", app.apple_id, day)
+    out = {}
+    for key, units in sorted(downloads(app, day).items()):
+        if bought := sum(rng.random() < 0.04 for _ in range(units)):
+            out[key] = bought
+    return out
+
+
+def refunded(app: SyntheticApp, day: date) -> bool:
+    """A paid app's occasional refund (one US iPhone purchase)."""
+    return app.price != "0" and _rng("refund", app.apple_id, day).random() < 0.15
+
+
+def updates(app: SyntheticApp, day: date) -> dict[str, int]:
+    """Existing users updating to a new release, by country, decaying over three weeks."""
+    _, released, _ = version_on(app, day)
+    since = (day - released).days
+    if released <= EPOCH or since >= UPDATE_DAYS:
+        return {}
+    installed = app.base_units * 30 * (1 + 0.004 * (day - EPOCH).days)
+    out = {}
+    for country, (weight, _, _) in COUNTRIES.items():
+        if units := round(installed * 0.12 * math.exp(-since / 4) * weight):
+            out[country] = units
+    return out
+
+
 def _gzip_tsv(header: list[str], rows: list[list[str]]) -> bytes:
     buffer = io.StringIO()
     writer = csv.writer(buffer, delimiter="\t", lineterminator="\n")
@@ -218,29 +262,51 @@ def sales_report(day: date) -> bytes:
         ])  # fmt: skip
 
     for app in APPS:
-        rng = _rng("sales", app.apple_id, day)
-        version, released, _ = version_on(app, day)
+        version = version_on(app, day)[0]
         for (country, device), units in sorted(downloads(app, day).items()):
             row(app.sku, app.name, "1F", units, app.price, country, device, app.apple_id,
                 version=version)  # fmt: skip
-            if app.iap and (iap_units := sum(rng.random() < 0.04 for _ in range(units))):
-                iap_id, iap_sku, iap_title, iap_price = app.iap
-                row(iap_sku, iap_title, "IA1", iap_units, iap_price, country, device, iap_id,
+        if app.iap:
+            iap_id, iap_sku, iap_title, iap_price = app.iap
+            for (country, device), units in iap_purchases(app, day).items():
+                row(iap_sku, iap_title, "IA1", units, iap_price, country, device, iap_id,
                     parent=app.sku)  # fmt: skip
-        if app.price != "0" and rng.random() < 0.15:  # the occasional refund
+        if refunded(app, day):
             row(app.sku, app.name, "1F", -1, app.price, "US", "iPhone", app.apple_id,
                 version=version)  # fmt: skip
-        since = (day - released).days
-        if released > EPOCH and since < UPDATE_DAYS:  # existing users updating, decaying
-            installed = app.base_units * 30 * (1 + 0.004 * (day - EPOCH).days)
-            for country, (weight, _, _) in COUNTRIES.items():
-                if units := round(installed * 0.12 * math.exp(-since / 4) * weight):
-                    row(app.sku, app.name, "7F", units, "0", country, "iPhone", app.apple_id,
-                        version=version)  # fmt: skip
+        for country, units in updates(app, day).items():
+            row(app.sku, app.name, "7F", units, "0", country, "iPhone", app.apple_id,
+                version=version)  # fmt: skip
     return _gzip_tsv(SALES_HEADER, rows)
 
 
+def _purchases_report(app: SyntheticApp, day: date) -> bytes:
+    """Proceeds at 70% of the USD price wherever it was bought: Apple converts to USD."""
+    rows = []
+
+    def row(kind, content, content_id, units, price, country, device):
+        usd = float(price) * units
+        rows.append([
+            day.isoformat(), app.name, str(app.apple_id), kind, content, str(content_id),
+            "Paid", device, "iOS 26", "App Store search", "Product page", "", "No", country,
+            str(units), f"{usd * 0.7:.2f}", f"{usd:.2f}", str(max(units, 0)),
+        ])  # fmt: skip
+
+    if app.price != "0":
+        for (country, device), units in sorted(downloads(app, day).items()):
+            row("App purchase", app.name, app.apple_id, units, app.price, country, device)
+        if refunded(app, day):
+            row("App purchase", app.name, app.apple_id, -1, app.price, "US", "iPhone")
+    if app.iap:
+        iap_id, _, iap_title, iap_price = app.iap
+        for (country, device), units in iap_purchases(app, day).items():
+            row("In-app purchase", iap_title, iap_id, units, iap_price, country, device)
+    return _gzip_tsv(PURCHASES_HEADER, rows)
+
+
 def analytics_report(app: SyntheticApp, report_name: str, day: date) -> bytes:
+    if report_name == PURCHASES_REPORT:
+        return _purchases_report(app, day)
     rng = _rng("analytics", report_name, app.apple_id, day)
     rows = []
     if report_name in (CRASHES_REPORT, SESSIONS_REPORT):
@@ -292,6 +358,13 @@ def analytics_report(app: SyntheticApp, report_name: str, day: date) -> bytes:
                         ])  # fmt: skip
             else:
                 raise ValueError(f"no synthetic generator for {report_name!r}")
+    if report_name == DOWNLOADS_REPORT:
+        version = version_on(app, day)[0]
+        for country, units in updates(app, day).items():
+            rows.append([
+                day.isoformat(), app.name, str(app.apple_id), "Auto-update", version, "iPhone",
+                "iOS 26", "Unavailable", "", "", "No page", "", "No", country, str(units),
+            ])  # fmt: skip
     header = DISCOVERY_HEADER if report_name == DISCOVERY_REPORT else DOWNLOADS_HEADER
     return _gzip_tsv(header, rows)
 

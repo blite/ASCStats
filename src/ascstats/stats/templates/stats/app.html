@@ -30,7 +30,7 @@
   <div class="card tile fade" style="animation-delay: 300ms">
     <div class="label">Proceeds, past 12 months</div>
     <div class="value">{% if rv %}{{ rv.year|money }}{% else %}–{% endif %}</div>
-    <div class="note">Net of refunds, at each day's ECB rate</div>
+    <div class="note">Net of refunds, in USD as Apple converts them</div>
   </div>
   {% endwith %}
 </div>
@@ -55,7 +55,7 @@
   <div class="card-head">
     <div>
       <h2>Revenue</h2>
-      <p class="sub">Developer proceeds in USD at each day's ECB rate, net of refunds. <a href="{% url 'revenue' %}">All apps</a></p>
+      <p class="sub">Developer proceeds in USD as Apple converts them, net of refunds, on UTC days like App Store Connect's Trends. <a href="{% url 'revenue' %}">All apps</a></p>
     </div>
   </div>
   {% if revenue %}{% with rv=revenue %}

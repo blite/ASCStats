@@ -73,7 +73,7 @@ def test_revenue_page_renders(client, apps):
     page = client.get("/revenue/")
     assert page.status_code == 200
     assert b"Weekly proceeds by app" in page.content
-    assert b"Not converted" in page.content  # no rates loaded: shown, not guessed
+    assert b"in USD as Apple converts them" in page.content  # no exchange rates needed
     assert b'aria-current="page"' in page.content
 
 

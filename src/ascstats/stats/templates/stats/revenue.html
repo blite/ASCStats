@@ -92,7 +92,7 @@
 </div>
 
 <p class="muted" style="font-size:12px;margin-top:16px;max-width:90ch">
-  Proceeds are what Apple pays you per unit, after its commission and before tax, net of refunds. Each day converts to USD at that day's European Central Bank reference rate (latest earlier rate on weekends), so these are estimates; Apple's payout uses its own rates.
+  Proceeds are what Apple pays you, after its commission and before tax, net of refunds, in USD as Apple converts them. Days are UTC days, the same days App Store Connect's Trends shows, so each day's total matches Apple's app. The newest two days can still grow as Apple's late purchases arrive.
   {% if unconverted %}Not converted (no ECB rate): {% for c, v in unconverted %}{{ v }} {{ c }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %}
 </p>
 {% endif %}

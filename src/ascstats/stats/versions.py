@@ -43,8 +43,8 @@ from .models import (
     App,
     AppVersion,
     ConversionMetric,
-    SalesDay,
     SalesRow,
+    UtcDay,
     platform_rows,
 )
 
@@ -168,7 +168,7 @@ def _pct(before: float | None, after: float | None) -> float | None:
 
 def _daily(app: App, field: str, platform: str, start: date, end: date) -> dict[date, int]:
     return dict(
-        SalesDay.objects.filter(app=app, platform=platform, date__range=(start, end)).values_list(
+        UtcDay.objects.filter(app=app, platform=platform, date__range=(start, end)).values_list(
             "date", field
         )
     )
@@ -268,12 +268,12 @@ def version_impact(
     platform and at the edges of the loaded data, so each side only ever contains one version.
     Conversion comes from App Store analytics, which is iOS-only here. ``since`` skips
     versions released before that day (their windows still use earlier data)."""
-    span = SalesDay.objects.filter(app=app).aggregate(first=Min("date"), last=Max("date"))
+    span = UtcDay.objects.filter(app=app).aggregate(first=Min("date"), last=Max("date"))
     if span["first"] is None:
         return []
     data_start, data_end = span["first"], span["last"]
     # An app whose first sale is the first day loaded for any app may be older than the data.
-    dataset_start = SalesDay.objects.aggregate(first=Min("date"))["first"]
+    dataset_start = UtcDay.objects.aggregate(first=Min("date"))["first"]
     install_rate = _install_rates(app)
     out = []
     for plat in [platform] if platform else [IOS, MAC_OS]:

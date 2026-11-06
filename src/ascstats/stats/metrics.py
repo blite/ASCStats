@@ -5,7 +5,7 @@ from datetime import date
 from django.db import transaction
 from django.db.models import Sum
 
-from .models import ConversionMetric, FunnelDay, SalesDay
+from .models import ConversionMetric, FunnelDay, UtcDay
 
 FUNNEL_FIELDS = [
     "impressions", "unique_impressions", "page_views", "unique_page_views",
@@ -16,7 +16,7 @@ FIELDS = [*FUNNEL_FIELDS, "units", "iap_units"]
 
 def build_conversion_metrics(start: date, end: date) -> int:
     """Recompute ConversionMetric for every active app and every day in [start, end] from the
-    FunnelDay and SalesDay rollups: two grouped queries, one upsert."""
+    FunnelDay and UtcDay rollups: two grouped queries, one upsert."""
     window = {"app__is_active": True, "date__range": (start, end)}
     merged: dict[tuple[int, date], dict[str, int]] = {}
     for r in (
@@ -26,7 +26,7 @@ def build_conversion_metrics(start: date, end: date) -> int:
     ):
         merged[(r.pop("app_id"), r.pop("date"))] = r
     for r in (
-        SalesDay.objects.filter(**window)
+        UtcDay.objects.filter(**window)
         .values("app_id", "date")
         .annotate(dl=Sum("downloads"), iap=Sum("iap_units"))
     ):

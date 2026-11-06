@@ -1,9 +1,10 @@
-"""Revenue at a glance: developer proceeds from every app, converted to USD.
+"""Revenue at a glance: developer proceeds from every app, in USD.
 
-Proceeds are what Apple pays the developer per unit (after its commission, before tax), in
-the storefront's currency; a row's proceeds are units x per-unit proceeds, so refunds
-(negative units) net out. Each day converts at that day's ECB reference rate (see ``fx``),
-so totals are estimates of the eventual payout, not the payout itself.
+Proceeds are what Apple pays the developer (after its commission, before tax). They come from
+the App Store Purchases report on UTC days, the days App Store Connect's own Trends shows,
+already converted to USD by Apple, so a day here is the same day and the same total as in
+Apple's app. (The sales report counts Pacific days in each storefront's currency; it stays in
+SalesRow but no total is read from it.)
 """
 
 from __future__ import annotations
@@ -13,11 +14,10 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 
-from django.db.models import F, Sum
+from django.db.models import Sum
 
 from .charts import Period, month_ticks, nice_axis, pct_change, spark
-from .fx import Converter
-from .models import ACTIVE_ROWS, App, SalesDay, SalesRow
+from .models import ACTIVE_ROWS, App, PurchaseDay, UtcDay
 
 SLOTS = 5  # apps with their own color; the rest fold into "Other"
 
@@ -26,7 +26,7 @@ SLOTS = 5  # apps with their own color; the rest fold into "Other"
 class Line:
     day: date
     app_id: int
-    sku: str
+    sku: str  # the product: what Apple calls Content Name
     title: str
     country: str
     currency: str
@@ -36,32 +36,23 @@ class Line:
 
 
 def _lines(start: date, end: date, app: App | None = None) -> list[Line]:
-    rows = SalesRow.objects.filter(ACTIVE_ROWS, report_date__range=(start, end))
+    """Proceeds per day, app, product and storefront, in USD (refunds net out)."""
+    rows = PurchaseDay.objects.filter(ACTIVE_ROWS, date__range=(start, end))
     if app is not None:
         rows = rows.filter(app=app)
-    rows = list(
-        rows.exclude(developer_proceeds=0)
-        .values("report_date", "app_id", "sku", "title", "country_code", "currency_of_proceeds")
-        .annotate(n_units=Sum("units"), local=Sum(F("units") * F("developer_proceeds")))
+    rows = (
+        rows.exclude(proceeds_cents=0, purchases=0)
+        .values("date", "app_id", "content", "territory")
+        .annotate(units=Sum("purchases"), cents=Sum("proceeds_cents"))
     )
-    # a week of earlier rates covers a range that starts on a weekend or holiday
-    convert = Converter(
-        since=start - timedelta(days=7), currencies={r["currency_of_proceeds"] for r in rows}
-    )
-    return [
-        Line(
-            r["report_date"],
-            r["app_id"],
-            r["sku"],
-            r["title"],
-            r["country_code"],
-            r["currency_of_proceeds"],
-            r["n_units"],
-            r["local"],
-            convert.usd(r["local"], r["currency_of_proceeds"], r["report_date"]),
-        )
-        for r in rows
-    ]
+    out = []
+    for r in rows:
+        usd = Decimal(r["cents"]) / 100
+        out.append(
+            Line(r["date"], r["app_id"], r["content"], r["content"], r["territory"], "USD",
+                 r["units"], usd, usd)
+        )  # fmt: skip
+    return out
 
 
 def money(value: float) -> str:
@@ -171,7 +162,7 @@ def revenue(end: date, period: Period | None = None) -> dict:
 
     # --- per-app table
     downloads = dict(
-        SalesDay.objects.filter(ACTIVE_ROWS, date__range=(since, end))
+        UtcDay.objects.filter(ACTIVE_ROWS, date__range=(since, end))
         .values_list("app_id")
         .annotate(Sum("downloads"))
     )
@@ -285,7 +276,7 @@ def app_revenue(app: App, end: date) -> dict | None:
         for v in tick_values
     ]
     downloads = (
-        SalesDay.objects.filter(app=app, date__range=(recent.start, end)).aggregate(
+        UtcDay.objects.filter(app=app, date__range=(recent.start, end)).aggregate(
             n=Sum("downloads")
         )["n"]
         or 0

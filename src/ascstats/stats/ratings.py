@@ -43,8 +43,8 @@ from .models import (
     CustomerReview,
     RatingSnapshot,
     ReviewSummary,
-    SalesDay,
     SalesRow,
+    UtcDay,
 )
 
 log = logging.getLogger(__name__)
@@ -400,7 +400,7 @@ def version_ratings(
     last = max([*daily, versions[-1].first_seen])
     active = {
         d: dl + up
-        for d, dl, up in SalesDay.objects.filter(app=app, platform=IOS).values_list(
+        for d, dl, up in UtcDay.objects.filter(app=app, platform=IOS).values_list(
             "date", "downloads", "updates"
         )
     }

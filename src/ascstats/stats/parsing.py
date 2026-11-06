@@ -27,8 +27,9 @@ SALES_REQUIRED = [
 ]
 
 ANALYTICS_REQUIRED = ["Date", "App Apple Identifier"]
-# The count column is named per report: Counts (engagement, downloads), Crashes, Sessions.
-COUNT_COLUMNS = {"Counts": "", "Crashes": "Crash", "Sessions": "Session"}
+# The count column is named per report: Counts (engagement, downloads), Crashes, Sessions,
+# Purchases.
+COUNT_COLUMNS = {"Counts": "", "Crashes": "Crash", "Sessions": "Session", "Purchases": "Purchase"}
 UNIQUE_COLUMNS = ["Unique Counts", "Unique Devices"]
 # Columns promoted to typed fields; everything else stays in AnalyticsLine.dimensions.
 ANALYTICS_PROMOTED = {
@@ -37,6 +38,7 @@ ANALYTICS_PROMOTED = {
     "App Apple Identifier",
     "Event",
     "Download Type",
+    "Purchase Type",
     "Source Type",
     "Device",
     "Territory",
@@ -51,7 +53,15 @@ DISCOVERY_REPORT = "App Store Discovery and Engagement Standard"
 DOWNLOADS_REPORT = "App Downloads Standard"
 CRASHES_REPORT = "App Crashes"
 SESSIONS_REPORT = "App Sessions Standard"
-ANALYTICS_REPORTS = [DISCOVERY_REPORT, DOWNLOADS_REPORT, CRASHES_REPORT, SESSIONS_REPORT]
+# Proceeds and sales in USD on UTC days: the numbers App Store Connect's Trends shows
+PURCHASES_REPORT = "App Store Purchases Standard"
+ANALYTICS_REPORTS = [
+    DISCOVERY_REPORT,
+    DOWNLOADS_REPORT,
+    CRASHES_REPORT,
+    SESSIONS_REPORT,
+    PURCHASES_REPORT,
+]
 
 
 class ValidationError(Exception):
@@ -157,7 +167,10 @@ def parse_analytics(raw: bytes) -> list[AnalyticsLine]:
                 date=date.fromisoformat(row["Date"].strip()),
                 app_apple_id=int(row["App Apple Identifier"]),
                 event=(
-                    row.get("Event") or row.get("Download Type") or COUNT_COLUMNS[count_column]
+                    row.get("Event")
+                    or row.get("Download Type")
+                    or row.get("Purchase Type")
+                    or COUNT_COLUMNS[count_column]
                 ).strip(),
                 source_type=(row.get("Source Type") or "").strip(),
                 device=(row.get("Device") or "").strip(),
@@ -173,8 +186,8 @@ def parse_analytics(raw: bytes) -> list[AnalyticsLine]:
         except (ValueError, KeyError) as exc:
             problems.append(f"line {n}: {exc}")
             continue
-        if line.counts < 0:
-            problems.append(f"line {n}: negative Counts {line.counts}")
+        if line.counts < 0 and count_column != "Purchases":  # refunds are negative purchases
+            problems.append(f"line {n}: negative {count_column} {line.counts}")
         lines.append(line)
     if problems:
         raise ValidationError(problems)

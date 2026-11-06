@@ -191,6 +191,58 @@ class FunnelDay(models.Model):
         return f"{self.app_id} {self.date} {self.source_type}"
 
 
+class UtcDay(models.Model):
+    """Daily totals per app and platform on UTC days, the days App Store Connect's own Trends
+    shows, reduced at load time from the App Downloads and App Store Purchases reports. The
+    sales report (SalesDay, SalesRow) counts Pacific days, so its day and the app's never
+    agree; the site reads this table instead. Money is in US cents, converted by Apple."""
+
+    app = models.ForeignKey(App, on_delete=models.CASCADE, db_index=False)
+    date = models.DateField()
+    platform = models.CharField(max_length=10)
+    downloads = models.IntegerField(default=0, help_text="first-time downloads")
+    redownloads = models.IntegerField(default=0, help_text="redownloads and restores")
+    updates = models.IntegerField(default=0, help_text="manual and automatic")
+    iap_units = models.IntegerField(default=0, help_text="in-app purchases, net of refunds")
+    proceeds_cents = models.BigIntegerField(default=0, help_text="Proceeds in USD x 100")
+    sales_cents = models.BigIntegerField(default=0, help_text="Sales in USD x 100")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["app", "date", "platform"], name="uniq_utc_day")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.app_id} {self.date} {self.platform}"
+
+
+class PurchaseDay(models.Model):
+    """App Store Purchases report detail per app, UTC day, what was bought and where: the
+    Revenue page's product and territory breakdowns. Money is in US cents, converted by Apple."""
+
+    app = models.ForeignKey(App, on_delete=models.CASCADE, db_index=False)
+    date = models.DateField()
+    platform = models.CharField(max_length=10)
+    purchase_type = models.CharField(max_length=40, help_text="App purchase / In-app purchase")
+    content = models.CharField(max_length=255, help_text="Content Name: the app or the item")
+    territory = models.CharField(max_length=10, blank=True)
+    purchases = models.IntegerField(default=0, help_text="net of refunds")
+    proceeds_cents = models.BigIntegerField(default=0)
+    sales_cents = models.BigIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["app", "date", "platform", "purchase_type", "content", "territory"],
+                name="uniq_purchase_day",
+            )
+        ]
+        indexes = [models.Index(fields=["date"])]
+
+    def __str__(self) -> str:
+        return f"{self.app_id} {self.date} {self.content} {self.territory}"
+
+
 class UsageDay(models.Model):
     """Sessions and crashes per app, day, platform and app version, reduced at load time from
     the App Sessions and App Crashes reports (users who share analytics only)."""

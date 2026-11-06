@@ -165,18 +165,18 @@ def test_all_period_covers_every_day_imported(client, seeded):
 
     from ascstats.stats import dashboard
     from ascstats.stats.charts import Period
-    from ascstats.stats.models import SalesDay
+    from ascstats.stats.models import UtcDay
     from ascstats.stats.revenue import revenue
 
     end = date.today() - timedelta(days=1)
-    old = SalesDay.objects.order_by("date").first()
+    old = UtcDay.objects.order_by("date").first()
     old.pk, old.date = None, end - timedelta(days=200)  # older than the tiles' 90-day sparkline
     old.save()
     first = old.date
     everything = Period.all(end, first)
     assert (everything.start, everything.key, everything.label) == (first, "all", "all time")
     downloads = dashboard.tiles(end, everything)[0]
-    assert downloads.value == sum(SalesDay.objects.values_list("downloads", flat=True))
+    assert downloads.value == sum(UtcDay.objects.values_list("downloads", flat=True))
     assert downloads.change_pct is None  # nothing before the first day to compare with
     assert revenue(end, everything)["total"] >= revenue(end, Period(end, 30))["total"] > 0
     for base in ("/", "/revenue/"):
@@ -302,7 +302,7 @@ def test_overview_shows_week_by_week(client, db):
     from datetime import date, timedelta
 
     from ascstats.stats import dashboard
-    from ascstats.stats.models import FxDay, SalesDay
+    from ascstats.stats.models import FxDay, UtcDay
 
     call_command("seed_synthetic", "--days", "40")
     FxDay.objects.create(
@@ -321,14 +321,14 @@ def test_overview_shows_week_by_week(client, db):
     assert len(weeks) <= 7  # 40 days span at most 7 calendar weeks
     full = weeks[1]
     days = [full.start + timedelta(days=i) for i in range(7)]
-    stored = sum(r.downloads for r in SalesDay.objects.filter(date__in=days))
+    stored = sum(r.downloads for r in UtcDay.objects.filter(date__in=days))
     assert full.downloads == stored
     assert full.revenue > 0
     assert full.per_1k is not None
     assert data["unconverted"] == []
     # a partial week is compared with the same weekdays of the week before
     first_days = [weeks[1].start + timedelta(days=i) for i in range(weeks[0].days)]
-    before = sum(r.downloads for r in SalesDay.objects.filter(date__in=first_days))
+    before = sum(r.downloads for r in UtcDay.objects.filter(date__in=first_days))
     assert weeks[0].downloads_change == pytest.approx(100 * (weeks[0].downloads - before) / before)
 
     page = client.get("/").content.decode()

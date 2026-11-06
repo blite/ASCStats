@@ -11,12 +11,22 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Iterator
+from decimal import Decimal
 
-from .models import FunnelDay, SalesDay, UsageDay, platform_of, sales_kind
+from .models import (
+    FunnelDay,
+    PurchaseDay,
+    SalesDay,
+    UsageDay,
+    UtcDay,
+    platform_of,
+    sales_kind,
+)
 from .parsing import (
     CRASHES_REPORT,
     DISCOVERY_REPORT,
     DOWNLOADS_REPORT,
+    PURCHASES_REPORT,
     SESSIONS_REPORT,
     AnalyticsLine,
     SalesLine,
@@ -33,12 +43,43 @@ def _discovery(ln: AnalyticsLine) -> Iterator[Emitted]:
         yield FunnelDay, (ln.date, ln.source_type), counts
 
 
+# App Downloads report Download Type -> UtcDay field. Apple's Trends counts restores with
+# redownloads and both kinds of update as updates.
+UTC_DOWNLOADS = {
+    "First-time download": "downloads",
+    "Redownload": "redownloads",
+    "Restore": "redownloads",
+    "Manual update": "updates",
+    "Auto-update": "updates",
+}
+
+
 def _downloads(ln: AnalyticsLine) -> Iterator[Emitted]:
     field = {"First-time download": "first_time_downloads", "Redownload": "redownloads"}.get(
         ln.event
     )
     if field:
         yield FunnelDay, (ln.date, ln.source_type), {field: ln.counts}
+    if utc := UTC_DOWNLOADS.get(ln.event):
+        yield UtcDay, (ln.date, platform_of(ln.device)), {utc: ln.counts}
+
+
+def cents(value: str | None) -> int:
+    """'2.10' (US dollars, as Apple writes them) -> 210."""
+    return int((Decimal(value or "0") * 100).to_integral_value())
+
+
+def _purchases(ln: AnalyticsLine) -> Iterator[Emitted]:
+    money = {
+        "proceeds_cents": cents(ln.dimensions.get("Proceeds in USD")),
+        "sales_cents": cents(ln.dimensions.get("Sales in USD")),
+    }
+    platform = platform_of(ln.device)
+    units = {"iap_units": ln.counts} if ln.event == "In-app purchase" else {}
+    yield UtcDay, (ln.date, platform), units | money
+    content = ln.dimensions.get("Content Name", "")[:255]
+    key = (ln.date, platform, ln.event[:40], content, ln.territory)
+    yield PurchaseDay, key, {"purchases": ln.counts} | money
 
 
 def _usage_key(ln: AnalyticsLine) -> tuple:
@@ -60,6 +101,7 @@ EMITTERS: dict[str, Callable[[AnalyticsLine], Iterator[Emitted]]] = {
     DOWNLOADS_REPORT: _downloads,
     CRASHES_REPORT: _crashes,
     SESSIONS_REPORT: _sessions,
+    PURCHASES_REPORT: _purchases,
 }
 
 
@@ -92,6 +134,8 @@ KEY_FIELDS = {
     FunnelDay: ("date", "source_type"),
     UsageDay: ("date", "platform", "version"),
     SalesDay: ("date", "platform"),
+    UtcDay: ("date", "platform"),
+    PurchaseDay: ("date", "platform", "purchase_type", "content", "territory"),
 }
 
 

@@ -9,7 +9,7 @@ from ascstats.stats import synthetic
 from ascstats.stats.metrics import build_conversion_metrics
 from ascstats.stats.models import DOWNLOAD_ROWS, App, AppVersion, SalesRow
 from ascstats.stats.pipeline import Pipeline
-from ascstats.stats.reducers import rebuild_sales_days
+from ascstats.stats.reducers import rebuild_sales_days as _rebuild_sales_days
 from ascstats.stats.versions import (
     Delta,
     _trend_delta,
@@ -18,6 +18,21 @@ from ascstats.stats.versions import (
     version_impact,
 )
 from tests.fake_asc import FakeASC
+
+
+def rebuild_sales_days():
+    """Hand-built sales rows -> SalesDay, and the same counts as UTC days: version impact
+    reads UtcDay, which the real pipeline fills from the analytics reports."""
+    from ascstats.stats.models import SalesDay, UtcDay
+
+    _rebuild_sales_days()
+    UtcDay.objects.all().delete()
+    UtcDay.objects.bulk_create(
+        UtcDay(app_id=d.app_id, date=d.date, platform=d.platform, downloads=d.downloads,
+               redownloads=d.redownloads, updates=d.updates, iap_units=d.iap_units)
+        for d in SalesDay.objects.all()
+    )  # fmt: skip
+
 
 SNAKE = 1000000001
 

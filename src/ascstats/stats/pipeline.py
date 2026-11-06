@@ -24,7 +24,17 @@ from ascstats.asc.client import ASCClient, ReportNotReady
 
 from . import synthetic
 from .app_status import apply_asc_status
-from .models import App, FunnelDay, IngestionRun, Report, SalesDay, SalesRow, UsageDay
+from .models import (
+    App,
+    FunnelDay,
+    IngestionRun,
+    PurchaseDay,
+    Report,
+    SalesDay,
+    SalesRow,
+    UsageDay,
+    UtcDay,
+)
 from .parsing import ANALYTICS_REPORTS, ValidationError, parse_analytics, parse_sales
 from .reducers import reduce_analytics, reduce_sales, rows, totals
 from .storage import RawStore, raw_store
@@ -37,6 +47,11 @@ STEPS = ["check", "download", "validate", "load", "quality"]
 # window means "nothing to report", not "not published yet".
 COMPLETE_AFTER_DAYS = 5
 NO_DATA = "_no-data"  # marker landed in place of a report Apple did not publish
+# Tables built from analytics reports, replaced together per (app, date)
+ANALYTICS_TABLES = (FunnelDay, UsageDay, UtcDay, PurchaseDay)
+# A day's reports restate earlier days (Sessions reaches six back), so a date can sit in the
+# copies of up to this many later processing days
+RESTATED_DAYS = 10
 
 
 class QualityError(Exception):
@@ -53,6 +68,46 @@ def sales_prefix(day: date) -> str:
 
 def analytics_prefix(day: date, apple_id: int, report_name: str) -> str:
     return f"analytics/date={day.isoformat()}/app={apple_id}/{_slug(report_name)}/"
+
+
+def snapshot_prefix(day: date, apple_id: int, report_name: str) -> str:
+    """History from a one-time snapshot request (``backfill_purchases``), kept apart so the
+    daily download, which replaces its own prefix, never deletes it."""
+    return f"snapshot/date={day.isoformat()}/app={apple_id}/{_slug(report_name)}/"
+
+
+REPORT_BY_SLUG = {_slug(name): name for name in ANALYTICS_REPORTS}
+
+
+def newest_lines(store: RawStore, keys: list[str], dates: set[date] | None = None) -> dict:
+    """{report name: lines}: for each report and data date, the lines of the newest copy that
+    has that date, so the order days were loaded in never matters. Apple restates a date in
+    several later instances and says to use the latest, never to merge them. ``keys`` are raw
+    keys under analytics/ or snapshot/; for one processing day the daily copy beats a
+    snapshot's. ``dates`` limits what is kept."""
+    best: dict[tuple[str, date], tuple[tuple, list]] = {}
+    for key in keys:
+        if not key.endswith(".tsv.gz"):
+            continue
+        root, day, _app, slug, _file = key.split("/")
+        name = REPORT_BY_SLUG.get(slug)
+        if name is None:
+            continue
+        rank = (date.fromisoformat(day.removeprefix("date=")), root == "analytics")
+        by_date: dict[date, list] = defaultdict(list)
+        for ln in parse_analytics(store.get(key)):
+            if dates is None or ln.date in dates:
+                by_date[ln.date].append(ln)
+        for d, lines in by_date.items():
+            held = best.get((name, d))
+            if held is None or held[0] < rank:
+                best[(name, d)] = (rank, lines)
+            elif held[0] == rank:
+                held[1].extend(lines)  # another segment of the same copy
+    out: dict[str, list] = defaultdict(list)
+    for (name, _d), (_rank, lines) in best.items():
+        out[name] += lines
+    return out
 
 
 @dataclass
@@ -279,13 +334,41 @@ class Pipeline:
                 for a in self._apps(app):
                     by_report = self._analytics_for(day, a)
                     parsed += sum(len(lines) for lines in by_report.values())
-                    dates = _dates(by_report, day)
-                    for model in (FunnelDay, UsageDay):
+                    dates = _dates(by_report)
+                    if not dates:
+                        continue
+                    for model in ANALYTICS_TABLES:
                         deleted += model.objects.filter(app=a, date__in=dates).delete()[0]
-                    for model, objs in rows(reduce_analytics(by_report), a).items():
+                    newest = self._newest(a, dates)
+                    for model, objs in rows(reduce_analytics(newest), a).items():
                         loaded += len(model.objects.bulk_create(objs, batch_size=2000))
         log.info("%s %s: deleted %d, loaded %d", report, day, deleted, loaded)
         return StepResult(rows_parsed=parsed, rows_deleted=deleted, rows_loaded=loaded)
+
+    def _newest(self, a: App, dates: set[date]) -> dict[str, list]:
+        """Every report's lines for ``dates``, from the newest raw copy holding each date."""
+        keys = []
+        day, last = min(dates), max(dates) + timedelta(days=RESTATED_DAYS)
+        while day <= last:
+            keys += self.store.list(f"analytics/date={day.isoformat()}/app={a.apple_id}/")
+            day += timedelta(days=1)
+        return newest_lines(self.store, keys, dates)
+
+    def rebuild(self, app: App) -> int:
+        """Rebuild an app's analytics tables from every raw copy there is (daily downloads and
+        snapshots): the repair after a change to how reports are read. Returns rows loaded."""
+        tag = f"/app={app.apple_id}/"
+        keys = [
+            k for root in ("analytics/", "snapshot/") for k in self.store.list(root) if tag in k
+        ]
+        reduced = reduce_analytics(newest_lines(self.store, keys))
+        with transaction.atomic():
+            for model in ANALYTICS_TABLES:
+                model.objects.filter(app=app).delete()
+            return sum(
+                len(model.objects.bulk_create(objs, batch_size=2000))
+                for model, objs in rows(reduced, app).items()
+            )
 
     def _ensure_app(self, apple_id: int, lines: list) -> App:
         top = next((ln for ln in lines if not ln.parent_identifier), lines[0])
@@ -326,10 +409,11 @@ class Pipeline:
                     )
         else:
             for a in self._apps(app):
-                by_report = self._analytics_for(day, a)
-                problems += _reduced_mismatches(
-                    reduce_analytics(by_report), a, _dates(by_report, day)
-                )
+                dates = _dates(self._analytics_for(day, a))
+                if dates:
+                    problems += _reduced_mismatches(
+                        reduce_analytics(self._newest(a, dates)), a, dates
+                    )
         if problems:
             raise QualityError("; ".join(problems))
         return StepResult()
@@ -354,9 +438,9 @@ def _sales_row(app: App, day: date, ln) -> SalesRow:
     )
 
 
-def _dates(by_report: dict[str, list], day: date) -> set[date]:
+def _dates(by_report: dict[str, list]) -> set[date]:
     """Every data date a day's reports touch (late batches can restate earlier days)."""
-    return {ln.date for lines in by_report.values() for ln in lines} | {day}
+    return {ln.date for lines in by_report.values() for ln in lines}
 
 
 def _reduced_mismatches(reduced, app: App, dates: set[date]) -> list[str]:

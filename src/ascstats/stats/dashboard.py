@@ -7,13 +7,13 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from django.db.models import Max, Min, Sum
+from django.db.models import Max, Min, Q, Sum
 
 from .charts import Period, nice_axis, pct_change, smooth, spark
 from .charts import days as _days
 from .charts import fmt_day as _fmt_day
 from .crashes import version_crashes
-from .models import ACTIVE_ROWS, IOS, App, AppEvent, IngestionRun, Report, SalesDay
+from .models import ACTIVE_ROWS, IOS, App, AppEvent, IngestionRun, Report, UtcDay
 from .ratings import current, daily_new_ratings, version_ratings
 from .revenue import _lines as revenue_lines
 from .revenue import money
@@ -21,17 +21,21 @@ from .versions import VersionImpact, version_impact
 
 
 def last_day() -> date | None:
-    return SalesDay.objects.filter(ACTIVE_ROWS).aggregate(last=Max("date"))["last"]
+    """The newest UTC day with downloads. Apple's purchases report reaches a day further than
+    its downloads report, so a day with only purchases is not shown yet: it would read as a
+    day with no downloads."""
+    downloads = Q(downloads__gt=0) | Q(redownloads__gt=0) | Q(updates__gt=0)
+    return UtcDay.objects.filter(ACTIVE_ROWS, downloads).aggregate(last=Max("date"))["last"]
 
 
 def first_day() -> date | None:
-    return SalesDay.objects.filter(ACTIVE_ROWS).aggregate(first=Min("date"))["first"]
+    return UtcDay.objects.filter(ACTIVE_ROWS).aggregate(first=Min("date"))["first"]
 
 
 def _daily(field: str, start: date, end: date, **filters) -> dict[date, int]:
-    """One SalesDay measure per day (all platforms) for active apps."""
+    """One UtcDay measure per day (all platforms) for active apps."""
     return dict(
-        SalesDay.objects.filter(ACTIVE_ROWS, date__range=(start, end), **filters)
+        UtcDay.objects.filter(ACTIVE_ROWS, date__range=(start, end), **filters)
         .values_list("date")
         .annotate(Sum(field))
     )
@@ -214,7 +218,7 @@ def scoreboard(end: date, days: int = 365) -> Scoreboard:
         return round(LANE_X0 + (day - start).days * step, 1)
 
     totals = dict(
-        SalesDay.objects.filter(ACTIVE_ROWS, date__range=(start, end))
+        UtcDay.objects.filter(ACTIVE_ROWS, date__range=(start, end))
         .values_list("app")
         .annotate(Sum("downloads"))
     )
