@@ -392,16 +392,17 @@ def test_overview_for_an_earlier_day(client, seeded):
     week = client.get(f"/day/{day}/7d/").content.decode()
     assert f"7 days to {fmt_weekday(day)}" in week
     assert "last 7 days" not in week
-    # → onto the newest day is the plain page for the same period, with no → after it
+    # the arrows are for one day only
+    assert 'aria-label="Day"' not in week
+    assert 'aria-label="Day"' not in client.get("/").content.decode()  # 30 days
+    # → onto the newest day is the plain page, with no → after it
     assert (
-        'href="/7d/" title="End on'
-        in client.get(f"/day/{latest - timedelta(days=1)}/7d/").content.decode()
+        'href="/1d/" title="End on'
+        in client.get(f"/day/{latest - timedelta(days=1)}/").content.decode()
     )
-    assert 'aria-label="Next day"' not in client.get("/").content.decode()
-    assert (
-        f'href="/day/{latest - timedelta(days=1)}/" title="End on'
-        in client.get("/1d/").content.decode()
-    )
+    newest = client.get("/1d/").content.decode()
+    assert 'aria-label="Next day"' not in newest
+    assert f'href="/day/{latest - timedelta(days=1)}/" title="End on' in newest
     # the first day has nothing before it
     assert 'aria-label="Previous day"' not in client.get(f"/day/{first}/").content.decode()
 

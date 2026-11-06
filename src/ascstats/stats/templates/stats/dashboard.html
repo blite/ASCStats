@@ -7,7 +7,7 @@
   <section class="hero fade">
     <div class="period-row">
       {% include "stats/_period.html" %}
-      {% if not demo %}<nav class="seg period day-step" aria-label="Day">
+      {% if period.days == 1 and not period.all_time and not demo %}<nav class="seg period day-step" aria-label="Day">
         {% if prev_url %}<a href="{{ prev_url }}" title="End on {{ prev_day|date:'D, M j' }}" aria-label="Previous day">←</a>{% else %}<span aria-hidden="true">←</span>{% endif %}
         {% if next_url %}<a href="{{ next_url }}" title="End on {{ next_day|date:'D, M j' }}" aria-label="Next day">→</a>{% else %}<span aria-hidden="true">→</span>{% endif %}
       </nav>{% endif %}
