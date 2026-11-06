@@ -26,8 +26,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from ascstats import store
-from ascstats.stats.charts import days as _days
-from ascstats.stats.charts import fmt_day, month_ticks, nice_step
 from ascstats.stats.models import App
 from ascstats.stats.territories import flag, name
 
@@ -420,9 +418,6 @@ def summary(apps: list[App], storefront: str | None = None) -> Summary:
     return out
 
 
-W, H, PAD_L, PAD_R, PAD_T, PAD_B = 1000, 240, 40, 12, 12, 22
-
-
 def _who(player) -> str | None:
     """How the row menus mark a result: "you", "rival" or None."""
     if player is None:
@@ -431,8 +426,8 @@ def _who(player) -> str | None:
 
 
 def detail(app: App, keyword: Keyword) -> dict:
-    """One keyword over the last ``HISTORY_DAYS``: a rank line per app (yours and each
-    competitor that showed up), today's top results, and where each app stands."""
+    """One keyword: today's top results, and where your app and each competitor that showed
+    up in the last ``HISTORY_DAYS`` stands."""
     snaps = list(keyword.snapshots.order_by("date"))
     look = latest_suggestions([keyword]).get(keyword.pk)
     out = {
@@ -458,40 +453,6 @@ def detail(app: App, keyword: Keyword) -> dict:
     ps = [you] + [
         replace(p, color=COLORS[min(i, len(COLORS) - 1)]) for i, p in enumerate(ranked, start=1)
     ]
-    seen = [r for rs in ranks.values() for r in rs if r is not None]
-    worst = max([*seen, 10])
-    step = nice_step(worst, 4)
-    bottom = min(store.SEARCH_LIMIT, step * -(-worst // step))
-    plot_w, plot_h = W - PAD_L - PAD_R, H - PAD_T - PAD_B
-    span = max((end - since).days, 1)
-
-    def x(day: date) -> float:
-        return round(PAD_L + plot_w * (day - since).days / span, 1)
-
-    def y(rank: float) -> float:
-        return round(PAD_T + plot_h * (rank - 1) / max(bottom - 1, 1), 1)
-
-    series = []
-    for p in ps:
-        if not any(ranks[p.apple_id]):
-            continue
-        lines, current, dots = [], [], []
-        for s, r in zip(snaps, ranks[p.apple_id], strict=True):
-            if r is None:
-                if current:
-                    lines.append(current)
-                current = []
-                continue
-            current.append(f"{x(s.date)},{y(r)}")
-            dots.append({"x": x(s.date), "y": y(r), "tip": f"{p.name}\n{fmt_day(s.date)}: #{r}"})
-        if current:
-            lines.append(current)
-        series.append({
-            "player": p, "lines": [" ".join(c) for c in lines],
-            "dots": dots if len(snaps) <= 120 else dots[-1:],
-        })  # fmt: skip
-    ticks = [1, *range(int(step), int(bottom) + 1, int(step))] if step >= 1 else [1]
-    every = _days(since, end)
     week = [s for s in snaps if s.date <= end - timedelta(days=WEEK)]
     standings = []
     for p in ps:
@@ -505,9 +466,6 @@ def detail(app: App, keyword: Keyword) -> dict:
     mine = {p.apple_id: p for p in ps}
     return out | {
         "date": end,
-        "series": series,
-        "grid": [{"y": y(t), "label": f"#{t}"} for t in ticks],
-        "xticks": month_ticks(every, lambda i: x(every[i]), 56),
         "top": [
             r | {"rank": i + 1, "player": (pl := mine.get(r["id"])), "who": _who(pl)}
             for i, r in enumerate(latest.top[:10])
@@ -515,5 +473,4 @@ def detail(app: App, keyword: Keyword) -> dict:
         "standings": standings,
         "results": len(latest.ids),
         "limit": store.SEARCH_LIMIT,
-        "width": W, "height": H, "pad_l": PAD_L, "plot_r": W - PAD_R,
-    }  # fmt: skip
+    }

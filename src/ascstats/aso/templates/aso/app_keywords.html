@@ -63,7 +63,7 @@
     {% elif r.date %}<p class="mnote">No results for this term today.</p>
     {% else %}<p class="mnote">Not searched yet: {% if app.is_idea %}its search runs in a minute{% else %}the next daily search fills this in{% endif %}.</p>{% endif %}
     <hr>
-    <button type="button" class="mi" data-show="{{ r.keyword.pk }}">{% icon "chart" %}Rank history and top results</button>
+    <button type="button" class="mi" data-show="{{ r.keyword.pk }}">{% icon "chart" %}Scores and top results</button>
     {% if not demo %}<button type="button" class="mi danger" data-untrack="{{ r.keyword.pk }}">{% icon "trash" %}Stop tracking</button>{% endif %}
   </div>
   {% endfor %}
@@ -188,7 +188,7 @@
     if (known) sortBy(key, Number(dir) || Number(known.dataset.dir)); else sortBy("rank", 1);
   })();
 
-  // Each row's menu: placed under its button, closed on scroll; "Rank history" opens the keyword
+  // Each row's menu: placed under its button, closed on scroll; "Scores and top results" opens the keyword
   // in the card below and "Stop tracking" sends just that keyword through the delete form (Track
   // and Following beside each result are in _app_entry_assets.html).
   (() => {
