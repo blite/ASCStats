@@ -25,3 +25,14 @@ def scan_competitor(scan_id: int) -> str:
     if scan is None or scan.status != KeywordScan.Status.QUEUED:
         return "skipped"
     return rival_keywords.run(scan).status
+
+
+@task(queue_name="store", priority=45)  # after a just-added keyword's search
+def read_competitor(competitor_id: int) -> str:
+    """Read a just-followed competitor's whole listing and its subtitle now, rather than
+    waiting for the daily run (``competitors.read_new``)."""
+    from . import competitors
+    from .models import Competitor
+
+    competitor = Competitor.objects.filter(pk=competitor_id).first()
+    return competitors.read_new(competitor) if competitor else "gone"

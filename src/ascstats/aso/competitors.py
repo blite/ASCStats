@@ -45,7 +45,7 @@ RECENT = 30  # days of "new ratings" in the table
 WEEKS = 12  # weeks in the new-ratings chart
 TIMELINE = 182  # days in the release timeline
 CHANGES_DAYS = 182  # days of listing changes on the Competitors tab
-SUBTITLE_PAGES = 60  # store pages read a day for subtitles; new followers wait their turn
+SUBTITLE_PAGES = 60  # store pages re-read a day for subtitles; a first read never waits
 SUBTITLE_EVERY = 30  # days before a subtitle is read again with no new version
 FAILURES_TO_STOP = 2  # pages failing in a row before the subtitle run stops for the day
 # Your app is the first color; competitors take the rest in turn
@@ -112,6 +112,10 @@ def add(
         )
         store_listing(competitor, listing, timezone.localdate(), storefront)
     competitor.tracked_for.add(app)
+    if competitor.subtitle_read_on is None or competitor.listing_seen_on is None:
+        from . import jobs
+
+        jobs.read_competitor.enqueue(competitor.pk)  # its whole listing now, not with the daily run
     return competitor
 
 
@@ -296,11 +300,15 @@ def read_subtitles(
     pause: float = store.PAUSE,
     limit: int = SUBTITLE_PAGES,
 ) -> int:
-    """Read the subtitle of up to ``limit`` competitors from their store pages (a daily
-    store step, after the keyword searches); returns the pages read."""
+    """Read competitors' subtitles from their store pages (a daily store step, after the
+    keyword searches): every one never read, then up to ``limit`` re-reads; returns the pages
+    read. Following a competitor reads it at once (``read_new``), so the never-read are only
+    those whose first read failed."""
     day = day or timezone.localdate()
     source = source or settings.ASC_SOURCE
-    due = _due_for_subtitle(day)[:limit]
+    due = _due_for_subtitle(day)
+    first = [c for c in due if c.subtitle_read_on is None]
+    due = first + [c for c in due if c.subtitle_read_on is not None][:limit]
     if source == "synthetic":
         for c in due:
             try:
@@ -332,6 +340,49 @@ def read_subtitles(
             _keep_subtitle(c, found, day, front)
     log.info("subtitles: %d pages read of %d due", read, len(due))
     return read
+
+
+def read_new(
+    competitor: Competitor,
+    day: date | None = None,
+    transport: httpx.BaseTransport | None = None,
+    pause: float = store.PAUSE,
+) -> str:
+    """A just-followed competitor's whole listing at once (the ``read_competitor`` job): its
+    Lookup listing (description, screenshots, languages and the rest), unless one was kept
+    already, and its subtitle from the store page. A store error leaves the rest to the
+    daily run."""
+    day = day or timezone.localdate()
+    front = competitor.listing_storefront or "us"
+    if settings.ASC_SOURCE == "synthetic":
+        try:
+            listing = synthetic.rival_listing(synthetic.rival_by_apple_id(competitor.apple_id), day)
+        except KeyError:
+            return "not synthetic"
+        if competitor.listing_seen_on is None:
+            store_listing(competitor, listing, day, front)
+        if competitor.subtitle_read_on is None:
+            _keep_subtitle(competitor, listing["subtitle"], day, front)
+        return "read"
+    with store.client(transport) as client:
+        try:
+            if competitor.listing_seen_on is None:
+                found = store.lookup([competitor.apple_id], front, client)
+                r = next((x for x in found if x.get("trackId") == competitor.apple_id), None)
+                if r is not None:
+                    store_listing(competitor, r, day, front)
+                if pause:
+                    time.sleep(pause)
+            if competitor.subtitle_read_on is None:
+                subtitle = store.subtitle(competitor.apple_id, front, client)
+                if subtitle is not None:
+                    _keep_subtitle(competitor, subtitle, day, front)
+        except store.StoreError as error:
+            log.warning("reading %s: %s", competitor.apple_id, error)
+            return "store error"
+    if pause:
+        time.sleep(pause)  # jobs run back to back: keep the store's pace between them
+    return "read"
 
 
 def seed_subtitles(day: date) -> None:

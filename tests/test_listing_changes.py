@@ -198,3 +198,43 @@ def test_synthetic_listings_change_on_the_planted_days_and_show_on_the_tab(clien
     assert "<del>Retro</del>" in html
     assert "<ins>Classic</ins>" in html
     assert "Classic snake game, no ads" in html  # the subtitle under the name
+
+
+@pytest.mark.django_db
+def test_following_reads_the_whole_listing_at_once(apps, settings, monkeypatch):
+    from django_tasks_db.models import DBTaskResult
+
+    from ascstats.aso import jobs
+
+    settings.ASC_SOURCE = "asc"
+
+    def queued():
+        found = DBTaskResult.objects.filter(task_path=jobs.read_competitor.module_path)
+        return [r.args_kwargs["args"][0] for r in found]
+
+    # From a keyword's results: only the name, seller and icon so far
+    rival = competitors.add(
+        apps[0], str(RIVAL), listing={"trackId": RIVAL, "trackName": "Real Rival"}
+    )
+    assert queued() == [rival.pk]
+
+    monkeypatch.setattr(store, "lookup", lambda ids, front, http: [listing()])
+    monkeypatch.setattr(store, "subtitle", lambda i, front, http: "Spades with friends")
+    assert competitors.read_new(rival, DAY, pause=0) == "read"
+    rival.refresh_from_db()
+    assert rival.subtitle == "Spades with friends"
+    assert rival.description == "Play spades.\n\nNo ads."
+    assert (rival.listing_seen_on, rival.subtitle_read_on) == (DAY, DAY)
+
+    DBTaskResult.objects.all().delete()  # a second app following it: nothing left to read
+    competitors.add(apps[1], str(RIVAL))
+    assert queued() == []
+
+
+@pytest.mark.django_db
+def test_first_subtitle_reads_are_not_capped(apps, settings, monkeypatch):
+    settings.ASC_SOURCE = "asc"
+    for i in range(5):
+        Competitor.objects.create(apple_id=RIVAL + i, name=f"R{i}").tracked_for.add(apps[0])
+    monkeypatch.setattr(store, "subtitle", lambda i, front, http: "Sub")
+    assert competitors.read_subtitles(DAY, pause=0, limit=2) == 5
