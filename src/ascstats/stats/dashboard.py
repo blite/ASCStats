@@ -99,7 +99,7 @@ def tiles(end: date, period: Period | None = None, app: App | None = None) -> li
         previous = sum(v for d, v in proceeds.items() if prev_start <= d < start)
         series = smooth([proceeds.get(d, 0.0) for d in spark_days])
         out.append(
-            Tile("Revenue", current, previous, spark(series, 120, 32), note + " · USD", usd=True)
+            Tile("Proceeds", current, previous, spark(series, 120, 32), note + " · USD", usd=True)
         )
     return out
 

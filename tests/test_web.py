@@ -354,7 +354,7 @@ def test_overview_tiles_show_revenue_not_updates(client, db):
     )  # fmt: skip
     week = Period(end, 7)
     tiles = dashboard.tiles(end, week)
-    assert [t.label for t in tiles] == ["Downloads", "In-app purchases", "Revenue"]
+    assert [t.label for t in tiles] == ["Downloads", "In-app purchases", "Proceeds"]
     money = tiles[2]
     assert money.value == pytest.approx(revenue(end, week)["total"])  # agrees with Revenue page
     assert money.change_pct is not None
