@@ -5,7 +5,14 @@
   {% else %}
   {% with dl=tiles.0 %}
   <section class="hero fade">
-    {% include "stats/_period.html" %}
+    <div class="period-row">
+      {% include "stats/_period.html" %}
+      {% if not demo %}<nav class="seg period day-step" aria-label="Day">
+        {% if prev_url %}<a href="{{ prev_url }}" title="End on {{ prev_day|date:'D, M j' }}" aria-label="Previous day">←</a>{% else %}<span aria-hidden="true">←</span>{% endif %}
+        {% if next_url %}<a href="{{ next_url }}" title="End on {{ next_day|date:'D, M j' }}" aria-label="Next day">→</a>{% else %}<span aria-hidden="true">→</span>{% endif %}
+      </nav>{% endif %}
+      {% if day %}<a class="to-latest" href="{% period_url 'overview' period.key %}">Back to {{ latest|date:"D, M j" }}, the newest day →</a>{% endif %}
+    </div>
     <p class="eyebrow">{{ period.label }} · {{ app_count }} apps</p>
     <h1><span class="num">{{ dl.value|intcomma }}</span> downloads{% if dl.change_pct is not None %}, {{ dl.direction }}{% if dl.direction != "flat" %} {{ dl.change_pct|floatformat:0|cut:"-" }}%{% endif %}{% endif %}.</h1>
     {% if best %}<p>Best release of the year: <strong>{{ best.app }} {{ best.impact.version }}</strong>, shipped {{ best.impact.released_on|date:"M j" }}, ran <strong>{{ best.impact.deltas.1.change_pct|floatformat:0 }}% above</strong> the downloads its pre-release trend predicted.</p>{% endif %}
@@ -154,12 +161,12 @@
   <div class="two">
     <section class="card">
       <h2>Pipeline health</h2>
-      <p class="sub">One square per day: did the daily sales import land?</p>
+      <p class="sub">One square per day: did the daily sales import land?{% if not demo %} Click a day to see the Overview for it.{% endif %}</p>
       <div class="scroll">
         <svg class="cal" viewBox="0 0 {{ calendar.width }} 112" style="min-width: 560px" role="img" aria-label="Daily import status for the past year">
           {% for m in calendar.months %}<text class="tick" x="{{ m.x }}" y="11">{{ m.label }}</text>{% endfor %}
           <text class="tick" x="0" y="{{ 18|add:22 }}">Mon</text><text class="tick" x="0" y="{{ 18|add:48 }}">Wed</text><text class="tick" x="0" y="{{ 18|add:74 }}">Fri</text>
-          {% for c in calendar.cells %}<rect class="{{ c.kind }}" x="{{ c.x }}" y="{{ c.y }}" width="11" height="11" data-tip="{{ c.tip }}"/>{% endfor %}
+          {% for c in calendar.cells %}{% if c.day and not demo %}<a href="{% period_url 'overview' 1 c.day %}" aria-label="Overview for {{ c.day|date:'M j, Y' }}">{% endif %}<rect class="{{ c.kind }}{% if c.selected %} selected{% endif %}" x="{{ c.x }}" y="{{ c.y }}" width="11" height="11" data-tip="{{ c.tip }}{% if c.day and not demo %}&#10;click to see this day{% endif %}"/>{% if c.day and not demo %}</a>{% endif %}{% endfor %}
         </svg>
       </div>
       <div class="split">

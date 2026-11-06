@@ -346,16 +346,19 @@ def daily_new_ratings(app: App) -> dict[date, tuple[int, int]]:
     return {d: (c, s) for d, (c, s) in out.items()}
 
 
-def latest_totals(apps: list[App]) -> dict[int, tuple[int, int]]:
-    """{app pk: (ratings, stars)} summed over each storefront's latest snapshot, since quiet
-    storefronts are not asked every day. Looks back two weeks, so a storefront that stopped
-    answering (the app left it) drops out."""
-    latest = RatingSnapshot.objects.filter(app__in=apps).aggregate(d=Max("date"))["d"]
+def latest_totals(apps: list[App], upto: date | None = None) -> dict[int, tuple[int, int]]:
+    """{app pk: (ratings, stars)} summed over each storefront's latest snapshot (on or before
+    ``upto``, if given), since quiet storefronts are not asked every day. Looks back two weeks,
+    so a storefront that stopped answering (the app left it) drops out."""
+    snapshots = RatingSnapshot.objects.filter(app__in=apps)
+    if upto is not None:
+        snapshots = snapshots.filter(date__lte=upto)
+    latest = snapshots.aggregate(d=Max("date"))["d"]
     if latest is None:
         return {}
     last: dict[tuple[int, str], tuple[int, int]] = {}
     for app_id, front, count, stars in (
-        RatingSnapshot.objects.filter(app__in=apps, date__gt=latest - timedelta(days=2 * WEEK))
+        snapshots.filter(date__gt=latest - timedelta(days=2 * WEEK), date__lte=latest)
         .order_by("date")
         .values_list("app_id", "storefront", "count", "star_sum")
     ):
@@ -471,15 +474,22 @@ class AppRatingChange:
     change: float | None  # overall average now minus before the window, in stars
 
 
-def recent_activity(apps: list[App], end: date, days: int, limit: int = 8) -> dict:
+def recent_activity(
+    apps: list[App], end: date, days: int, limit: int = 8, upto: date | None = None
+) -> dict:
     """What changed for the overview: new ratings per app over the last ``days`` days of
     snapshots (ending at the latest one), and the newest written reviews across apps since
-    ``end`` minus ``days``. Apps without a snapshot are left out of the ratings."""
-    latest = RatingSnapshot.objects.filter(app__in=apps).aggregate(d=Max("date"))["d"]
+    ``end`` minus ``days``. Apps without a snapshot are left out of the ratings. With
+    ``upto`` (an Overview for an earlier day) nothing after that day counts: snapshots and
+    reviews stop there, as they stood then."""
+    snapshots = RatingSnapshot.objects.filter(app__in=apps)
+    if upto is not None:
+        snapshots = snapshots.filter(date__lte=upto)
+    latest = snapshots.aggregate(d=Max("date"))["d"]
     changes, observed = [], 0
     if latest is not None:
         since = latest - timedelta(days=days)
-        totals = latest_totals(apps)
+        totals = latest_totals(apps, upto)
         for app in apps:
             count, stars = totals.get(app.pk, (0, 0))
             if not count:
@@ -501,11 +511,12 @@ def recent_activity(apps: list[App], end: date, days: int, limit: int = 8) -> di
                 )
             )
         changes.sort(key=lambda c: (-c.new_ratings, -c.count))
-    reviews = list(
-        CustomerReview.objects.filter(
-            app__in=apps, created__gte=_midnight(end - timedelta(days=days - 1))
-        ).select_related("app")[:limit]
+    reviews = CustomerReview.objects.filter(
+        app__in=apps, created__gte=_midnight(end - timedelta(days=days - 1))
     )
+    if upto is not None:
+        reviews = reviews.filter(created__lt=_midnight(upto + timedelta(days=1)))
+    reviews = list(reviews.select_related("app")[:limit])
     return {
         "latest": latest,
         "observed": observed,  # days of snapshot pairs in the window; 0 until the second snapshot

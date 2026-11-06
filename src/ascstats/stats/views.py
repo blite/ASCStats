@@ -1,5 +1,7 @@
 """The dashboard: a portfolio page, plus a page per app with an htmx-swapped deep-dive."""
 
+from datetime import timedelta
+
 from django.conf import settings
 from django.contrib.auth import logout
 from django.http import Http404, HttpResponse
@@ -14,36 +16,60 @@ from . import revenue as r
 from .cache import cached_page
 from .charts import ALL, DEFAULT_PERIOD, PERIODS, Period
 from .models import App, IngestionRun
+from .templatetags.stats_extras import period_url
 
 WINDOWS = [30, 90, 180, 365]
 
 
-def _period(end, days: int | str) -> Period:
+def _period(end, days: int | str, dated: bool = False) -> Period:
     if days == ALL:
-        return Period.all(end, d.first_day())
+        return Period.all(end, d.first_day(), dated=dated)
     if days not in PERIODS:
         raise Http404("no such period")
-    return Period(end, days)
+    return Period(end, days, dated=dated)
 
 
 @cached_page
-def dashboard(request, days=DEFAULT_PERIOD):
-    end = d.last_day()
-    if end is None:
+def dashboard(request, days=DEFAULT_PERIOD, day=None):
+    """The portfolio page, ending on the newest day with data or, with ``day``, on an earlier
+    one (/day/2026-11-04/), with arrows a day either way. The newest day, or one after it that
+    has no data yet, redirects to the plain page, so each view has one address."""
+    latest = d.last_day()
+    if latest is None:
+        if day is not None:
+            raise Http404("no data yet")
         return render(request, "stats/dashboard.html", {"empty": True, "page": "overview"})
-    period = _period(end, days)
+    first = d.first_day()
+    if day is not None:
+        if day >= latest:
+            return redirect(period_url("overview", days))
+        if day < first:
+            raise Http404("before the first day imported")
+    end = day or latest
+    period = _period(end, days, dated=day is not None)
     tiles = d.tiles(end, period)
     board = d.scoreboard(end)
     apps = list(App.objects.active())
+    step = timedelta(days=1)
+
+    def day_url(other):  # the same period, ending on another day; the newest is the plain page
+        return period_url("overview", period.key, None if other == latest else other)
+
     context = {
         "page": "overview",
         "end": end,
+        "day": day,  # set only on a dated page
+        "latest": latest,
+        "prev_day": end - step if end > first else None,
+        "next_day": end + step if end < latest else None,
+        "prev_url": day_url(end - step) if end > first else None,
+        "next_url": day_url(end + step) if end < latest else None,
         "period": period,
         "tiles": tiles,
         "board": board,
         "weekly": d.weekly(end),
-        "calendar": d.pipeline_calendar(end),
-        "activity": rt.recent_activity(apps, end, period.days),
+        "calendar": d.pipeline_calendar(latest, first=first, selected=day),
+        "activity": rt.recent_activity(apps, end, period.days, upto=day),
         "app_count": len(apps),
         "more_tiles": [t for hook in extensions.dashboard_tiles if (t := hook(apps))],
         "best": max(

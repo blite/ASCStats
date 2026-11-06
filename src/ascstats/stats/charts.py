@@ -97,10 +97,11 @@ class Period:
     end: date
     days: int = DEFAULT_PERIOD
     all_time: bool = False
+    dated: bool = False  # ends on a day picked on purpose, not the newest: names that day
 
     @classmethod
-    def all(cls, end: date, first: date) -> Period:
-        return cls(end, (end - first).days + 1, all_time=True)
+    def all(cls, end: date, first: date, dated: bool = False) -> Period:
+        return cls(end, (end - first).days + 1, all_time=True, dated=dated)
 
     @property
     def key(self) -> int | str:
@@ -117,10 +118,14 @@ class Period:
 
     @property
     def label(self) -> str:
-        """'last 7 days', 'all time', or the day itself for one day."""
+        """'last 7 days', 'all time', or the day itself for one day; on a dated page
+        '7 days to Wed, Nov 4' and 'all time to Wed, Nov 4'."""
+        to = f" to {fmt_weekday(self.end)}" if self.dated else ""
         if self.all_time:
-            return "all time"
-        return fmt_weekday(self.end) if self.days == 1 else f"last {self.days} days"
+            return f"all time{to}"
+        if self.days == 1:
+            return fmt_weekday(self.end)
+        return f"{self.days} days{to}" if self.dated else f"last {self.days} days"
 
     @property
     def versus(self) -> str:
@@ -134,8 +139,10 @@ class Period:
     def span(self) -> str:
         """For "reviews ...": 'since Thu, Oct 22', 'from the last 7 days', 'of all time'."""
         if self.all_time:
-            return "of all time"
-        return f"since {self.label}" if self.days == 1 else f"from the {self.label}"
+            return f"of {self.label}"
+        if self.days == 1:
+            return f"since {self.label}"
+        return f"from the {self.label}"
 
     def options(self) -> list[dict]:
         names = {1: fmt_weekday(self.end), 7: "7 days", 30: "30 days", ALL: "All"}

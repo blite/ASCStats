@@ -1,5 +1,5 @@
-{% load humanize %}<tr{% if w.partial %} class="partial"{% endif %}>
-  <td>{{ w.start|date:"M j" }}–{% if w.start.month == w.end.month %}{{ w.end|date:"j" }}{% else %}{{ w.end|date:"M j" }}{% endif %}{% if w.partial %} <span class="muted">· {{ w.days }} day{{ w.days|pluralize }} so far</span>{% endif %}</td>
+{% load humanize stats_extras %}<tr{% if w.partial %} class="partial"{% endif %}>
+  <td>{% if not w.partial and not demo %}<a href="{% period_url 'overview' 7 w.end %}" title="The Overview for this week">{% endif %}{{ w.start|date:"M j" }}–{% if w.start.month == w.end.month %}{{ w.end|date:"j" }}{% else %}{{ w.end|date:"M j" }}{% endif %}{% if not w.partial and not demo %}</a>{% endif %}{% if w.partial %} <span class="muted">· {{ w.days }} day{{ w.days|pluralize }} so far</span>{% endif %}</td>
   <td class="wbar"><svg width="80" height="8" aria-hidden="true"><rect x="0" y="0" width="80" height="8" rx="3" fill="var(--grid)"/><rect x="0" y="0" width="{% widthratio w.downloads_w 100 80 %}" height="8" rx="3" fill="var(--chart-1)"/></svg></td><td class="num">{{ w.downloads|intcomma }}</td>
   <td class="num">{% include "stats/_week_change.html" with change=w.downloads_change %}</td>
   <td class="wbar"><svg width="80" height="8" aria-hidden="true"><rect x="0" y="0" width="80" height="8" rx="3" fill="var(--grid)"/><rect x="0" y="0" width="{% widthratio w.revenue_w 100 80 %}" height="8" rx="3" fill="var(--chart-2)"/></svg></td><td class="num">{{ w.revenue_label }}</td>

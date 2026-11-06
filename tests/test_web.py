@@ -367,3 +367,74 @@ def test_overview_tiles_show_revenue_not_updates(client, db):
     page = client.get("/7d/").content.decode()
     assert money.shown in page
     assert "Updates installed" not in page
+
+
+def test_overview_for_an_earlier_day(client, seeded):
+    from datetime import date, timedelta
+
+    from ascstats.stats import dashboard
+    from ascstats.stats.charts import Period, fmt_weekday
+    from ascstats.stats.models import App
+    from ascstats.stats.ratings import recent_activity
+
+    latest, first = dashboard.last_day(), dashboard.first_day()
+    day = latest - timedelta(days=2)
+    page = client.get(f"/day/{day}/").content.decode()
+    downloads = dashboard.tiles(day, Period(day, 1))[0].value
+    assert f"{fmt_weekday(day)} · " in page  # the day itself, not the newest
+    assert f'<span class="num">{downloads:,}</span> downloads' in page
+    assert f'href="/day/{day - timedelta(days=1)}/" title="End on' in page  # ← a day earlier
+    assert f'href="/day/{day + timedelta(days=1)}/" title="End on' in page  # → a day later
+    assert f'<a href="/day/{day}/7d/">7 days</a>' in page  # the switch keeps the day
+    assert "the newest day" in page
+    assert 'class="selected' not in client.get("/").content.decode()
+
+    week = client.get(f"/day/{day}/7d/").content.decode()
+    assert f"7 days to {fmt_weekday(day)}" in week
+    assert "last 7 days" not in week
+    # → onto the newest day is the plain page for the same period, with no → after it
+    assert (
+        'href="/7d/" title="End on'
+        in client.get(f"/day/{latest - timedelta(days=1)}/7d/").content.decode()
+    )
+    assert 'aria-label="Next day"' not in client.get("/").content.decode()
+    assert (
+        f'href="/day/{latest - timedelta(days=1)}/" title="End on'
+        in client.get("/1d/").content.decode()
+    )
+    # the first day has nothing before it
+    assert 'aria-label="Previous day"' not in client.get(f"/day/{first}/").content.decode()
+
+    # the newest day, or one Apple hasn't published yet, is the plain page
+    assert client.get(f"/day/{latest}/").url == "/1d/"
+    assert client.get(f"/day/{latest + timedelta(days=3)}/30d/").url == "/"
+    assert client.get(f"/day/{latest}/all/").url == "/all/"
+    assert client.get(f"/day/{first - timedelta(days=1)}/").status_code == 404
+    assert client.get(f"/day/{day}/90d/").status_code == 404
+    assert client.get("/day/2026-02-30/").status_code == 404
+
+    # ratings and reviews stop on the day picked
+    then = recent_activity(list(App.objects.active()), day, 1, upto=day)
+    assert then["latest"] is None or then["latest"] <= day
+    assert all(r.created.date() <= day for r in then["reviews"])
+    assert date.today() > day
+
+
+def test_calendar_and_finished_weeks_open_their_day(client, seeded):
+    from datetime import timedelta
+
+    from ascstats.stats import dashboard
+
+    latest, first = dashboard.last_day(), dashboard.first_day()
+    cal = dashboard.pipeline_calendar(latest, first=first, selected=first)
+    days = [c["day"] for c in cal.cells if c["day"]]
+    assert days[0] == first
+    assert days[-1] == latest
+    assert [c["day"] for c in cal.cells if c["selected"]] == [first]
+    page = client.get("/").content.decode()
+    assert f'<a href="/day/{first}/" aria-label="Overview for' in page
+    weeks = dashboard.weekly(latest)["weeks"]
+    for w in weeks:
+        link = f'href="/day/{w.end}/7d/"'
+        assert (link in page) == (not w.partial)
+    assert latest - timedelta(days=1) >= first

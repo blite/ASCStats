@@ -280,7 +280,11 @@ class Calendar:
     counts: dict[str, int]
 
 
-def pipeline_calendar(end: date, days: int = 371) -> Calendar:
+def pipeline_calendar(
+    end: date, days: int = 371, first: date | None = None, selected: date | None = None
+) -> Calendar:
+    """One square per day up to ``end``. With ``first``, each day from it to ``end`` carries
+    ``day`` so its square opens the Overview for that day; ``selected`` is the day shown."""
     start = end - timedelta(days=days - 1)
     start -= timedelta(days=(start.weekday() + 1) % 7)  # columns start on Sunday
     kinds = {
@@ -313,6 +317,8 @@ def pipeline_calendar(end: date, days: int = 371) -> Calendar:
                 "y": 18 + row * CELL,
                 "kind": kind,
                 "tip": f"{_fmt_day(day)}\n{labels[kind]}",
+                "day": day if first is not None and day >= first else None,
+                "selected": day == selected,
             }
         )
         if day.day == 1:

@@ -56,9 +56,16 @@ def territory(code):
 
 
 @register.simple_tag
-def period_url(page, days):
+def period_url(page, days, day=None):
     """A page for a period: /7d/, /revenue/1d/, /all/. The default period is the page's own
-    URL, so each view has one address."""
+    URL, so each view has one address. With ``day`` the Overview ends on that day instead of
+    the newest one: /day/2026-11-04/ (one day, its default), /day/2026-11-04/7d/."""
+    if day and page == "overview":  # a missing template variable arrives as ""
+        if days == 1:
+            return reverse("dashboard_day", args=[day])
+        if days == ALL:
+            return reverse("dashboard_day_all", args=[day])
+        return reverse("dashboard_day_period", args=[day, days or DEFAULT_PERIOD])
     name = PERIOD_PAGES[page]
     if not days or days == DEFAULT_PERIOD:
         return reverse(name)

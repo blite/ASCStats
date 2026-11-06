@@ -122,6 +122,12 @@
     .seg a { padding: 6px 12px; font-size: 13px; color: var(--ink-2); text-decoration: none; }
     .seg a[aria-current] { background: var(--foreground); color: var(--card); }
     .period { margin-bottom: 16px; }
+    .period-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 16px; }
+    .period-row .period { margin-bottom: 0; }
+    .day-step span { padding: 6px 12px; font-size: 13px; color: var(--grid); }
+    .to-latest { font-size: 13px; }
+    .cal a rect { cursor: pointer; } .cal a:hover rect { stroke: var(--foreground); stroke-width: 1; }
+    .cal rect.selected { stroke: var(--foreground); stroke-width: 2; }
     .two { display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px; }
     .cal rect { rx: 2.5; }
     .cal .loaded { fill: var(--st-good); } .cal .empty { fill: var(--st-empty); }
@@ -226,7 +232,7 @@
     <button type="button" class="btn ghost icon sm" data-sidebar-toggle aria-controls="sidebar" title="Toggle sidebar (⌘B)">{% icon "panel" %}<span class="sr-only">Toggle sidebar</span></button>
     <span class="sep"></span>
     <span class="crumb">{% block crumb %}{% if page == "app" %}{{ app.name }}{% elif page %}{{ page|capfirst }}{% else %}ASCStats{% endif %}{% endblock %}</span>
-    {% if end %}<span class="pill"><span class="pulse"></span>Data through {{ end|date:"M j, Y" }}</span>{% endif %}
+    {% if end %}<span class="pill"><span class="pulse"></span>Data through {{ latest|default:end|date:"M j, Y" }}</span>{% endif %}
   </div>
 {% else %}
 <div>

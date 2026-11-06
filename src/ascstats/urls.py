@@ -11,6 +11,10 @@ urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     path("<int:days>d/", views.dashboard, name="dashboard_period"),
     path("all/", views.dashboard, {"days": ALL}, name="dashboard_all"),
+    # The Overview ending on an earlier day: one day by default, or the days up to it
+    path("day/<isodate:day>/", views.dashboard, {"days": 1}, name="dashboard_day"),
+    path("day/<isodate:day>/<int:days>d/", views.dashboard, name="dashboard_day_period"),
+    path("day/<isodate:day>/all/", views.dashboard, {"days": ALL}, name="dashboard_day_all"),
     path("app/<appid:apple_id>/", views.app_page, name="app"),
     path("app/<appid:apple_id>/funnel/", views.app_funnel, name="app_funnel"),
     path("app/<appid:apple_id>/ratings/", views.app_ratings, name="app_ratings"),
