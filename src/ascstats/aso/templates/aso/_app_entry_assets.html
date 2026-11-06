@@ -1,0 +1,60 @@
+<style>
+  /* one app in a search's results (_app_entry.html) */
+  .appent { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+  .appent .ae-open { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; color: inherit; text-decoration: none; }
+  .appent img, .appent .noicon { width: 28px; height: 28px; border-radius: 7px; flex: none; background: var(--muted); }
+  .appent .noicon { display: grid; place-items: center; color: var(--muted-foreground); } .appent .noicon .lucide { width: 15px; height: 15px; }
+  .appent .ae-text { display: flex; flex-direction: column; min-width: 0; }
+  .appent .ae-name, .appent .ae-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .appent .ae-name { font-weight: 500; } .appent .ae-open:hover .ae-name { text-decoration: underline; }
+  .appent .ae-sub { font-size: 12px; color: var(--muted-foreground); }
+  .appent .ae-store { display: inline-grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 7px; color: var(--muted-foreground); }
+  .appent .ae-store:hover, .appent .ae-store:focus-visible { background: var(--background); color: var(--foreground); }
+  .appent .ae-store .lucide { width: 14px; height: 14px; }
+  .appent .ae-you { flex: none; font-size: 12px; color: var(--muted-foreground); padding: 0 4px; }
+  .appent .ae-act { display: none; flex: none; align-items: center; justify-content: center; gap: 3px; height: 26px; min-width: 78px;
+    padding: 0 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--background); color: var(--foreground);
+    font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; }
+  .appent .ae-act .lucide { width: 13px; height: 13px; }
+  .appent[data-state=track] .ae-track, .appent[data-state=rival] .ae-following { display: inline-flex; }
+  .appent .ae-track:hover { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+  .appent .ae-following { border-color: transparent; background: var(--muted); color: var(--muted-foreground); }
+  .appent .ae-following .off, .appent .ae-following:is(:hover, :focus-visible) .on { display: none; }
+  .appent .ae-following:is(:hover, :focus-visible) .off { display: inline; }
+  .appent .ae-following:is(:hover, :focus-visible) { border-color: var(--destructive); background: none; color: var(--destructive); }
+  .appent .ae-act:disabled { opacity: .5; cursor: wait; }
+  .ae-err { margin: 4px 8px; font-size: 12px; color: var(--destructive); }
+</style>
+<script>
+  // Track follows a result as a competitor and Following stops; every list showing that app
+  // (the row menus and the keyword detail) changes at once. Following again keeps its history.
+  (() => {
+    const token = () => document.cookie.match(/(?:^|; )csrftoken=([^;]+)/)?.[1] ?? "";
+    const urls = {follow: "{% url 'app_competitors_follow' app.apple_id %}", unfollow: "{% url 'app_competitors_unfollow' app.apple_id %}"};
+    document.addEventListener("click", async e => {
+      const button = e.target.closest(".appent [data-follow], .appent [data-unfollow]");
+      if (!button) return;
+      e.preventDefault();
+      const entry = button.closest(".appent"), follow = "follow" in button.dataset;
+      const id = follow ? button.dataset.follow : button.dataset.unfollow;
+      const row = entry.closest("li") || entry;
+      row.parentElement.querySelectorAll(".ae-err").forEach(p => p.remove());
+      button.disabled = true;
+      const body = new URLSearchParams(follow ? {id, keyword: button.dataset.keyword} : {id});
+      let answer;
+      try {
+        const r = await fetch(follow ? urls.follow : urls.unfollow, {method: "POST", body, headers: {"X-CSRFToken": token()}});
+        answer = await r.json();
+      } catch { answer = {error: "Could not reach the site; try again."}; }
+      button.disabled = false;
+      if (answer.error) {
+        row.after(Object.assign(document.createElement(row.tagName === "LI" ? "li" : "p"), {className: "ae-err", textContent: answer.error}));
+        return;
+      }
+      document.querySelectorAll(`.appent[data-app="${id}"]`).forEach(a => {
+        a.dataset.state = follow ? "rival" : "track";
+        a.closest("li")?.classList.toggle("rival", follow);
+      });
+    });
+  })();
+</script>

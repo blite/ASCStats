@@ -23,6 +23,11 @@ urlpatterns = [
         views.app_competitors_follow,
         name="app_competitors_follow",
     ),
+    path(
+        "app/<appid:apple_id>/competitors/unfollow/",
+        views.app_competitors_unfollow,
+        name="app_competitors_unfollow",
+    ),
     path("app/<appid:apple_id>/keywords/", views.app_keywords, name="app_keywords"),
     path(
         "app/<appid:apple_id>/keywords/manage/",

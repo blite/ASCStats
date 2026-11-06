@@ -46,8 +46,7 @@
     <ol class="toplist">
       {% for r in top %}<li class="{% if r.player.you %}you{% elif r.player %}rival{% endif %}">
         <span class="pos">{{ r.rank }}</span>
-        {% if r.icon %}<img src="{{ r.icon }}" alt="" width="28" height="28">{% else %}<span class="noicon"></span>{% endif %}
-        <span class="ellip"><a href="https://apps.apple.com/{{ keyword.storefront }}/app/id{{ r.id }}" target="_blank" rel="noopener">{{ r.name }}</a><small>{{ r.seller }}{% if r.ratings %} · {{ r.ratings|intcomma }} ratings{% if r.average %}, {{ r.average|floatformat:1 }}★{% endif %}{% endif %}</small></span>
+        {% include "aso/_app_entry.html" with a=r who=r.who front=keyword.storefront keyword=keyword.pk ratings=1 %}
         {% if r.player %}<span class="sw" style="background:{{ r.player.color }}" title="{% if r.player.you %}You{% else %}Competitor{% endif %}"></span>{% endif %}
       </li>{% endfor %}
     </ol>
@@ -82,9 +81,5 @@
   .toplist li.you { background: color-mix(in oklch, var(--primary) 12%, transparent); }
   .toplist li.rival { background: var(--muted); }
   .toplist .pos { width: 22px; text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
-  .toplist img, .toplist .noicon { width: 28px; height: 28px; border-radius: 7px; flex: none; background: var(--muted); }
-  .toplist .ellip { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .toplist a { font-weight: 500; text-decoration: none; } .toplist a:hover { text-decoration: underline; }
-  .toplist small { display: block; font-size: 12px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; }
   .kd tr.you td { background: color-mix(in oklch, var(--primary) 7%, transparent); }
 </style>

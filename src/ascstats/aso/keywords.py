@@ -423,6 +423,13 @@ def summary(apps: list[App], storefront: str | None = None) -> Summary:
 W, H, PAD_L, PAD_R, PAD_T, PAD_B = 1000, 240, 40, 12, 12, 22
 
 
+def _who(player) -> str | None:
+    """How the row menus mark a result: "you", "rival" or None."""
+    if player is None:
+        return None
+    return "you" if player.you else "rival"
+
+
 def detail(app: App, keyword: Keyword) -> dict:
     """One keyword over the last ``HISTORY_DAYS``: a rank line per app (yours and each
     competitor that showed up), today's top results, and where each app stands."""
@@ -502,7 +509,8 @@ def detail(app: App, keyword: Keyword) -> dict:
         "grid": [{"y": y(t), "label": f"#{t}"} for t in ticks],
         "xticks": month_ticks(every, lambda i: x(every[i]), 56),
         "top": [
-            r | {"rank": i + 1, "player": mine.get(r["id"])} for i, r in enumerate(latest.top[:10])
+            r | {"rank": i + 1, "player": (pl := mine.get(r["id"])), "who": _who(pl)}
+            for i, r in enumerate(latest.top[:10])
         ],
         "standings": standings,
         "results": len(latest.ids),

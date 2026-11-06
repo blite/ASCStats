@@ -305,14 +305,22 @@ def _menu(client, keyword) -> str:
     return page.split(f'id="kwm-{keyword.pk}"')[1].split("</div>")[0]
 
 
+def _state(html: str, apple_id) -> str:
+    """The Track/Following state a list gives one result."""
+    return html.split(f'data-app="{apple_id}" data-state="')[1].split('"')[0]
+
+
 def test_the_top_10_menu_follows_a_result_as_a_competitor(client, seeded):
     snake = App.objects.get(apple_id=SNAKE)
     row = next(r for r in keywords.board(snake, "us")["rows"] if any(not t["who"] for t in r.top))
     stranger = next(t for t in row.top if not t["who"])
     menu = _menu(client, row.keyword)
-    assert f'data-follow="{stranger["id"]}"' in menu  # a + for an app nobody follows
-    placed = [t for t in row.top if t["who"]]  # you and your competitors get no +
-    assert all(f'data-follow="{t["id"]}"' not in menu for t in placed)
+    assert _state(menu, stranger["id"]) == "track"  # Track for an app nobody follows
+    assert f'data-follow="{stranger["id"]}"' in menu
+    for t in row.top:
+        if t["who"]:  # you, and Following for your competitors
+            assert _state(menu, t["id"]) == t["who"]
+    assert f"apps.apple.com/us/app/id{stranger['id']}" in menu  # each opens in the App Store
 
     url = f"/app/{SNAKE}/competitors/follow/"
     answer = client.post(url, {"id": stranger["id"], "keyword": row.keyword.pk})
@@ -326,5 +334,17 @@ def test_the_top_10_menu_follows_a_result_as_a_competitor(client, seeded):
     assert "already follows" in again.json()["error"]
     assert client.post(url, {"id": 1, "keyword": row.keyword.pk}).status_code == 400  # not a result
     assert client.get(url).status_code == 405
-    # the cached tab shows it as followed straight away
-    assert f'data-follow="{stranger["id"]}"' not in _menu(client, row.keyword)
+    # the cached tab and the keyword's detail show it as followed straight away
+    assert _state(_menu(client, row.keyword), stranger["id"]) == "rival"
+    detail = client.get(f"/app/{SNAKE}/keywords/{row.keyword.pk}/").content.decode()
+    assert _state(detail, stranger["id"]) == "rival"
+
+    # and Following stops: its history is kept, and Track follows it again
+    url = f"/app/{SNAKE}/competitors/unfollow/"
+    answer = client.post(url, {"id": stranger["id"]})
+    assert answer.status_code == 200
+    assert snake not in rival.tracked_for.all()
+    assert Competitor.objects.filter(apple_id=stranger["id"]).exists()
+    assert _state(_menu(client, row.keyword), stranger["id"]) == "track"
+    assert client.post(url, {"id": stranger["id"]}).status_code == 400  # not followed now
+    assert client.get(url).status_code == 405

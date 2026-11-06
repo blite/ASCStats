@@ -101,6 +101,18 @@ def app_competitors_follow(request, apple_id):
     return JsonResponse({"name": rival.name})
 
 
+@require_POST
+def app_competitors_unfollow(request, apple_id):
+    """Stop following a competitor, from Following beside a search result on the Keywords tab.
+    Its history is kept, so Track picks up where it left off."""
+    app = _editable(apple_id)
+    rival = app.competitors.filter(apple_id=request.POST.get("id", "")).first()
+    if rival is None:
+        return JsonResponse({"error": f"{app.name} doesn't follow that app."}, status=400)
+    cp.remove(app, rival)
+    return JsonResponse({"name": rival.name})
+
+
 def idea_new(request):
     """Start an idea: an app not built yet, to research its keywords and competitors."""
     if settings.DEMO_SITE:
@@ -156,7 +168,7 @@ def app_keyword(request, apple_id, keyword_id):
     """One keyword's ranks over time and today's top results (an htmx fragment)."""
     app = _app(apple_id)
     keyword = get_object_or_404(app.keywords, pk=keyword_id)
-    return render(request, "aso/_keyword.html", kw.detail(app, keyword))
+    return render(request, "aso/_keyword.html", kw.detail(app, keyword) | {"app": app})
 
 
 @require_POST

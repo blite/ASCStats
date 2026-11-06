@@ -1,0 +1,20 @@
+{% load humanize stats_extras %}{% comment %}
+One app in a search's results: its icon, name and developer, a link to it in the App Store, and
+Track (+) to follow it as a competitor, or Following to stop. Used by the Keywords tab's row
+menus and its keyword detail, for apps and ideas alike; _app_entry_assets.html styles it and
+makes the buttons work.
+  a        a result: id, name, seller, icon and, when the search had them, ratings and average
+  who      "you", "rival" (followed already) or None
+  front    the storefront the result is from
+  keyword  the keyword whose results list it (a follow is checked against them)
+  ratings  show its ratings beside the developer
+{% endcomment %}{% with state=who|default:"track" %}<span class="appent" data-app="{{ a.id }}" data-state="{{ state }}">
+  {% if who == "rival" %}<a class="ae-open" href="{% url 'app_competitor' app.apple_id a.id %}" title="{{ a.name }}: search ranks and history">{% else %}<a class="ae-open" href="https://apps.apple.com/{{ front }}/app/id{{ a.id }}" target="_blank" rel="noopener" title="Open {{ a.name }} in the App Store">{% endif %}
+    {% if a.icon %}<img src="{{ a.icon }}" alt="" width="28" height="28" loading="lazy">{% else %}<span class="noicon">{% icon "app" %}</span>{% endif %}
+    <span class="ae-text"><span class="ae-name">{{ a.name }}</span><span class="ae-sub">{{ a.seller }}{% if ratings and a.ratings %} · {{ a.ratings|intcomma }} ratings{% if a.average %}, {{ a.average|floatformat:1 }}★{% endif %}{% endif %}</span></span>
+  </a>
+  <a class="ae-store" href="https://apps.apple.com/{{ front }}/app/id{{ a.id }}" target="_blank" rel="noopener" title="Open {{ a.name }} in the App Store" aria-label="Open {{ a.name }} in the App Store">{% icon "external" %}</a>
+  {% if who == "you" %}<span class="ae-you">You</span>
+  {% elif not demo %}<button type="button" class="ae-act ae-track" data-follow="{{ a.id }}" data-keyword="{{ keyword }}" aria-label="Track {{ a.name }} as a competitor" title="Follow {{ a.name }} as a competitor">{% icon "plus" %}Track</button><button type="button" class="ae-act ae-following" data-unfollow="{{ a.id }}" aria-label="Stop following {{ a.name }}" title="Stop following {{ a.name }}; its history is kept"><span class="on">Following</span><span class="off">Unfollow</span></button>
+  {% elif who == "rival" %}<span class="ae-you">Following</span>{% endif %}
+</span>{% endwith %}
