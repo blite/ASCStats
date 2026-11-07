@@ -17,3 +17,5 @@ k8s/**/*.secret.yaml
 # local real-data setup: the Compose override and the data folder it stores into
 compose.override.yaml
 /data/
+# Claude Code local settings
+/.claude/
