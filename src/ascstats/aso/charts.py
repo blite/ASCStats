@@ -38,7 +38,6 @@ log = logging.getLogger(__name__)
 KINDS = [k for k, _ in ChartCapture.Kind.choices]  # free, paid, grossing: the page's columns
 OVERALL = 0
 DEFAULT = ("us", 6014)  # Games: where the page opens before anything is fetched
-COLUMN = 25  # rows a column shows before "Show all"
 MOVERS = 8  # apps per list in the Movers card
 WORDS = 30  # title words the Title words card lists
 PHRASES = 15
@@ -255,14 +254,6 @@ class Column:
     compare_day: date | None
     rows: list[Row]
     dropped: list[tuple[int, ChartApp]]  # (its rank before, app): in the comparison, not now
-
-    @property
-    def head(self) -> list[Row]:
-        return self.rows[:COLUMN]
-
-    @property
-    def rest(self) -> list[Row]:
-        return self.rows[COLUMN:]
 
     @property
     def no_ads(self) -> int:

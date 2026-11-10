@@ -49,10 +49,7 @@
     <h2>{{ column.label }}</h2>
     <p class="sub">{% if column.capture %}{% if column.rows %}{{ column.rows|length }} apps · {{ column.no_ads }} say no ads{% if column.compare_day %} · vs {{ column.compare_day|date:"M j" }}{% else %} · no earlier fetch to compare{% endif %}{% else %}No apps in this chart.{% endif %}{% else %}Not in the {{ day|date:"M j" }} fetch.{% endif %}</p>
     {% if column.rows %}
-    <ol class="chart">{% for r in column.head %}{% include "aso/_chart_row.html" with kind=column.kind %}{% endfor %}</ol>
-    {% if column.rest %}<details class="ch-more"><summary>Show {{ column.head|length|add:1 }}–{{ column.rows|length }}</summary>
-      <ol class="chart" start="{{ column.head|length|add:1 }}">{% for r in column.rest %}{% include "aso/_chart_row.html" with kind=column.kind %}{% endfor %}</ol>
-    </details>{% endif %}
+    <ol class="chart">{% for r in column.rows %}{% include "aso/_chart_row.html" with kind=column.kind %}{% endfor %}</ol>
     {% endif %}
   </section>
   {% endfor %}
@@ -127,7 +124,6 @@
          background: var(--background); color: var(--muted-foreground); cursor: pointer; }
   .trk:hover, .trk:focus-visible, .trk[aria-expanded="true"] { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
   .trk .lucide { width: 13px; height: 13px; }
-  .ch-more summary { margin-top: 8px; }
   .ch-err { font-size: 12px; color: var(--destructive); padding: 2px 0 4px 62px; }
   .movers { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 4px 18px; }
   .movers h3, .card h3 { font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 10px 0 6px; }
