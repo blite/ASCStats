@@ -2,19 +2,15 @@
 {% block title %}Top charts · {{ genre_label }} · ASCStats{% endblock %}
 {% block crumb %}Top charts{% endblock %}
 {% block content %}
-{% with free=columns.0 %}
 <section class="hero fade">
   <p class="eyebrow">Top charts · {{ store_name }}{% if any_capture %} · {{ day|date:"M j, Y" }}{% endif %}</p>
-  {% if free.capture and free.rows %}
-  <h1>{{ genre_label }}: <span class="num">{{ free.no_ads }}</span> of the top {{ free.rows|length }} free say no ads.</h1>
-  {% elif any_capture %}
+  {% if any_capture %}
   <h1>{{ genre_label }} in {{ store_name }}.</h1>
   {% else %}
   <h1>{{ genre_label }} hasn't been fetched yet.</h1>
   {% endif %}
-  <p>The App Store's top free, paid and grossing iPhone apps in one category, 100 each, as Apple's chart feed lists them. <strong>No ads</strong> marks apps whose description promises none and <strong>Ads</strong> marks ones that mention removing or watching them. Both come from the listing's words, not from the app itself. A category is fetched only when you ask, and the page keeps that fetch until you refetch.{% if genre == 0 %} The free overall chart holds no games; pick Games or a game genre for those.{% endif %}</p>
+  <p>The App Store's top free, paid and grossing iPhone apps in one category, 100 each, as Apple's chart feed lists them. A category is fetched only when you ask, and the page keeps that fetch until you refetch.{% if genre == 0 %} The free overall chart holds no games; pick Games or a game genre for those.{% endif %}</p>
 </section>
-{% endwith %}
 
 <section class="card fade ch-controls">
   <form class="filters" id="chart-pick" data-base="{% url 'charts' 'xx' 0 %}" onsubmit="return false">
@@ -47,7 +43,7 @@
   {% for column in columns %}
   <section class="card ch-col">
     <h2>{{ column.label }}</h2>
-    <p class="sub">{% if column.capture %}{% if column.rows %}{{ column.rows|length }} apps · {{ column.no_ads }} say no ads{% if column.compare_day %} · vs {{ column.compare_day|date:"M j" }}{% else %} · no earlier fetch to compare{% endif %}{% else %}No apps in this chart.{% endif %}{% else %}Not in the {{ day|date:"M j" }} fetch.{% endif %}</p>
+    <p class="sub">{% if column.capture %}{% if column.rows %}{{ column.rows|length }} apps{% if column.compare_day %} · vs {{ column.compare_day|date:"M j" }}{% else %} · no earlier fetch to compare{% endif %}{% else %}No apps in this chart.{% endif %}{% else %}Not in the {{ day|date:"M j" }} fetch.{% endif %}</p>
     {% if column.rows %}
     <ol class="chart">{% for r in column.rows %}{% include "aso/_chart_row.html" with kind=column.kind %}{% endfor %}</ol>
     {% endif %}
@@ -118,7 +114,6 @@
   .cn { font-weight: 500; } .ca:hover .cn { text-decoration: underline; }
   .cs { font-size: 12px; color: var(--muted-foreground); }
   .tag { flex: none; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--muted); color: var(--muted-foreground); white-space: nowrap; }
-  .tag.noads { background: color-mix(in oklch, var(--st-good) 16%, transparent); color: var(--good-text); }
   .tag.you { background: var(--foreground); color: var(--card); }
   .trk { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--border); border-radius: 999px;
          background: var(--background); color: var(--muted-foreground); cursor: pointer; }
@@ -144,7 +139,7 @@
                      color: var(--foreground); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
   .trk-menu button:hover, .trk-menu button:focus-visible { background: var(--muted); }
   .trk-menu img, .trk-menu .lucide { width: 16px; height: 16px; border-radius: 4px; flex: none; }
-  @media (max-width: 640px) { .ch-actions { margin-left: 0; } .cr .tag.ads { display: none; } }
+  @media (max-width: 640px) { .ch-actions { margin-left: 0; } }
 </style>
 <script>
   (() => {

@@ -1,9 +1,9 @@
 {% load stats_extras %}{% comment %}
-One app in a top chart (charts.html): its rank, how far it moved, its listing and what its
-description says about ads, then Yours, Following, or + to track it as a competitor.
+One app in a top chart (charts.html): its rank, how far it moved and its listing, then
+Yours, Following, or + to track it as a competitor.
   r      a charts.Row
   kind   the chart's kind: the price shows on paid and grossing charts only
-{% endcomment %}<li class="cr{% if r.you %} you{% elif r.rivals %} rival{% endif %}" data-ads="{{ r.ads|default:'unsaid' }}" data-app="{{ r.app.apple_id }}">
+{% endcomment %}<li class="cr{% if r.you %} you{% elif r.rivals %} rival{% endif %}" data-app="{{ r.app.apple_id }}">
   <span class="pos">{{ r.rank }}</span>
   {% if r.new %}<span class="mv new" title="Not in the chart {{ column.compare_day|date:'M j' }}">New</span>
   {% elif r.change > 0 %}<span class="mv up" title="Up from #{{ r.before }}">▲{{ r.change }}</span>
@@ -14,7 +14,6 @@ description says about ads, then Yours, Following, or + to track it as a competi
     {% if r.app.icon_url %}<img src="{{ r.app.icon_url }}" alt="" width="28" height="28" loading="lazy">{% else %}<span class="noicon">{% icon "app" %}</span>{% endif %}
     <span class="ct"><span class="cn">{{ r.app.name }}</span><span class="cs">{{ r.app.seller }}{% if kind != "free" and r.app.price %} · {% if r.app.currency == "USD" %}${{ r.app.price }}{% else %}{{ r.app.price }} {{ r.app.currency }}{% endif %}{% endif %}</span></span>
   </a>
-  {% if r.ads == "none" %}<span class="tag noads" title="Its description promises no ads">No ads</span>{% elif r.ads == "some" %}<span class="tag ads" title="Its description mentions removing, watching or living with ads">Ads</span>{% endif %}
   {% if r.you %}<span class="tag you">Yours</span>
   {% elif r.rivals %}<span class="tag rival" title="A competitor of {{ r.rivals|join:', ' }}">Following</span>
   {% elif trackers %}<button type="button" class="trk" data-track="{{ r.app.apple_id }}" aria-label="Track {{ r.app.name }} as a competitor" title="Track {{ r.app.name }} as a competitor">{% icon "plus" %}</button>{% endif %}

@@ -279,8 +279,7 @@ class ChartCapture(models.Model):
 
 
 class ChartApp(models.Model):
-    """An app as the chart feed last showed it: enough to list it in a chart and to judge
-    whether its description promises no ads (``charts.ads``)."""
+    """An app as the chart feed last showed it: enough to list it in a chart."""
 
     apple_id = models.BigIntegerField(unique=True)
     name = models.CharField(max_length=255)

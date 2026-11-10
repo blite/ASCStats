@@ -83,38 +83,6 @@ def check(storefront: str, genre: int) -> None:
 
 # ----------------------------------------------------------------------------- what an app says
 
-# "no ads", "ad-free", "without ads", "zero ads", "no annoying ads", "free of ads"
-_NO_ADS = re.compile(
-    r"\b(?:no|zero|without|free of|never any|0)\s+(?:annoying\s+|intrusive\s+|pop-?ups?\s+|"
-    r"forced\s+|third[- ]party\s+|banner\s+|video\s+)?(?:ads|adverts?|advertising|"
-    r"advertisements?)\b|\bad[- ]?free\b|\bads?[- ]free\b",
-    re.I,
-)
-# ...but an app that sells the way out of them has ads: "remove ads", "go ad-free",
-# "ad-free version", "watch an ad", "non-intrusive ads", "no ads after every level", and
-# "no ads" listed among what a subscription or VIP pass unlocks
-_HAS_ADS = re.compile(
-    r"\bremove\s+(?:all\s+|the\s+)?ads\b|\bads?\s+removal\b|\bgo\s+ad[- ]?free\b|"
-    r"\bad[- ]?free\s+(?:version|upgrade|option|subscription|pass|mode)\b|"
-    r"\bwatch(?:ing)?\s+(?:an?\s+|short\s+)*(?:video\s+)?ads?\b|\brewarded\s+(?:video|ads?)\b|"
-    r"\bnon[- ]?intrusive\s+ads\b|\bcontains\s+ads\b|\bads\s+(?:help|support|keep)\b|"
-    r"\bno\s+(?:annoying\s+|forced\s+)?ads\s+(?:after|between|during)\b|"
-    r"\b(?:subscri\w*|vip|premium|membership)\b[^.!?]{0,120}\b(?:no|without)\s+ads\b",
-    re.I,
-)
-
-
-def ads(summary: str) -> str:
-    """What an app's description says about ads: "none" when it promises none, "some" when
-    it mentions removing, watching or living with them, "" when it says neither. A reading of
-    the listing's words, not of the app."""
-    if _HAS_ADS.search(summary):
-        return "some"
-    if _NO_ADS.search(summary):
-        return "none"
-    return ""
-
-
 # Words too common in app names to say anything about a category
 _STOP_WORDS = (
     "a an and the of for to in on with by at or your you my our it is be are from as all "
@@ -232,7 +200,6 @@ class Row:
     app: ChartApp
     before: int | None = None  # its rank in the comparison chart; None: not in it
     compared: bool = False  # a comparison chart exists
-    ads: str = ""
     you: bool = False
     rivals: list[str] = field(default_factory=list)  # your apps that follow it
 
@@ -254,10 +221,6 @@ class Column:
     compare_day: date | None
     rows: list[Row]
     dropped: list[tuple[int, ChartApp]]  # (its rank before, app): in the comparison, not now
-
-    @property
-    def no_ads(self) -> int:
-        return sum(r.ads == "none" for r in self.rows)
 
 
 def _comparison(storefront: str, genre: int, kind: str, day: date):
@@ -296,7 +259,7 @@ def page(storefront: str, genre: int, day: date | None = None) -> dict:
         before = {i: n for n, i in enumerate(old.ids, 1)} if old else {}
         rows = [
             Row(rank=n, app=apps[i], before=before.get(i), compared=old is not None,
-                ads=ads(apps[i].summary), you=i in yours, rivals=rivals.get(i, []))
+                you=i in yours, rivals=rivals.get(i, []))
             for n, i in enumerate(cap.ids if cap else [], 1) if i in apps
         ]  # fmt: skip
         now = set(cap.ids) if cap else set()

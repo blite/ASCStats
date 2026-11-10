@@ -52,27 +52,6 @@ def test_top_chart_reads_the_feed():
     assert calls[1].endswith("/us/rss/toppaidapplications/limit=100/json")  # the overall chart
 
 
-@pytest.mark.parametrize(
-    ("summary", "said"),
-    [
-        ("Relaxing puzzles. No ads, no timers.", "none"),
-        ("Completely ad-free and offline.", "none"),
-        ("Play without annoying ads!", "none"),
-        ("Free to play. Remove ads with a one-time purchase.", "some"),
-        ("Go ad-free with Premium.", "some"),
-        ("Watch a short video ad for a hint.", "some"),
-        ("Non-Intrusive Ads: zero interruptions.", "some"),
-        ("No annoying ads after every level.", "some"),
-        ("VIP subscription: you will unlock instant hints, no ads, double gifts.", "some"),
-        ("One purchase. Unlock the full game with no ads.", "none"),
-        ("Hundreds of levels to master.", ""),
-        ("Read the news headlines.", ""),  # "headlines" is not "ads"
-    ],
-)
-def test_ads_reads_what_the_description_promises(summary, said):
-    assert charts.ads(summary) == said
-
-
 def test_title_words_count_names_not_mentions():
     words, phrases = charts.title_words([
         "Sudoku - Classic Number Puzzle", "Killer Sudoku: Number Puzzle", "Sudoku Sudoku",
@@ -123,7 +102,7 @@ def seed(day, kind, ids, genre=PUZZLE):
     for i in ids:
         ChartApp.objects.get_or_create(
             apple_id=i,
-            defaults={"name": f"App {i}", "seen_on": day, "summary": "No ads." if i % 2 else ""},
+            defaults={"name": f"App {i}", "seen_on": day},
         )
     ChartCapture.objects.create(date=day, storefront="us", genre=genre, kind=kind, ids=ids)
 
@@ -145,8 +124,6 @@ def test_page_compares_with_the_fetch_before(apps):
     assert rows[11].rivals == [apps[1].name]
     assert rows[apps[0].apple_id].you
     assert [(n, a.apple_id) for n, a in free.dropped] == [(2, 10), (4, 13)]
-    assert rows[11].ads == "none"
-    assert rows[12].ads == ""
     assert page["mover_lists"][0][1][0][1].app.apple_id == 12  # climbed most
     assert page["columns"][1].capture is None  # paid: not captured that day
     assert page["older"] == DAY - timedelta(days=1)
@@ -165,7 +142,8 @@ def test_charts_page_and_its_buttons(client, apps, monkeypatch):
     seed(DAY, "free", [600000021, 600000022])
     seed(DAY, "paid", [600000022])
     page = client.get(f"/charts/us/{PUZZLE}/").content.decode()
-    assert 'Puzzle games: <span class="num">1</span> of the top 2 free say no ads.' in page
+    assert "Puzzle games in United States." in page
+    assert "No ads" not in page
     assert "App 600000021" in page
     assert 'data-track="600000021"' in page
     assert client.get(f"/charts/us/{PUZZLE}/{DAY}/").status_code == 200
