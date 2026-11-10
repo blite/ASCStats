@@ -9,8 +9,11 @@ description, screenshots, price and the rest) is kept as a ``ListingChange``. Lo
 out the subtitle, so ``read_subtitles`` reads it from the store's web page: once for every
 competitor, again whenever it ships a version (a subtitle only changes with one), and once a
 month in case.
-Everything compared here is limited to the storefronts your apps are snapshotted in, so your
-app and its competitors are always counted over the same storefronts.
+Competitors are snapshotted in the US store every day, so everything compared here is the US
+store's, your app's included. Every other storefront your apps sell in is read once a week,
+each on a weekday of its own (``read_weekly``, the daily store job's last step, after the
+keyword searches), and a competitor's page can read its ``STORES`` again on demand
+(``read_stores``), to see how well it does in the languages there.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ import difflib
 import logging
 import re
 import time
+import zlib
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -49,6 +53,26 @@ SUBTITLE_PAGES = 60  # store pages re-read a day for subtitles; a first read nev
 SUBTITLE_EVERY = 30  # days before a subtitle is read again with no new version
 FAILURES_TO_STOP = 2  # pages failing in a row before the subtitle run stops for the day
 # Your app is the first color; competitors take the rest in turn
+# The storefronts a competitor's page can read on demand: those Cloudless Cam ships a listing
+# language for (en-US, en-GB, de-DE, es-ES, es-MX, fr-FR, it, pt-BR), then Australia and the
+# stores of languages the US store is said to index too (Korean, Russian, Vietnamese)
+STORES = ["us", "gb", "de", "es", "mx", "fr", "it", "br", "au", "kr", "ru", "vn"]
+# Reading a competitor's stores is a nicety; keyword searches are not, and they share the store's
+# rate limit. So a competitor's stores are read at most once a day, by this many competitors a
+# day in all: 12 requests each, under 250 a day, behind every keyword job in the queue.
+STORE_READS_PER_DAY = 20
+WEEK = 7  # days between a storefront's weekly read of every competitor
+STORES_PER_PAGE = 10  # rows of Ratings by store a page shows at a time
+FRESH_DAYS = 14  # a store row older than this is not shown: two weekly reads missed
+# ... and the languages of those listings, to pick out on a competitor's languages
+YOUR_LANGUAGES = {"EN", "DE", "ES", "FR", "IT", "PT"}
+# Language names Django's locale table lacks, for the codes Lookup sends
+MORE_LANGUAGES = {
+    "AM": "Amharic", "FO": "Faroese", "GU": "Gujarati", "HA": "Hausa", "LA": "Latin",
+    "LO": "Lao", "OR": "Odia", "SH": "Serbo-Croatian", "SI": "Sinhala", "TL": "Tagalog",
+    "ZH": "Chinese", "ZU": "Zulu",
+}  # fmt: skip
+HOME = "us"  # the storefront every competitor is snapshotted in daily, with your apps
 COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)",
           "var(--chart-5)", "var(--other)"]  # fmt: skip
 
@@ -434,11 +458,15 @@ class Rider:
             self.listings[apple_id] = listing = synthetic.rival_listing(syn, day)
             self.fronts[apple_id] = "us"
             for front, (count, stars) in synthetic.rival_rating_snapshot(syn, day).items():
+                if front != HOME:
+                    continue
                 rows.append(CompetitorSnapshot(
                     competitor=rival, date=day, storefront=front, count=count, star_sum=stars,
                     version=listing["version"],
                 ))  # fmt: skip
-        CompetitorSnapshot.objects.filter(date=day, competitor__in=self.rivals.values()).delete()
+        CompetitorSnapshot.objects.filter(
+            date=day, storefront=HOME, competitor__in=self.rivals.values()
+        ).delete()
         CompetitorSnapshot.objects.bulk_create(rows)
         self.finish(day)
         return len(rows)
@@ -540,8 +568,10 @@ def compare(app: App) -> dict:
     rivals = list(app.competitors.all())
     end = max(
         filter(None, [
-            RatingSnapshot.objects.filter(app=app).aggregate(d=Max("date"))["d"],
-            CompetitorSnapshot.objects.filter(competitor__in=rivals).aggregate(d=Max("date"))["d"],
+            RatingSnapshot.objects.filter(app=app, storefront=HOME).aggregate(d=Max("date"))["d"],
+            CompetitorSnapshot.objects.filter(competitor__in=rivals, storefront=HOME).aggregate(
+                d=Max("date")
+            )["d"],
         ]),
         default=None,
     )  # fmt: skip
@@ -564,9 +594,10 @@ def compare(app: App) -> dict:
         return {"members": members, "end": None, "max": MAX_PER_APP, "charted": members,
                 "changes": [], "new_label": f"New, {RECENT} days"}  # fmt: skip
 
-    _ratings(you, RatingSnapshot.objects.filter(app=app), end)
+    _ratings(you, RatingSnapshot.objects.filter(app=app, storefront=HOME), end)
     for m in members[1:]:
-        _ratings(m, CompetitorSnapshot.objects.filter(competitor=m.competitor), end)
+        snaps = CompetitorSnapshot.objects.filter(competitor=m.competitor, storefront=HOME)
+        _ratings(m, snaps, end)
     # Busiest first: new ratings lately, then ratings in all; the top few are charted
     members[1:] = sorted(members[1:], key=lambda m: (-(m.new or 0), -(m.count or 0), m.name))
     charted = [you, *[m for m in members[1:] if m.count is not None][:CHARTED]]
@@ -798,7 +829,7 @@ def profile(app: App, competitor: Competitor) -> dict:
         version_on=competitor.version_released_on, price=competitor.price,
         subtitle=competitor.subtitle,
     )  # fmt: skip
-    snaps = CompetitorSnapshot.objects.filter(competitor=competitor)
+    snaps = CompetitorSnapshot.objects.filter(competitor=competitor, storefront=HOME)
     end = snaps.aggregate(d=Max("date"))["d"]
     if end is not None:
         _ratings(member, snaps, end)
@@ -813,4 +844,272 @@ def profile(app: App, competitor: Competitor) -> dict:
         "releases": sum(e["kind"] == "release" for e in events),
         "changed_days": sum(e["kind"] == "changes" for e in events),
         "ranks": rival_keywords.ranks(app, competitor),
+        "stores": stores(app, competitor),
+        "store_codes": STORES,
+        "languages": languages(competitor),
     }
+
+
+# --- one competitor in many storefronts ------------------------------------------------------
+
+
+@dataclass
+class StoreRow:
+    """One storefront on a competitor's page: its ratings there, and your app's."""
+
+    code: str
+    name: str
+    flag: str
+    count: int | None = None  # None: no snapshot in this storefront yet
+    average: float | None = None
+    on: date | None = None
+    sold: bool = True  # False: the last read found no listing here
+    you_count: int | None = None
+    you_average: float | None = None
+
+    @property
+    def grade(self) -> str:
+        return grade(self.average)
+
+
+def _latest(snaps) -> dict[str, tuple[date, int, int]]:
+    """{storefront: (date, count, star_sum)} of each storefront's latest snapshot, within
+    ``FRESH_DAYS`` of the newest: an older one is from a storefront no longer read."""
+    out: dict[str, tuple[date, int, int]] = {}
+    newest = snaps.aggregate(d=Max("date"))["d"]
+    if newest is None:
+        return out
+    since = newest - timedelta(days=FRESH_DAYS)
+    for front, day, count, stars in (
+        snaps.filter(date__gte=since)
+        .order_by("date")
+        .values_list("storefront", "date", "count", "star_sum")
+    ):
+        out[front] = (day, count, stars)
+    return out
+
+
+def stores(app: App, competitor: Competitor) -> dict:
+    """``competitor`` in every storefront it has ratings in, most first, next to ``app`` there:
+    the latest from the last ``FRESH_DAYS`` (the US daily, the rest weekly or from the last
+    ``read_stores``). Storefronts where it has none, or where the last ``read_stores`` did not
+    find it, are only counted. Your app's numbers come from its own daily snapshot."""
+    from ascstats.stats.territories import flag, name
+
+    theirs = _latest(CompetitorSnapshot.objects.filter(competitor=competitor))
+    yours = _latest(RatingSnapshot.objects.filter(app=app))
+    read_on = competitor.stores_read_on
+    rows, empty = [], []
+    for code, (on, count, stars) in theirs.items():
+        row = StoreRow(code, name(code), flag(code), count=count, on=on,
+                       average=stars / count if count else None)  # fmt: skip
+        if code in yours:
+            _, row.you_count, you_stars = yours[code]
+            row.you_average = you_stars / row.you_count if row.you_count else None
+        (rows if count else empty).append(row)
+    rows.sort(key=lambda r: (-r.count, r.name))
+    empty.sort(key=lambda r: r.name)
+    # read on the button and not found, with nothing fresh from before: not sold there
+    missing = [
+        StoreRow(c, name(c), flag(c), sold=False) for c in STORES if read_on and c not in theirs
+    ]
+    return {
+        "rows": rows, "empty": empty, "missing": missing, "read_on": read_on,
+        "per_page": STORES_PER_PAGE, "read_today": read_on == timezone.localdate(),
+    }  # fmt: skip
+
+
+def read_stores(
+    competitor: Competitor,
+    day: date | None = None,
+    transport: httpx.BaseTransport | None = None,
+    pause: float = store.PAUSE,
+) -> str:
+    """Snapshot ``competitor``'s ratings in each of ``STORES``: the ``read_stores`` job, a
+    Lookup request per storefront. The US one too, so a competitor followed since the daily
+    snapshot has it now (the daily snapshot replaces it with the same answer). A storefront
+    that answers nothing is not one it is sold in; one that fails is left as it was."""
+    day = day or timezone.localdate()
+    found: dict[str, dict | None] = {}
+    if settings.ASC_SOURCE == "synthetic":
+        try:
+            syn = synthetic.rival_by_apple_id(competitor.apple_id)
+        except KeyError:
+            return "not synthetic"
+        for front, (count, stars) in synthetic.rival_rating_snapshot(syn, day).items():
+            if front in STORES:
+                found[front] = {"userRatingCount": count, "averageUserRating": stars / count
+                                if count else 0, "version": competitor.version}  # fmt: skip
+    else:
+        with store.client(transport) as client:
+            for i, front in enumerate(STORES):
+                if i and pause:
+                    time.sleep(pause)
+                try:
+                    answers = store.lookup([competitor.apple_id], front, client)
+                except store.StoreError as error:
+                    log.warning("reading %s in %s: %s", competitor.apple_id, front, error)
+                    continue
+                found[front] = next(
+                    (r for r in answers if r.get("trackId") == competitor.apple_id), None
+                )
+        if not found:
+            return "store error"
+    rows = [
+        CompetitorSnapshot(
+            competitor=competitor, date=day, storefront=front,
+            count=(count := r.get("userRatingCount") or 0),
+            star_sum=round(count * (r.get("averageUserRating") or 0)),
+            version=r.get("version") or "",
+        )
+        for front, r in found.items()
+        if r is not None
+    ]  # fmt: skip
+    CompetitorSnapshot.objects.filter(
+        competitor=competitor, date=day, storefront__in=list(found)
+    ).delete()
+    CompetitorSnapshot.objects.bulk_create(rows)
+    competitor.stores_read_on = day
+    competitor.save(update_fields=["stores_read_on"])
+    if pause:
+        time.sleep(pause)  # jobs run back to back: keep the store's pace between them
+    return f"{len(rows)} of {len(found)} storefronts"
+
+
+def language_name(code: str) -> str:
+    """English name of an ISO 639-1 code as Lookup sends it (``DE``); the code if unknown."""
+    from django.conf.locale import LANG_INFO
+
+    info = LANG_INFO.get(code.lower(), {})
+    return info.get("name") or MORE_LANGUAGES.get(code.upper(), code.upper())
+
+
+def languages(competitor: Competitor) -> list[dict]:
+    """The languages ``competitor``'s app supports (Lookup's ``languageCodesISO2A``), the ones
+    your listings are in first, then by name."""
+    rows = [
+        {"code": c, "name": language_name(c), "yours": c in YOUR_LANGUAGES}
+        for c in competitor.languages
+    ]
+    return sorted(rows, key=lambda r: (not r["yours"], r["name"]))
+
+
+def start_store_read(competitor: Competitor) -> str:
+    """Queue ``read_stores`` for ``competitor`` and return the job's id: the waiting one's if
+    it is queued already. CompetitorError when it was read today or the day's reads are spent
+    (``STORE_READS_PER_DAY``)."""
+    from django_tasks_db.models import DBTaskResult
+
+    from . import jobs
+
+    today = timezone.localdate()
+    if competitor.stores_read_on == today:
+        raise CompetitorError("Read today already: its stores can be read again tomorrow.")
+    reads = DBTaskResult.objects.filter(
+        task_path=jobs.read_stores.module_path,
+        enqueued_at__gte=timezone.make_aware(datetime.combine(today, datetime.min.time())),
+    )
+    waiting = next(
+        (r for r in reads.filter(status__in=["READY", "RUNNING"])
+         if r.args_kwargs["args"] == [competitor.pk]),
+        None,
+    )  # fmt: skip
+    if waiting is not None:
+        return str(waiting.id)
+    if reads.count() >= STORE_READS_PER_DAY:
+        raise CompetitorError(
+            f"{STORE_READS_PER_DAY} competitors' stores were read today, the day's limit, "
+            "to leave the store's rate limit to keyword searches. Try again tomorrow."
+        )
+    return str(jobs.read_stores.enqueue(competitor.pk).id)
+
+
+def _weekday_due(front: str, day: date) -> bool:
+    """Whether ``day`` is ``front``'s weekday: each storefront has its own, so the weekly
+    reads spread evenly over the week."""
+    return zlib.crc32(front.encode()) % WEEK == day.toordinal() % WEEK
+
+
+def read_weekly(
+    day: date | None = None,
+    source: str | None = None,
+    transport: httpx.BaseTransport | None = None,
+    pause: float = store.PAUSE,
+) -> int:
+    """Snapshot every followed competitor in the storefronts whose weekday ``day`` is (a daily
+    store step, the last: after the keyword searches, which matter more). The US is not one:
+    the ratings snapshot reads it daily. About a seventh of your apps' storefronts a day, a
+    Lookup request per 100 competitors in each. A storefront saved already today is not asked
+    again, so a retry only asks what is missing; two failing in a row stop the run for the
+    day. Returns the rows written."""
+    from ascstats.stats.ratings import storefronts
+
+    day = day or timezone.localdate()
+    source = source or settings.ASC_SOURCE
+    rivals = {
+        c.apple_id: c for c in Competitor.objects.filter(tracked_for__is_active=True).distinct()
+    }
+    due = [f for f in storefronts(day) if f != HOME and _weekday_due(f, day)]
+    if source == "synthetic":
+        due_set, rows = set(due), []
+        for apple_id, rival in rivals.items():
+            try:
+                syn = synthetic.rival_by_apple_id(apple_id)
+            except KeyError:
+                continue
+            for front, (count, stars) in synthetic.rival_rating_snapshot(syn, day).items():
+                if front in due_set:
+                    rows.append(CompetitorSnapshot(
+                        competitor=rival, date=day, storefront=front, count=count,
+                        star_sum=stars, version=rival.version,
+                    ))  # fmt: skip
+        CompetitorSnapshot.objects.filter(
+            date=day, storefront__in=due, competitor__in=rivals.values()
+        ).delete()
+        CompetitorSnapshot.objects.bulk_create(rows)
+        return len(rows)
+
+    done = set(
+        CompetitorSnapshot.objects.filter(date=day, storefront__in=due)
+        .values_list("storefront", flat=True)
+        .distinct()
+    )
+    written = failures = asked = 0
+    with store.client(transport) as client:
+        for front in due:
+            if front in done:
+                continue
+            if asked + failures and pause:
+                time.sleep(pause)
+            try:
+                answers = store.lookup_all(list(rivals), front, client, pause)
+            except store.StoreError as error:
+                log.warning("weekly competitor ratings: %s", error)
+                failures += 1
+                if failures >= FAILURES_TO_STOP:
+                    log.error("weekly competitor ratings stopped: %d storefronts failed in a row",
+                              failures)  # fmt: skip
+                    break
+                continue
+            asked, failures = asked + 1, 0
+            rows = [
+                CompetitorSnapshot(
+                    competitor=rivals[r["trackId"]], date=day, storefront=front,
+                    count=(count := r.get("userRatingCount") or 0),
+                    star_sum=round(count * (r.get("averageUserRating") or 0)),
+                    version=r.get("version") or "",
+                )
+                for r in answers
+                if r.get("trackId") in rivals
+            ]  # fmt: skip
+            CompetitorSnapshot.objects.filter(
+                date=day, storefront=front, competitor__in=rivals.values()
+            ).delete()
+            CompetitorSnapshot.objects.bulk_create(rows)
+            written += len(rows)
+    log.info("weekly competitor ratings: asked %d of %d storefronts due", asked, len(due))
+    return written
+
+
+def seed_weekly(day: date) -> None:
+    read_weekly(day, source="synthetic")

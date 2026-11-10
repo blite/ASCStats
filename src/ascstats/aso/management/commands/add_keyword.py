@@ -6,7 +6,7 @@ python manage.py add_keyword 1000000001 "snake game" --storefront gb --remove
 
 from django.core.management.base import BaseCommand, CommandError
 
-from ascstats.aso import keywords
+from ascstats.aso import jobs, keywords
 from ascstats.stats.models import App
 
 
@@ -37,4 +37,6 @@ class Command(BaseCommand):
             added = keywords.add(mine, "\n".join(terms), storefront)
         except keywords.KeywordError as error:
             raise CommandError(str(error)) from None
-        self.stdout.write(f"{mine.name} now tracks " + ", ".join(map(str, added)))
+        for k in added:  # as the Keywords tab does: an idea's keywords get no daily search
+            jobs.search_keyword.enqueue(k.pk)
+        self.stdout.write(f"{mine.name} now tracks {', '.join(map(str, added))}; searching now")

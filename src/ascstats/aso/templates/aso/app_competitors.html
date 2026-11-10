@@ -5,7 +5,7 @@
   <div class="card-head">
     <div>
       <h2>Side by side</h2>
-      <p class="sub">Ratings across the storefronts your apps are snapshotted in{% if end %}, as of {{ end|date:"M j, Y" }}{% endif %}; new ratings are the last {{ recent }} days, busiest competitors first. Competitors are snapshotted with your apps every day, in the same requests.</p>
+      <p class="sub">Ratings in the US store{% if end %}, as of {{ end|date:"M j, Y" }}{% endif %}; new ratings are the last {{ recent }} days, busiest competitors first. Competitors are snapshotted in the US store with your apps every day; a competitor's page reads its other stores.</p>
     </div>
     {% if not demo %}<a class="btn outline sm" href="{% url 'app_competitors_manage' app.apple_id %}">{% icon "competitors" %}Manage competitors</a>{% endif %}
   </div>

@@ -67,9 +67,13 @@ def test_public_lookup_snapshot_is_exact_and_idempotent(apps, settings, monkeypa
     snake.refresh_from_db()  # the US listing wins over other storefronts
     assert (snake.released_on, snake.primary_genre) == (date(2025, 1, 1), "Games")
     assert snake.icon_url.endswith("/512x512bb.jpg")
-    # the competitors seeding follows ride in the same requests: no extra calls for them
-    expected = {str(a.apple_id) for a in apps} | {str(r.apple_id) for r in aso_synthetic.RIVALS}
-    assert all(set(c.url.params["id"].split(",")) == expected for c in calls)
+    # the competitors seeding follows ride in the same US request: no extra calls for them,
+    # and none in the other storefronts
+    yours = {str(a.apple_id) for a in apps}
+    rivals = {str(r.apple_id) for r in aso_synthetic.RIVALS}
+    for c in calls:
+        riding = rivals if c.url.params["country"] == "us" else set()
+        assert set(c.url.params["id"].split(",")) == yours | riding
 
 
 @pytest.mark.django_db

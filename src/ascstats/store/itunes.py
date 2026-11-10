@@ -1,4 +1,4 @@
-"""iTunes Lookup, Search and search hints, with the retry policy they share."""
+"""iTunes Lookup, Search, search hints and the top charts feed, with the retry policy they share."""
 
 from __future__ import annotations
 
@@ -15,6 +15,10 @@ LOOKUP_URL = "https://itunes.apple.com/lookup"
 SEARCH_URL = "https://itunes.apple.com/search"
 HINTS_URL = "https://search.itunes.apple.com/WebObjects/MZSearchHints.woa/wa/hints"
 PAGE_URL = "https://apps.apple.com/{storefront}/app/id{apple_id}"
+CHART_URL = "https://itunes.apple.com/{storefront}/rss/{feed}/limit={limit}{genre}/json"
+CHART_FEEDS = {"free": "topfreeapplications", "paid": "toppaidapplications",
+               "grossing": "topgrossingapplications"}  # fmt: skip
+CHART_DEPTH = 100  # apps in a chart: the feed stops there, whatever limit it is asked for
 PAUSE = 5.0  # seconds between requests, and the base of the backoff when Apple refuses one
 TIMEOUT = 15.0
 LOOKUP_IDS = 100  # apps per Lookup request; more are asked in further requests
@@ -110,6 +114,54 @@ def hints(term: str, storefront: str, http: httpx.Client) -> list[str]:
     except (plistlib.InvalidFileException, ValueError, AttributeError) as error:
         raise StoreError(f"{storefront} hints {term!r}: unreadable answer") from error
     return [h["term"] for h in found if isinstance(h, dict) and h.get("term")]
+
+
+def _label(entry: dict, key: str) -> str:
+    value = entry.get(key)
+    return value.get("label", "") if isinstance(value, dict) else ""
+
+
+def _chart_entry(entry: dict) -> dict | None:
+    """One app of a chart feed, in the shape the charts keep; None when it has no Apple ID."""
+    try:
+        apple_id = int(entry["id"]["attributes"]["im:id"])
+    except KeyError, TypeError, ValueError:
+        return None
+    images = entry.get("im:image") or []
+    price = (entry.get("im:price") or {}).get("attributes", {})
+    category = (entry.get("category") or {}).get("attributes", {})
+    released = (entry.get("im:releaseDate") or {}).get("label", "")
+    return {
+        "id": apple_id,
+        "name": _label(entry, "im:name"),
+        "seller": _label(entry, "im:artist"),
+        "icon": images[-1].get("label", "") if images else "",
+        "price": float(price.get("amount") or 0),
+        "currency": price.get("currency", ""),
+        "genre": category.get("label", ""),
+        "released": released[:10],
+        "summary": _label(entry, "summary"),
+    }
+
+
+def top_chart(kind: str, genre: int | None, storefront: str, http: httpx.Client) -> list[dict]:
+    """A storefront's top free, paid or grossing iPhone apps, in chart order: the whole chart
+    (``CHART_DEPTH``) of one category, or of the whole store when ``genre`` is None. Each app
+    is {id, name, seller, icon, price, currency, genre, released, summary}; ``summary`` is the
+    start of its description. An empty chart answers no entries at all."""
+    url = CHART_URL.format(
+        storefront=storefront, feed=CHART_FEEDS[kind], limit=CHART_DEPTH,
+        genre=f"/genre={genre}" if genre else "",
+    )  # fmt: skip
+    label = f"{storefront} top {kind} {genre or 'overall'}"
+    try:
+        feed = _get(http, url, {}, label).json().get("feed", {})
+    except ValueError as error:
+        raise StoreError(f"{label}: unreadable answer") from error
+    entries = feed.get("entry") or []
+    if isinstance(entries, dict):  # a chart of one app is an entry, not a list
+        entries = [entries]
+    return [e for e in map(_chart_entry, entries) if e]
 
 
 _SERVER_DATA = re.compile(r'<script[^>]*id="serialized-server-data"[^>]*>(.*?)</script>', re.S)

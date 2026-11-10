@@ -19,7 +19,51 @@
     <div><dt>Version</dt><dd>{% if rival.version %}{{ rival.version }}{% if rival.version_released_on %} <span class="muted">· {{ rival.version_released_on|date:"M j, Y" }}</span>{% endif %}{% else %}<span class="muted">–</span>{% endif %}</dd></div>
     <div><dt>On the App Store since</dt><dd>{% if rival.released_on %}{{ rival.released_on|date:"M j, Y" }}{% else %}<span class="muted">–</span>{% endif %}</dd></div>
     <div><dt>Followed since</dt><dd>{{ rival.created_at|date:"M j, Y" }}</dd></div>
+    <div class="langs"><dt>Languages{% if languages %} · {{ languages|length }}{% endif %}<button type="button" class="info" aria-label="About languages" data-tip="Languages&#10;The languages the app itself supports, as its US listing reports them. Highlighted: the languages your listings are in (English, German, Spanish, French, Italian and Portuguese).&#10;It does not say whether its store listing is translated: Ratings by store and the listing in each store tell that.">{% icon "info" %}</button></dt><dd>{% for l in languages %}<span class="lang{% if l.yours %} yours{% endif %}" title="{{ l.code }}">{{ l.name }}</span>{% empty %}<span class="muted">–</span>{% endfor %}</dd></div>
   </dl>
+</section>
+
+<section class="card fade">
+  <div class="card-head">
+    <div>
+      <h2>Ratings by store<button type="button" class="info" aria-label="About ratings by store" data-tip="Ratings by store&#10;Every store {{ rival.name }} has ratings in, most first, next to {{ app.name }} in the same store. Ratings are counted per store, so a store with few of them next to many in the US is a hint its listing there is not localized.&#10;Competitors are read in the US store every day and in every other store your apps sell in once a week, each store on a weekday of its own. Read all stores reads {{ store_codes|length }} stores now ({{ store_codes|join:', '|upper }}), at most once a day. A store not read in two weeks is left out.">{% icon "info" %}</button></h2>
+      <p class="sub">Ratings in {{ stores.rows|length }} store{{ stores.rows|length|pluralize }}{% if stores.empty %} · <span title="{% for s in stores.empty %}{{ s.flag }} {{ s.name }}&#10;{% endfor %}">none in {{ stores.empty|length }} more</span>{% endif %}{% if stores.missing %} · <span title="{% for s in stores.missing %}{{ s.flag }} {{ s.name }}&#10;{% endfor %}">not found in {% for s in stores.missing %}{{ s.flag }}{% endfor %}</span>{% endif %}{% if stores.read_on %} · read {{ stores.read_on|date:"M j, Y" }}{% endif %}</p>
+    </div>
+    {% if not demo %}<div class="rs"><button type="button" class="btn outline sm" id="read-stores" data-url="{% url 'app_competitor_stores' app.apple_id rival.apple_id %}"{% if stores.read_today %} disabled title="Its stores can be read again tomorrow"{% endif %}>{% icon "ratings" %}<span>{% if stores.read_today %}Read today{% else %}Read all stores{% endif %}</span></button><p class="rs-note" hidden></p></div>{% endif %}
+  </div>
+  {% if stores.rows %}
+  <div class="scroll">
+  <table class="stores" data-per-page="{{ stores.per_page }}">
+    <thead><tr>
+      <th>Store</th>
+      <th class="num">Ratings</th>
+      <th class="num">Average</th>
+      <th class="num" title="{{ app.name }} in the same store">{{ app.name }}</th>
+      <th class="num">As of</th>
+    </tr></thead>
+    <tbody>
+    {% for s in stores.rows %}
+    <tr{% if forloop.counter > stores.per_page %} hidden{% endif %}>
+      <td><span title="{{ s.name }}">{{ s.flag }} {{ s.name }}</span></td>
+      <td class="num">{{ s.count|intcomma }}</td>
+      <td class="num">{% if s.average is not None %}{{ s.average|floatformat:2 }}<span class="star {{ s.grade }}">★</span>{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td class="num">{% if s.you_count is not None %}{{ s.you_count|intcomma }}{% if s.you_average is not None %} <span class="muted">· {{ s.you_average|floatformat:2 }}★</span>{% endif %}{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td class="num muted">{{ s.on|date:"M j" }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if stores.rows|length > stores.per_page %}
+  <div class="pager" data-pager>
+    <button type="button" class="btn outline sm" data-step="-1" disabled>← Previous</button>
+    <span class="muted" data-range>1–{{ stores.per_page }} of {{ stores.rows|length }}</span>
+    <button type="button" class="btn outline sm" data-step="1">Next →</button>
+  </div>
+  {% endif %}
+  {% else %}
+  <p class="muted">No ratings in any store yet.</p>
+  {% endif %}
 </section>
 
 <section class="card fade">
@@ -107,8 +151,16 @@
   .rh-sub { color: var(--foreground); }
   .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--border); }
   .facts dt { font-size: 12px; color: var(--muted-foreground); } .facts dd { margin: 2px 0 0; font-size: 15px; font-weight: 550; font-variant-numeric: tabular-nums; }
+  .facts .langs { grid-column: 1 / -1; }
+  .facts .langs dd { display: flex; flex-wrap: wrap; gap: 4px; font-size: 12px; font-weight: 500; }
+  .lang { padding: 2px 7px; border-radius: 999px; background: var(--muted); color: var(--muted-foreground); }
+  .lang.yours { background: var(--accent); color: var(--foreground); font-weight: 600; }
   .star { margin-left: 3px; }
   .star.good { color: var(--good-text); } .star.fair { color: var(--chart-4); } .star.poor { color: var(--bad-text); }
+  .rs { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-width: 320px; }
+  .rs-note { margin: 0; font-size: 12px; color: var(--muted-foreground); text-align: right; }
+  .stores { min-width: 520px; }
+  .pager { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 10px; font-size: 13px; font-variant-numeric: tabular-nums; } .stores td { font-size: 14px; }
   .ranks td { vertical-align: middle; font-size: 14px; }
   .ranks .term { font-weight: 500; }
   .ranks .rank { font-weight: 650; } .ranks .rank.top { color: var(--good-text); }
@@ -129,6 +181,55 @@
 {% include "aso/_change_style.html" %}
 {% include "aso/_sort_table.html" %}
 <script>
+  // Ratings by store, a page of rows at a time
+  document.querySelectorAll("[data-pager]").forEach((pager) => {
+    const rows = [...pager.previousElementSibling.querySelectorAll("tbody tr")];
+    const per = Number(pager.previousElementSibling.querySelector("table").dataset.perPage);
+    const pages = Math.ceil(rows.length / per);
+    let page = 0;
+    pager.addEventListener("click", (event) => {
+      const step = Number(event.target.closest("[data-step]")?.dataset.step);
+      if (!step) return;
+      page = Math.min(Math.max(page + step, 0), pages - 1);
+      rows.forEach((row, i) => { row.hidden = Math.floor(i / per) !== page; });
+      pager.querySelector('[data-step="-1"]').disabled = page === 0;
+      pager.querySelector('[data-step="1"]').disabled = page === pages - 1;
+      const last = Math.min((page + 1) * per, rows.length);
+      pager.querySelector("[data-range]").textContent = `${page * per + 1}–${last} of ${rows.length}`;
+    });
+  });
+  // Read all stores: start the job, then reload once it finished (the page is cached, and
+  // its rows count toward the cache's data version, so the reload shows them)
+  document.getElementById("read-stores")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget, label = button.querySelector("span");
+    const csrf = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/)?.[1] ?? "";
+    button.disabled = true;
+    label.textContent = "Reading…";
+    try {
+      const r = await fetch(button.dataset.url, {method: "POST", headers: {"X-CSRFToken": csrf}});
+      const answer = await r.json().catch(() => ({}));
+      if (answer.error) {  // read today, or the day's reads are spent
+        label.textContent = "Read all stores";
+        const note = button.parentElement.querySelector(".rs-note");
+        note.textContent = answer.error;
+        note.hidden = false;
+        return;
+      }
+      if (!r.ok) throw new Error(r.status);
+      const {job} = answer;
+      label.textContent = "Queued…";  // keyword jobs go first
+      for (;;) {
+        await new Promise((done) => setTimeout(done, 3000));
+        const poll = await (await fetch(`${button.dataset.url}?job=${job}`)).json();
+        if (poll.done) break;
+        label.textContent = /RUNNING/.test(poll.status) ? "Reading…" : "Queued…";
+      }
+      location.reload();
+    } catch {
+      button.disabled = false;
+      label.textContent = "Try again";
+    }
+  });
   // Track a term: the same request as the Suggestions card's Track button. The page is cached,
   // so the request reads this session's CSRF token from its cookie.
   document.querySelector(".ranks")?.addEventListener("click", async (event) => {

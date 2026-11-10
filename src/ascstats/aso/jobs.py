@@ -36,3 +36,21 @@ def read_competitor(competitor_id: int) -> str:
 
     competitor = Competitor.objects.filter(pk=competitor_id).first()
     return competitors.read_new(competitor) if competitor else "gone"
+
+
+@task(queue_name="store", priority=-10)  # behind every keyword job, the daily one included
+def read_stores(competitor_id: int) -> str:
+    """Read a competitor's ratings in each of ``competitors.STORES``, from the button on its
+    page (``competitors.start_store_read``): a request per storefront, about a minute at the
+    store's pace. At most once a day per competitor."""
+    from django.utils import timezone
+
+    from . import competitors
+    from .models import Competitor
+
+    competitor = Competitor.objects.filter(pk=competitor_id).first()
+    if competitor is None:
+        return "gone"
+    if competitor.stores_read_on == timezone.localdate():
+        return "read today"
+    return competitors.read_stores(competitor)

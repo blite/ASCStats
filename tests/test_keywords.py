@@ -8,6 +8,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import override_settings
+from django_tasks_db.models import DBTaskResult
 
 import ascstats.stats
 from ascstats.aso import keywords, suggestions, views
@@ -151,6 +152,8 @@ def test_keywords_tab_ranks_you_and_your_competitors(client, seeded):
     detail = client.get(f"/app/{SNAKE}/keywords/{k.pk}/").content.decode()
     assert "You and your competitors" in detail
     assert "Synthetic Worm Rush" in detail
+    worm = snake.competitors.get(name="Synthetic Worm Rush")
+    assert f'href="/app/{SNAKE}/competitors/{worm.apple_id}/">Synthetic Worm Rush</a>' in detail
     sudoku_kw = Keyword.objects.get(term="daily sudoku")
     assert client.get(f"/app/{SNAKE}/keywords/{sudoku_kw.pk}/").status_code == 404
 
@@ -287,7 +290,9 @@ def test_delete_picked_keywords_from_the_tab(client, seeded):
 def test_add_keyword_command(seeded):
     call_command("add_keyword", str(SUDOKU), "number puzzle", "--storefront", "gb")
     sudoku = App.objects.get(apple_id=SUDOKU)
-    assert sudoku.keywords.filter(term="number puzzle", storefront="gb").exists()
+    keyword = sudoku.keywords.get(term="number puzzle", storefront="gb")
+    queued = DBTaskResult.objects.get(task_path="ascstats.aso.jobs.search_keyword")
+    assert queued.args_kwargs == {"args": [keyword.pk], "kwargs": {}}
     call_command("add_keyword", str(SUDOKU), "Number Puzzle", "--storefront", "gb", "--remove")
     assert not sudoku.keywords.filter(term="number puzzle").exists()
     with pytest.raises(CommandError, match="does not track"):

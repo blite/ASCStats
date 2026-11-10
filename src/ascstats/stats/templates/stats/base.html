@@ -194,6 +194,12 @@
         {% endfor %}
       </ul>
     </div>{% endif %}
+    {% if not demo %}<div class="sb-group">{# the static demo has no store to capture charts from #}
+      <div class="sb-label">Store</div>
+      <ul class="sb-menu">
+        <li><a class="sb-btn" href="{% url 'charts_home' %}" title="Top charts"{% if page == "charts" %} aria-current="page"{% endif %}>{% icon "trophy" %}<span>Top charts</span></a></li>
+      </ul>
+    </div>{% endif %}
     {% if not demo %}<div class="sb-group">{# the static demo exports real apps only #}
       <div class="sb-label">Ideas<a class="sb-action" href="{% url 'idea_new' %}" title="New idea"{% if page == "idea_new" %} aria-current="page"{% endif %}>{% icon "plus" %}<span class="sr-only">New idea</span></a></div>
       <ul class="sb-menu">

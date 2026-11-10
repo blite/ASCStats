@@ -34,6 +34,9 @@ class Competitor(models.Model):
     subtitle_version = models.CharField(
         max_length=50, blank=True, help_text="the version on sale when the subtitle was read"
     )
+    stores_read_on = models.DateField(
+        null=True, blank=True, help_text="last read of its other storefronts' ratings"
+    )
     tracked_for = models.ManyToManyField(App, related_name="competitors", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -243,3 +246,54 @@ class KeywordScan(models.Model):
 
     def __str__(self) -> str:
         return f"{self.competitor_id} {self.storefront} {self.status}"
+
+
+class ChartCapture(models.Model):
+    """A top free, paid or grossing chart of one category in one storefront as fetched on one
+    day (a refetch that day replaces it): the apps' Apple IDs in chart order, up to 100
+    (``store.CHART_DEPTH``). Each app's listing is a ``ChartApp``, so the same app in many
+    charts is stored once."""
+
+    class Kind(models.TextChoices):
+        FREE = "free", "Free"
+        PAID = "paid", "Paid"
+        GROSSING = "grossing", "Grossing"
+
+    date = models.DateField()
+    storefront = models.CharField(max_length=2)
+    genre = models.PositiveIntegerField(help_text="Apple genre ID; 0 for the overall chart")
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    ids = models.JSONField(default=list, help_text="Apple IDs in chart order")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["storefront", "genre", "kind", "date"], name="uniq_chart_capture"
+            )
+        ]
+        ordering = ["-date", "storefront", "genre", "kind"]
+
+    def __str__(self) -> str:
+        return f"{self.date} {self.storefront} {self.genre} {self.kind} ({len(self.ids)})"
+
+
+class ChartApp(models.Model):
+    """An app as the chart feed last showed it: enough to list it in a chart and to judge
+    whether its description promises no ads (``charts.ads``)."""
+
+    apple_id = models.BigIntegerField(unique=True)
+    name = models.CharField(max_length=255)
+    seller = models.CharField(max_length=255, blank=True)
+    icon_url = models.URLField(max_length=500, blank=True)
+    price = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    currency = models.CharField(max_length=3, blank=True)
+    released_on = models.DateField(null=True, blank=True)
+    summary = models.TextField(blank=True, help_text="the start of its description")
+    seen_on = models.DateField(help_text="the last capture that listed it")
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.apple_id})"

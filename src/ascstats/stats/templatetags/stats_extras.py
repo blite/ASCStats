@@ -34,7 +34,7 @@ def asc_reviews_href(review):
     platform = ASC_PLATFORM_PATHS.get(review.platform, "ios")
     return (
         f"https://appstoreconnect.apple.com/apps/{review.app.apple_id}"
-        f"/distribution/activity/{platform}/ratingsResponses"
+        f"/distribution/ratings/{platform}"
     )
 
 
@@ -152,6 +152,10 @@ ICONS = {
     "trash": '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>'
     '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
     "chart": '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/>',
+    "trophy": '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>'
+    '<path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>'
+    '<path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>'
+    '<path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>',
     "external": '<path d="M15 3h6v6"/><path d="M10 14 21 3"/>'
     '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
     "down": '<path d="m6 9 6 6 6-6"/>',

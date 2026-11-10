@@ -5,6 +5,17 @@ from ascstats.stats import converters  # noqa: F401  (registers <appid:…>)
 from . import views
 
 urlpatterns = [
+    path("charts/", views.charts_home, name="charts_home"),
+    path("charts/track/", views.charts_track, name="charts_track"),
+    path("charts/<str:storefront>/<int:genre>/", views.charts, name="charts"),
+    path("charts/<str:storefront>/<int:genre>/<int:days>d/", views.charts, name="charts_window"),
+    path("charts/<str:storefront>/<int:genre>/<isodate:day>/", views.charts, name="charts_day"),
+    path(
+        "charts/<str:storefront>/<int:genre>/<isodate:day>/<int:days>d/",
+        views.charts,
+        name="charts_day_window",
+    ),
+    path("charts/<str:storefront>/<int:genre>/fetch/", views.charts_fetch, name="charts_fetch"),
     path("ideas/new/", views.idea_new, name="idea_new"),
     path("app/<appid:apple_id>/real/", views.app_make_real, name="app_make_real"),
     path("app/<appid:apple_id>/competitors/", views.app_competitors, name="app_competitors"),
@@ -12,6 +23,11 @@ urlpatterns = [
         "app/<appid:apple_id>/competitors/<int:rival_id>/",
         views.app_competitor,
         name="app_competitor",
+    ),
+    path(
+        "app/<appid:apple_id>/competitors/<int:rival_id>/stores/",
+        views.app_competitor_stores,
+        name="app_competitor_stores",
     ),
     path(
         "app/<appid:apple_id>/competitors/manage/",

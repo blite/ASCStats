@@ -59,7 +59,7 @@
     <p class="mh">Top {{ r.top|length|default:10 }} today <span class="muted">· “{{ r.keyword.term }}”</span></p>
     {% if r.top %}
     <ol>{% for t in r.top %}<li{% if t.who %} class="{{ t.who }}"{% endif %}><span class="pos">#{{ t.rank }}</span>{% include "aso/_app_entry.html" with a=t who=t.who front=r.keyword.storefront keyword=r.keyword.pk %}</li>{% endfor %}</ol>
-    {% with r.further as further %}{% if further %}<p class="mnote">{% with further.0 as f %}Your competitors further down: {{ f.1 }} at #{{ f.0 }}{% endwith %}{% if further|length > 1 %} and {{ further|length|add:"-1" }} more{% endif %}</p>{% endif %}{% endwith %}
+    {% with r.further as further %}{% if further %}<p class="mnote">{% with further.0 as f %}Your competitors further down: <a href="{% url 'app_competitor' app.apple_id f.2 %}">{{ f.1 }}</a> at #{{ f.0 }}{% endwith %}{% if further|length > 1 %} and {{ further|length|add:"-1" }} more{% endif %}</p>{% endif %}{% endwith %}
     {% elif r.date %}<p class="mnote">No results for this term today.</p>
     {% else %}<p class="mnote">Not searched yet: {% if app.is_idea %}its search runs in a minute{% else %}the next daily search fills this in{% endif %}.</p>{% endif %}
     <hr>
@@ -117,6 +117,7 @@
             background: var(--popover); color: var(--foreground); box-shadow: 0 10px 30px -10px rgb(0 0 0 / .25); font-size: 13px; }
   .kwmenu .mh { margin: 4px 8px 6px; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .kwmenu .mnote { margin: 2px 8px 6px; font-size: 12px; color: var(--muted-foreground); }
+  .kwmenu .mnote a { color: var(--foreground); }
   .kwmenu ol { list-style: none; margin: 0; padding: 0; }
   .kwmenu li { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: calc(var(--radius) - 4px); }
   .kwmenu li:hover { background: var(--accent); }

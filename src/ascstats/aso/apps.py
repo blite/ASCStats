@@ -12,6 +12,8 @@ class AsoConfig(AppConfig):
 
         from . import competitors, keywords, rival_keywords, suggestions, views
         from .models import (
+            ChartApp,
+            ChartCapture,
             Competitor,
             CompetitorRelease,
             CompetitorSnapshot,
@@ -28,18 +30,20 @@ class AsoConfig(AppConfig):
         extensions.data_models += [
             Competitor, Competitor.tracked_for.through, CompetitorSnapshot, CompetitorRelease,
             Keyword, Keyword.tracked_for.through, KeywordSnapshot, KeywordSuggestion,
-            ListingChange, KeywordScan,
+            ListingChange, KeywordScan, ChartCapture, ChartApp,
         ]  # fmt: skip
         extensions.daily_store_steps += [
             keywords.snapshot,
             suggestions.probe,
             competitors.read_subtitles,
+            competitors.read_weekly,  # last: the least important of the store's requests
         ]
         extensions.synthetic_setup += [competitors.seed_synthetic, keywords.seed_synthetic]
         extensions.synthetic_day += [
             keywords.seed_day,
             suggestions.seed_day,
             competitors.seed_subtitles,
+            competitors.seed_weekly,
             rival_keywords.seed_day,
         ]
         extensions.export_paths.append(views.export_paths)

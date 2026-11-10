@@ -16,7 +16,7 @@
     {% for t in rk.terms %}
     <div class="rkr" data-best="{{ t.best }}">
       <span class="term">{{ t.keyword.term }}</span>
-      <span class="spots">{% for s in t.rivals|slice:":3" %}<span class="spot{% if s.rank <= 10 %} top{% endif %}" title="{{ s.competitor.name }}: #{{ s.rank }} on {{ t.date|date:'M j' }}"><b>#{{ s.rank }}</b> {{ s.competitor.name|truncatechars:26 }}</span>{% endfor %}{% if t.rivals|length > 3 %}<span class="muted more" title="{% for s in t.rivals|slice:'3:' %}{{ s.competitor.name }}: #{{ s.rank }}&#10;{% endfor %}">+{{ t.rivals|length|add:"-3" }}</span>{% endif %}</span>
+      <span class="spots">{% for s in t.rivals|slice:":3" %}<a class="spot{% if s.rank <= 10 %} top{% endif %}" href="{% url 'app_competitor' app.apple_id s.competitor.apple_id %}" title="{{ s.competitor.name }}: #{{ s.rank }} on {{ t.date|date:'M j' }}"><b>#{{ s.rank }}</b> {{ s.competitor.name|truncatechars:26 }}</a>{% endfor %}{% if t.rivals|length > 3 %}<span class="muted more" title="{% for s in t.rivals|slice:'3:' %}{{ s.competitor.name }}: #{{ s.rank }}&#10;{% endfor %}">+{{ t.rivals|length|add:"-3" }}</span>{% endif %}</span>
       <span class="num you">{% if t.you %}#{{ t.you }}{% else %}<span class="muted" title="Not in the top {{ limit }}">–</span>{% endif %}</span>
       {% with sc=t.scores %}
       <span class="num score">{% if sc.popularity is not None %}<span><span class="est">~</span>{{ sc.popularity }}</span><i style="--v:{{ sc.popularity }}"></i>{% else %}<span class="muted">–</span>{% endif %}</span>
@@ -47,6 +47,7 @@
   .rkr .spot { font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--muted); color: var(--muted-foreground); white-space: nowrap; }
   .rkr .spot.top { background: color-mix(in oklch, var(--chart-2) 18%, transparent); color: var(--foreground); }
   .rkr .spot b { font-weight: 650; }
+  .rkr a.spot { text-decoration: none; } .rkr a.spot:hover, .rkr a.spot:focus-visible { color: var(--foreground); text-decoration: underline; }
   .rkr .more { font-size: 12px; cursor: default; }
   .rkr .you { font-weight: 650; }
   .rkr .act { text-align: right; }

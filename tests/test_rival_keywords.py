@@ -156,5 +156,8 @@ def test_the_keywords_tab_shows_the_synthetic_competitors_terms(client):
     html = client.get(f"/app/{SUDOKU}/keywords/").content.decode()
     assert "Competitors&#x27; keywords" in html or "Competitors' keywords" in html
     assert "Synthetic Number Place" in html
+    rival = Competitor.objects.get(name="Synthetic Number Place")
+    assert 'class="spot' in html
+    assert f'href="/app/{SUDOKU}/competitors/{rival.apple_id}/"' in html  # its page
     assert 'data-track="' in html
     assert KeywordScan.objects.filter(status="done").exists()

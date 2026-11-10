@@ -53,6 +53,9 @@ MISSING_RETRIES = 2  # re-asks when an app answered in that storefront last week
 FAILURES_TO_STOP = 2  # storefronts failing in a row before the run stops for the day
 ACTIVE_DAYS = 30  # a storefront whose ratings moved within this many days is asked daily
 WEEK = 7
+# Riders (competitors) are asked in the US request only: hundreds of them in every storefront
+# would multiply the requests. A competitor's other storefronts are read on demand.
+RIDER_STOREFRONT = "us"
 
 
 # --- star-rating snapshots ---------------------------------------------------------------------
@@ -103,7 +106,7 @@ def snapshot(
 ) -> int:
     """Record today's public rating totals for every active app in the storefronts due today,
     or in all of them with ``every_storefront``, and return the rows written. Registered riders
-    (``extensions.snapshot_riders``: competitors) are asked in the same requests.
+    (``extensions.snapshot_riders``: competitors) are asked in the same US request.
 
     Each storefront is saved as soon as it answers and one already saved today is not asked
     again, so a rerun after a failure only asks what is missing. Two storefronts failing in a
@@ -155,13 +158,14 @@ def snapshot(
         delisting), and save what it said."""
         answers: dict[int, tuple[App, dict]] = {}
         ridden: dict[int, dict] = {}
+        riding = rider_ids if front == RIDER_STOREFRONT else {}
         for attempt in range(MISSING_RETRIES + 1):
             if attempt and pause:
                 time.sleep(pause)
-            for r in store.lookup_all([*apps, *rider_ids], front, client, pause):
+            for r in store.lookup_all([*apps, *riding], front, client, pause):
                 if (app := apps.get(r.get("trackId"))) is not None:
                     answers[app.pk] = (app, r)
-                elif r.get("trackId") in rider_ids:
+                elif r.get("trackId") in riding:
                     ridden[r["trackId"]] = r
             if not recent[front] - answers.keys():
                 break
@@ -179,6 +183,8 @@ def snapshot(
         with transaction.atomic():
             today.filter(storefront=front).delete()
             RatingSnapshot.objects.bulk_create(rows)
+            if not riding:
+                return len(rows)
             return len(rows) + sum(
                 rider.save(day, front, {i: r for i, r in ridden.items() if rider_ids[i] is rider})
                 for rider in riders

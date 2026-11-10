@@ -1,6 +1,7 @@
 """The public App Store, read-only and keyless: iTunes Lookup (listings and rating totals),
 iTunes Search (search results, for keyword ranks), search hints (suggestions, for keyword
-popularity) and the App Store web page (subtitles, which Lookup leaves out). Requests
+popularity), the top charts RSS feed (each category's top free, paid and grossing
+apps) and the App Store web page (subtitles, which Lookup leaves out). Requests
 carry only app IDs, a search term and a storefront. App Store Connect, which needs a key,
 is ``ascstats.asc`` next door.
 
@@ -11,6 +12,8 @@ they stay near 12. A competitor keyword scan runs in the same queue, never along
 """
 
 from .itunes import (
+    CHART_DEPTH,
+    CHART_FEEDS,
     LOOKUP_IDS,
     PAUSE,
     SEARCH_LIMIT,
@@ -23,9 +26,11 @@ from .itunes import (
     lookup_all,
     search,
     subtitle,
+    top_chart,
 )
 
 __all__ = [
-    "LOOKUP_IDS", "PAUSE", "SEARCH_LIMIT", "STOREFRONT_IDS", "TIMEOUT", "StoreError", "client",
-    "hints", "lookup", "lookup_all", "search", "subtitle",
+    "CHART_DEPTH", "CHART_FEEDS", "LOOKUP_IDS", "PAUSE", "SEARCH_LIMIT", "STOREFRONT_IDS",
+    "TIMEOUT", "StoreError", "client", "hints", "lookup", "lookup_all", "search", "subtitle",
+    "top_chart",
 ]  # fmt: skip

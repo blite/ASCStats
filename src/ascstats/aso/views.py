@@ -12,12 +12,14 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
+from ascstats import store
 from ascstats.stats import dashboard as d
 from ascstats.stats.cache import cached_page
 from ascstats.stats.models import App
 from ascstats.stats.ratings import storefronts
 from ascstats.stats.territories import name
 
+from . import charts as ch
 from . import competitors as cp
 from . import finder, idea_apps, jobs, rival_keywords
 from . import keywords as kw
@@ -56,6 +58,24 @@ def app_competitor(request, apple_id, rival_id):
     rival = get_object_or_404(app.competitors, apple_id=rival_id)
     context = _tab(app, "competitors") | cp.profile(app, rival)
     return render(request, "aso/app_competitor.html", context)
+
+
+def app_competitor_stores(request, apple_id, rival_id):
+    """The Read all stores button on a competitor's page: POST starts the ``read_stores`` job
+    and answers its id; GET ``?job=<id>`` answers whether it finished. The page is cached,
+    so the button asks with this session's CSRF token from its cookie."""
+    app = _editable(apple_id)
+    rival = get_object_or_404(app.competitors, apple_id=rival_id)
+    if request.method == "POST":
+        try:
+            return JsonResponse({"job": cp.start_store_read(rival)})
+        except cp.CompetitorError as error:
+            return JsonResponse({"error": str(error)}, status=429)
+    try:
+        result = jobs.read_stores.get_result(request.GET.get("job", ""))
+    except Exception:  # an unknown or malformed id: nothing to wait for
+        return JsonResponse({"done": True})
+    return JsonResponse({"done": result.is_finished, "status": str(result.status)})
 
 
 def app_competitors_manage(request, apple_id):
@@ -274,6 +294,53 @@ def app_keywords_manage(request, apple_id):
         "picked": request.POST.get("storefront", "us"),
     }
     return render(request, "aso/app_keywords_manage.html", context)
+
+
+def charts_home(request):
+    """/charts/: the category fetched last, else Games in the US store."""
+    return redirect("charts", *ch.latest())
+
+
+@ensure_csrf_cookie  # outside the cache: Fetch and Track read the token from the cookie
+@cached_page
+def charts(request, storefront, genre, day=None, days=1):
+    """The Top charts page: a category's free, paid and grossing charts side by side as
+    fetched on one day, each app's movement since an earlier fetch, and what the names share."""
+    try:
+        context = ch.page(storefront, genre, day, days)
+    except ch.ChartError as error:
+        raise Http404(str(error)) from None
+    return render(request, "aso/charts.html", {"page": "charts", "end": d.last_day()} | context)
+
+
+@require_POST
+def charts_fetch(request, storefront, genre):
+    """Fetch (or Refetch): ask the store for the category's three charts while you wait,
+    about three seconds; the page reloads to show them."""
+    if settings.DEMO_SITE:
+        raise Http404("the static demo is read-only")
+    try:
+        ch.fetch(storefront, genre)
+    except ch.ChartError as error:
+        raise Http404(str(error)) from None
+    except store.StoreError:
+        return JsonResponse({"error": "The App Store didn't answer; try again."}, status=502)
+    return JsonResponse({"ok": True})
+
+
+@require_POST
+def charts_track(request):
+    """Track beside a chart's app: follow it as a competitor of one of your apps or ideas."""
+    if settings.DEMO_SITE:
+        raise Http404("the static demo is read-only")
+    app = App.objects.researched().filter(apple_id=request.POST.get("app", "") or 0).first()
+    if app is None:
+        return JsonResponse({"error": "Pick one of your apps or ideas."}, status=400)
+    try:
+        rival = ch.track(app, int(request.POST.get("id", "") or 0))
+    except (cp.CompetitorError, ValueError) as error:
+        return JsonResponse({"error": str(error) or "No such app."}, status=400)
+    return JsonResponse({"name": rival.name, "app": app.name})
 
 
 def dashboard_tiles(apps: list[App]) -> tuple[str, kw.Summary] | None:

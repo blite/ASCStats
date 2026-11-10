@@ -1,0 +1,249 @@
+{% extends "stats/base.html" %}{% load stats_extras aso_charts %}
+{% block title %}Top charts · {{ genre_label }} · ASCStats{% endblock %}
+{% block crumb %}Top charts{% endblock %}
+{% block content %}
+{% with free=columns.0 %}
+<section class="hero fade">
+  <p class="eyebrow">Top charts · {{ store_name }}{% if any_capture %} · {{ day|date:"M j, Y" }}{% endif %}</p>
+  {% if free.capture and free.rows %}
+  <h1>{{ genre_label }}: <span class="num">{{ free.no_ads }}</span> of the top {{ free.rows|length }} free say no ads.</h1>
+  {% elif any_capture %}
+  <h1>{{ genre_label }} in {{ store_name }}.</h1>
+  {% else %}
+  <h1>{{ genre_label }} hasn't been fetched yet.</h1>
+  {% endif %}
+  <p>The App Store's top free, paid and grossing iPhone apps in one category, 100 each, as Apple's chart feed lists them. <strong>No ads</strong> marks apps whose description promises none and <strong>Ads</strong> marks ones that mention removing or watching them. Both come from the listing's words, not from the app itself. A category is fetched only when you ask, and the page keeps that fetch until you refetch.{% if genre == 0 %} The free overall chart holds no games; pick Games or a game genre for those.{% endif %}</p>
+</section>
+{% endwith %}
+
+<section class="card fade ch-controls">
+  <form class="filters" id="chart-pick" data-base="{% url 'charts' 'xx' 0 %}" onsubmit="return false">
+    <label class="sr-only" for="ch-store">Storefront</label>
+    <select id="ch-store" name="storefront">
+      {% for sf in storefronts %}<option value="{{ sf }}"{% if sf == storefront %} selected{% endif %}>{{ sf|territory_name }}</option>{% endfor %}
+    </select>
+    <label class="sr-only" for="ch-genre">Category</label>
+    <select id="ch-genre" name="genre">
+      <optgroup label="Apps">{% for g, n in app_genres %}<option value="{{ g }}"{% if g == genre %} selected{% endif %}>{{ n }}{% with d=fetched_here|get:g %}{% if d %} · {{ d|date:"M j" }}{% endif %}{% endwith %}</option>{% endfor %}</optgroup>
+      <optgroup label="Games">{% for g, n in game_genres %}<option value="{{ g }}"{% if g == genre %} selected{% endif %}>{{ n }}{% with d=fetched_here|get:g %}{% if d %} · {{ d|date:"M j" }}{% endif %}{% endwith %}</option>{% endfor %}</optgroup>
+    </select>
+    {% if captured %}
+    <span class="day-pick">
+      {% if older %}<a class="btn ghost icon sm" href="{% chart_url storefront genre older days %}" title="Previous capture, {{ older|date:'M j' }}" aria-label="Previous capture">‹</a>{% else %}<span class="btn ghost icon sm" aria-hidden="true">‹</span>{% endif %}
+      <label class="sr-only" for="ch-day">Day</label>
+      <select id="ch-day" name="day">{% for d in captured %}<option value="{{ d|date:'Y-m-d' }}"{% if d == day %} selected{% endif %}>{{ d|date:"M j, Y" }}</option>{% endfor %}</select>
+      {% if newer %}<a class="btn ghost icon sm" href="{% chart_url storefront genre newer days %}" title="Next capture, {{ newer|date:'M j' }}" aria-label="Next capture">›</a>{% else %}<span class="btn ghost icon sm" aria-hidden="true">›</span>{% endif %}
+    </span>
+    <nav class="seg" aria-label="Compare with">
+      {% for w in windows %}<a href="{% chart_url storefront genre day w %}"{% if w == days %} aria-current="page"{% endif %} title="Movement since {{ w }} day{{ w|pluralize }} before">{% if w == 1 %}vs day before{% else %}vs {{ w }}d{% endif %}</a>{% endfor %}
+    </nav>
+    {% endif %}
+    <label class="only-noads"><input type="checkbox" id="only-noads"> No-ads apps only</label>
+    {% if not demo %}<span class="ch-actions">
+      <button type="button" class="btn{% if any_capture %} outline{% endif %} sm" id="ch-fetch" data-url="{% url 'charts_fetch' storefront genre %}" title="Ask the App Store for this category's free, paid and grossing charts now"><span>{% if captured %}Refetch{% else %}Fetch charts{% endif %}</span></button>
+    </span>{% endif %}
+  </form>
+  <p class="sub ch-note" id="ch-note">{% if captured %}Fetched {{ captured.0|date:"M j, Y" }}{% if captured|length > 1 %}, and on {{ captured|length|add:-1 }} earlier day{{ captured|length|add:-1|pluralize }} to compare with{% endif %}. Refetch replaces today's copy; an earlier day's stays.{% else %}Not fetched yet: <strong>Fetch charts</strong> asks the App Store for its three charts, about three seconds.{% endif %}</p>
+</section>
+
+{% if any_capture %}
+<div class="ch-cols fade">
+  {% for column in columns %}
+  <section class="card ch-col">
+    <h2>{{ column.label }}</h2>
+    <p class="sub">{% if column.capture %}{% if column.rows %}{{ column.rows|length }} apps · {{ column.no_ads }} say no ads{% if column.compare_day %} · vs {{ column.compare_day|date:"M j" }}{% else %} · no earlier fetch to compare{% endif %}{% else %}No apps in this chart.{% endif %}{% else %}Not in the {{ day|date:"M j" }} fetch.{% endif %}</p>
+    {% if column.rows %}
+    <ol class="chart">{% for r in column.head %}{% include "aso/_chart_row.html" with kind=column.kind %}{% endfor %}</ol>
+    {% if column.rest %}<details class="ch-more"><summary>Show {{ column.head|length|add:1 }}–{{ column.rows|length }}</summary>
+      <ol class="chart" start="{{ column.head|length|add:1 }}">{% for r in column.rest %}{% include "aso/_chart_row.html" with kind=column.kind %}{% endfor %}</ol>
+    </details>{% endif %}
+    <p class="ch-empty-filter muted" hidden>No app in the top {{ column.head|length }} says no ads.</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+
+<div class="two">
+  <section class="card fade">
+    <h2>Movers</h2>
+    <p class="sub">{% if columns.0.compare_day or columns.1.compare_day or columns.2.compare_day %}Across the three charts, since {% if days == 1 %}the capture before{% else %}{{ days }} days before{% endif %}.{% else %}Nothing to compare yet: movement shows once there is an earlier capture inside the window.{% endif %}</p>
+    <div class="movers">
+      {% for title, items, sign in mover_lists %}
+      <div><h3>{{ title }}</h3>
+        {% if items %}<ol>{% for label, m in items %}<li>{% if sign == "dropped" %}<span class="mv down">was #{{ m.0 }}</span> <span class="mn">{{ m.1.name }}</span>{% else %}<span class="mv {% if sign == 'new' %}new{% elif sign == 'up' %}up{% else %}down{% endif %}">{% if sign == "new" %}#{{ m.rank }}{% elif sign == "up" %}▲{{ m.change }}{% else %}▼{% widthratio m.change 1 -1 %}{% endif %}</span> <span class="mn">{{ m.app.name }}</span>{% endif %} <span class="muted">{{ label|lower }}</span></li>{% endfor %}</ol>
+        {% else %}<p class="muted">None.</p>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  <section class="card fade">
+    <h2>Words in the names</h2>
+    <p class="sub">What the {{ chart_apps }} app names in these charts share, and how many use each. It's the category's own vocabulary, a source of keyword ideas.</p>
+    {% if words %}<div class="words">{% for w, n in words %}<span class="word">{{ w }} <span class="muted">{{ n }}</span></span>{% endfor %}</div>{% endif %}
+    {% if phrases %}<h3>Phrases</h3><div class="words">{% for w, n in phrases %}<span class="word">{{ w }} <span class="muted">{{ n }}</span></span>{% endfor %}</div>{% endif %}
+    {% if not words and not phrases %}<p class="muted">No word is in more than one name.</p>{% endif %}
+  </section>
+</div>
+{% endif %}
+
+<section class="card fade">
+  <h2>Fetched categories</h2>
+  <p class="sub">Every category fetched so far, newest first. Each keeps its last fetch until you refetch it.</p>
+  {% if fetches %}<ul class="follows">{% for f in fetches %}<li><a href="{% url 'charts' f.storefront f.genre %}"{% if f.storefront == storefront and f.genre == genre %} aria-current="page"{% endif %}>{{ f.label }}</a> <span class="muted">{{ f.store }} · {{ f.day|date:"M j" }}</span></li>{% endfor %}</ul>
+  {% else %}<p class="muted">None yet.</p>{% endif %}
+</section>
+
+{% if trackers and not demo %}
+<div class="trk-menu" id="trk-menu" role="menu" hidden>
+  <p>Track as a competitor of</p>
+  {% for a in trackers %}<button type="button" role="menuitem" data-for="{{ a.apple_id }}">{% if a.is_idea %}{% icon "idea" %}{% elif a.icon_url %}<img src="{{ a.icon_url }}" alt="" width="16" height="16">{% else %}{% icon "app" %}{% endif %}<span>{{ a.name }}</span></button>{% endfor %}
+</div>
+{% endif %}
+
+<style>
+  .ch-controls { padding-bottom: 6px; }
+  .ch-controls .filters { gap: 8px 10px; }
+  .day-pick { display: inline-flex; align-items: center; gap: 2px; }
+  .day-pick span.btn { opacity: .35; }
+  .only-noads { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+  .ch-actions { display: inline-flex; gap: 8px; margin-left: auto; }
+  .ch-note { margin: 10px 0 0; }
+  .ch-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; margin: 14px 0; }
+  .ch-cols .card { margin: 0; min-width: 0; }
+  ol.chart { list-style: none; margin: 0; padding: 0; }
+  .cr { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px solid var(--grid); font-size: 13px; }
+  .cr:last-child { border-bottom: 0; }
+  .cr.you { background: color-mix(in oklch, var(--series-1) 9%, transparent); }
+  .cr .pos { width: 22px; flex: none; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  .mv { width: 34px; flex: none; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .mv.up { color: var(--good-text); } .mv.down { color: var(--bad-text); } .mv.flat { color: var(--muted-foreground); }
+  .mv.new { color: var(--series-1); text-transform: uppercase; letter-spacing: .03em; }
+  .ca { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; color: inherit; text-decoration: none; }
+  .ca img, .ca .noicon { width: 28px; height: 28px; border-radius: 7px; flex: none; background: var(--muted); }
+  .ca .noicon { display: grid; place-items: center; color: var(--muted-foreground); }
+  .ca .noicon .lucide { width: 15px; height: 15px; }
+  .ct { display: flex; flex-direction: column; min-width: 0; }
+  .cn, .cs { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cn { font-weight: 500; } .ca:hover .cn { text-decoration: underline; }
+  .cs { font-size: 12px; color: var(--muted-foreground); }
+  .tag { flex: none; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--muted); color: var(--muted-foreground); white-space: nowrap; }
+  .tag.noads { background: color-mix(in oklch, var(--st-good) 16%, transparent); color: var(--good-text); }
+  .tag.you { background: var(--foreground); color: var(--card); }
+  .trk { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--border); border-radius: 999px;
+         background: var(--background); color: var(--muted-foreground); cursor: pointer; }
+  .trk:hover, .trk:focus-visible, .trk[aria-expanded="true"] { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+  .trk .lucide { width: 13px; height: 13px; }
+  .ch-more summary { margin-top: 8px; }
+  html.noads-only .cr:not([data-ads="none"]) { display: none; }
+  html.noads-only .ch-col:not(:has(.cr[data-ads="none"])) .ch-empty-filter { display: block; }
+  .ch-err { font-size: 12px; color: var(--destructive); padding: 2px 0 4px 62px; }
+  .movers { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 4px 18px; }
+  .movers h3, .card h3 { font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 10px 0 6px; }
+  .movers ol { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+  .movers li { display: flex; gap: 6px; align-items: baseline; padding: 3px 0; min-width: 0; }
+  .movers .mv { width: auto; min-width: 34px; }
+  .movers .mn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .movers p { font-size: 13px; margin: 0; }
+  .words { display: flex; flex-wrap: wrap; gap: 6px; }
+  .word { font-size: 13px; padding: 3px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--background); }
+  .word .muted { font-variant-numeric: tabular-nums; }
+  .follows { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.9; }
+  .follows a[aria-current] { font-weight: 600; }
+  .trk-menu { position: absolute; z-index: 15; min-width: 200px; max-height: 320px; overflow-y: auto; padding: 4px; border: 1px solid var(--border);
+              border-radius: 10px; background: var(--popover); box-shadow: 0 8px 28px rgba(0,0,0,.18); }
+  .trk-menu p { margin: 4px 8px 6px; font-size: 12px; color: var(--muted-foreground); }
+  .trk-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: 6px; background: none;
+                     color: var(--foreground); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+  .trk-menu button:hover, .trk-menu button:focus-visible { background: var(--muted); }
+  .trk-menu img, .trk-menu .lucide { width: 16px; height: 16px; border-radius: 4px; flex: none; }
+  @media (max-width: 640px) { .ch-actions { margin-left: 0; } .cr .tag.ads { display: none; } }
+</style>
+<script>
+  (() => {
+    const csrf = () => document.cookie.match(/(?:^|; )csrftoken=([^;]+)/)?.[1] ?? "";
+    // The pickers: a storefront or category opens its newest capture; a day keeps the window
+    const pick = document.getElementById("chart-pick");
+    const go = (withDay) => {
+      const f = new FormData(pick);
+      let url = pick.dataset.base.replace("/xx/0/", `/${f.get("storefront")}/${f.get("genre")}/`);
+      if (withDay && f.get("day")) url += `${f.get("day")}/`;
+      const days = {{ days }};
+      if (withDay && days !== 1) url += `${days}d/`;
+      location.href = url;
+    };
+    pick.querySelector("[name=storefront]").addEventListener("change", () => go(false));
+    pick.querySelector("[name=genre]").addEventListener("change", () => go(false));
+    pick.querySelector("[name=day]")?.addEventListener("change", () => go(true));
+
+    // No-ads apps only: per browser
+    const only = document.getElementById("only-noads");
+    const apply = () => document.documentElement.classList.toggle("noads-only", only.checked);
+    try { only.checked = localStorage.getItem("chartsNoAds") === "1"; } catch (e) {}
+    apply();
+    only.addEventListener("change", () => {
+      apply();
+      if (only.checked) document.querySelectorAll(".ch-more").forEach(d => { d.open = true; });
+      try { localStorage.setItem("chartsNoAds", only.checked ? "1" : "0"); } catch (e) {}
+    });
+
+    // Fetch charts / Refetch: the store answers in a few seconds, then show the new fetch
+    document.getElementById("ch-fetch")?.addEventListener("click", async (e) => {
+      const b = e.currentTarget, label = b.querySelector("span"), was = label.textContent;
+      b.disabled = true;
+      label.textContent = "Fetching…";
+      let answer;
+      try {
+        const r = await fetch(b.dataset.url, {method: "POST", headers: {"X-CSRFToken": csrf()}});
+        answer = await r.json();
+      } catch { answer = {error: "Could not reach the site; try again."}; }
+      if (answer.error) {
+        b.disabled = false;
+        label.textContent = was;
+        document.getElementById("ch-note").textContent = answer.error;
+        return;
+      }
+      location.href = pick.dataset.base.replace("/xx/0/", `/{{ storefront }}/{{ genre }}/`);
+    });
+
+    // + beside an app: pick one of your apps or ideas, follow the app as its competitor
+    const menu = document.getElementById("trk-menu");
+    if (!menu) return;
+    let opener = null;
+    const close = () => { menu.hidden = true; opener?.setAttribute("aria-expanded", "false"); opener = null; };
+    document.addEventListener("click", async (e) => {
+      const plus = e.target.closest(".trk");
+      if (plus) {
+        if (opener === plus) { close(); return; }
+        close();
+        opener = plus;
+        plus.setAttribute("aria-expanded", "true");
+        const box = plus.getBoundingClientRect();
+        menu.hidden = false;
+        menu.style.top = `${box.bottom + scrollY + 4}px`;
+        menu.style.left = `${Math.max(8, Math.min(box.right + scrollX - menu.offsetWidth, innerWidth - menu.offsetWidth - 8))}px`;
+        menu.querySelector("button")?.focus();
+        return;
+      }
+      const choice = e.target.closest(".trk-menu [data-for]");
+      if (!choice) { if (!e.target.closest(".trk-menu")) close(); return; }
+      const id = opener.dataset.track, row = opener.closest(".cr");
+      close();
+      row.nextElementSibling?.classList.contains("ch-err") && row.nextElementSibling.remove();
+      const body = new URLSearchParams({app: choice.dataset.for, id});
+      let answer;
+      try {
+        const r = await fetch("{% url 'charts_track' %}", {method: "POST", body, headers: {"X-CSRFToken": csrf()}});
+        answer = await r.json();
+      } catch { answer = {error: "Could not reach the site; try again."}; }
+      if (answer.error) {
+        row.after(Object.assign(document.createElement("li"), {className: "ch-err", textContent: answer.error}));
+        return;
+      }
+      document.querySelectorAll(`.cr[data-app="${id}"] .trk`).forEach(btn => {
+        btn.replaceWith(Object.assign(document.createElement("span"), {className: "tag rival", textContent: "Following", title: `A competitor of ${answer.app}`}));
+      });
+    });
+    document.addEventListener("keydown", e => { if (e.key === "Escape" && !menu.hidden) { opener?.focus(); close(); } });
+  })();
+</script>
+{% endblock %}

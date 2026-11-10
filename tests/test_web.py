@@ -252,11 +252,11 @@ def test_review_queue_works_the_unanswered_worst_first(client, apps):
     order, page = titles("/reviews/")
     assert order == ["b", "c", "a"]  # unanswered only, lowest rating first, then newest
     assert b"3</span> reviews need a reply" in page.content
-    asc = f"appstoreconnect.apple.com/apps/{snake.apple_id}/distribution/activity/ios/"
-    assert f"{asc}ratingsResponses".encode() in page.content
+    asc = f"appstoreconnect.apple.com/apps/{snake.apple_id}/distribution/ratings/ios"
+    assert f"{asc}\"".encode() in page.content
     assert f"apps.apple.com/us/app/id{snake.apple_id}".encode() in page.content
-    mac = f"appstoreconnect.apple.com/apps/{sudoku.apple_id}/distribution/activity/macos/"
-    assert f"{mac}ratingsResponses".encode() in page.content  # a Mac review opens the Mac page
+    mac = f"appstoreconnect.apple.com/apps/{sudoku.apple_id}/distribution/ratings/macos"
+    assert f"{mac}\"".encode() in page.content  # a Mac review opens the Mac page
     assert titles("/reviews/replied/")[0] == ["e", "d"]  # newest first, pending counts
     assert b"Pending publication" in titles("/reviews/replied/")[1].content
     assert titles("/reviews/all/")[0] == ["e", "d", "c", "b", "a"]
