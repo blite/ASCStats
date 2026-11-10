@@ -20,7 +20,7 @@ import re
 import time
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date
 
 import httpx
 from django.db import transaction
@@ -39,7 +39,6 @@ KINDS = [k for k, _ in ChartCapture.Kind.choices]  # free, paid, grossing: the p
 OVERALL = 0
 DEFAULT = ("us", 6014)  # Games: where the page opens before anything is fetched
 COLUMN = 25  # rows a column shows before "Show all"
-WINDOWS = [1, 7, 30]  # days back the movement compares against
 MOVERS = 8  # apps per list in the Movers card
 WORDS = 30  # title words the Title words card lists
 PHRASES = 15
@@ -270,32 +269,29 @@ class Column:
         return sum(r.ads == "none" for r in self.rows)
 
 
-def _comparison(storefront: str, genre: int, kind: str, day: date, days: int):
-    """The newest capture at or before ``day - days`` and no older than another window."""
+def _comparison(storefront: str, genre: int, kind: str, day: date):
+    """The fetch before ``day``, however long before: the one its movement is measured from."""
     return (
         ChartCapture.objects.filter(
             storefront=storefront,
             genre=genre,
             kind=kind,
-            date__lte=day - timedelta(days=days),
-            date__gte=day - timedelta(days=2 * days),
+            date__lt=day,
         )
         .order_by("-date")
         .first()
     )
 
 
-def page(storefront: str, genre: int, day: date | None = None, days: int = 1) -> dict:
+def page(storefront: str, genre: int, day: date | None = None) -> dict:
     """Everything the Top charts page shows for one category on one day."""
     check(storefront, genre)
-    if days not in WINDOWS:
-        raise ChartError(f"Compare with 1, 7 or 30 days back, not {days}.")
     here = ChartCapture.objects.filter(storefront=storefront, genre=genre)
     captured = sorted(set(here.values_list("date", flat=True)), reverse=True)
     if day is None:
         day = captured[0] if captured else timezone.localdate()
     captures = {c.kind: c for c in here.filter(date=day)}
-    compared = {k: _comparison(storefront, genre, k, day, days) for k in KINDS}
+    compared = {k: _comparison(storefront, genre, k, day) for k in KINDS}
     wanted = {i for c in [*captures.values(), *filter(None, compared.values())] for i in c.ids}
     apps = ChartApp.objects.in_bulk(wanted, field_name="apple_id")
     yours = set(App.objects.filter(apple_id__in=wanted).values_list("apple_id", flat=True))
@@ -325,7 +321,7 @@ def page(storefront: str, genre: int, day: date | None = None, days: int = 1) ->
     i = captured.index(day) if day in captured else None
     return {
         "storefront": storefront, "genre": genre, "genre_label": genre_name(genre),
-        "store_name": territory_name(storefront), "day": day, "days": days,
+        "store_name": territory_name(storefront), "day": day,
         "today": timezone.localdate(), "captured": captured,
         "older": captured[i + 1] if i is not None and i + 1 < len(captured) else None,
         "newer": captured[i - 1] if i else None,
@@ -335,8 +331,6 @@ def page(storefront: str, genre: int, day: date | None = None, days: int = 1) ->
             ("Fell", movers["falls"], "down"), ("Dropped out", movers["dropped"], "dropped"),
         ],
         "words": words, "phrases": phrases, "chart_apps": len(names),
-        "windows": WINDOWS,
-        "fetched_here": {g: d for (sf, g), d in done.items() if sf == storefront},
         "fetches": [
             {"storefront": sf, "genre": g, "label": genre_name(g), "store": territory_name(sf),
              "day": d}

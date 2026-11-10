@@ -303,11 +303,11 @@ def charts_home(request):
 
 @ensure_csrf_cookie  # outside the cache: Fetch and Track read the token from the cookie
 @cached_page
-def charts(request, storefront, genre, day=None, days=1):
+def charts(request, storefront, genre, day=None):
     """The Top charts page: a category's free, paid and grossing charts side by side as
     fetched on one day, each app's movement since an earlier fetch, and what the names share."""
     try:
-        context = ch.page(storefront, genre, day, days)
+        context = ch.page(storefront, genre, day)
     except ch.ChartError as error:
         raise Http404(str(error)) from None
     return render(request, "aso/charts.html", {"page": "charts", "end": d.last_day()} | context)

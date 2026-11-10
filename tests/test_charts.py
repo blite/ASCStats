@@ -129,14 +129,14 @@ def seed(day, kind, ids, genre=PUZZLE):
 
 
 @pytest.mark.django_db
-def test_page_compares_with_the_window_before(apps):
-    seed(DAY - timedelta(days=8), "free", [10, 11, 12, 13])  # inside the 7-day window
+def test_page_compares_with_the_fetch_before(apps):
+    seed(DAY - timedelta(days=8), "free", [10, 11, 12, 13])
     seed(DAY - timedelta(days=1), "free", [11, 10, 12, 13])
     seed(DAY, "free", [12, 11, 14, apps[0].apple_id])
     rival = Competitor.objects.create(apple_id=11, name="App 11")
     rival.tracked_for.add(apps[1])
 
-    page = charts.page("us", PUZZLE, DAY, 1)
+    page = charts.page("us", PUZZLE, DAY)
     free = page["columns"][0]
     rows = {r.app.apple_id: r for r in free.rows}
     assert [(r.rank, r.change, r.new) for r in free.rows] == [
@@ -152,12 +152,10 @@ def test_page_compares_with_the_window_before(apps):
     assert page["older"] == DAY - timedelta(days=1)
     assert page["newer"] is None
 
-    week = charts.page("us", PUZZLE, DAY, 7)["columns"][0]
-    assert week.compare_day == DAY - timedelta(days=8)
-    assert charts.page("us", PUZZLE, DAY, 30)["columns"][0].compare_day is None
+    before = charts.page("us", PUZZLE, DAY - timedelta(days=1))["columns"][0]
+    assert before.compare_day == DAY - timedelta(days=8)  # the fetch before, however long ago
+    assert charts.page("us", PUZZLE, DAY - timedelta(days=8))["columns"][0].compare_day is None
     assert charts.page("us", PUZZLE)["day"] == DAY  # the newest capture
-    with pytest.raises(charts.ChartError):
-        charts.page("us", PUZZLE, DAY, 3)
 
 
 @pytest.mark.django_db
@@ -170,9 +168,9 @@ def test_charts_page_and_its_buttons(client, apps, monkeypatch):
     assert 'Puzzle games: <span class="num">1</span> of the top 2 free say no ads.' in page
     assert "App 600000021" in page
     assert 'data-track="600000021"' in page
-    assert client.get(f"/charts/us/{PUZZLE}/{DAY}/7d/").status_code == 200
+    assert client.get(f"/charts/us/{PUZZLE}/{DAY}/").status_code == 200
     assert client.get("/charts/zz/1/").status_code == 404
-    assert client.get(f"/charts/us/{PUZZLE}/3d/").status_code == 404
+    assert client.get(f"/charts/us/{PUZZLE}/7d/").status_code == 404  # no compare windows
 
     calls = []
     monkeypatch.setattr("ascstats.aso.charts.time.sleep", lambda _: None)

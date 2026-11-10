@@ -24,21 +24,17 @@
     </select>
     <label class="sr-only" for="ch-genre">Category</label>
     <select id="ch-genre" name="genre">
-      <optgroup label="Apps">{% for g, n in app_genres %}<option value="{{ g }}"{% if g == genre %} selected{% endif %}>{{ n }}{% with d=fetched_here|get:g %}{% if d %} · {{ d|date:"M j" }}{% endif %}{% endwith %}</option>{% endfor %}</optgroup>
-      <optgroup label="Games">{% for g, n in game_genres %}<option value="{{ g }}"{% if g == genre %} selected{% endif %}>{{ n }}{% with d=fetched_here|get:g %}{% if d %} · {{ d|date:"M j" }}{% endif %}{% endwith %}</option>{% endfor %}</optgroup>
+      <optgroup label="Apps">{% for g, n in app_genres %}<option value="{{ g }}"{% if g == genre %} selected{% endif %}>{{ n }}</option>{% endfor %}</optgroup>
+      <optgroup label="Games">{% for g, n in game_genres %}<option value="{{ g }}"{% if g == genre %} selected{% endif %}>{{ n }}</option>{% endfor %}</optgroup>
     </select>
     {% if captured %}
     <span class="day-pick">
-      {% if older %}<a class="btn ghost icon sm" href="{% chart_url storefront genre older days %}" title="Previous capture, {{ older|date:'M j' }}" aria-label="Previous capture">‹</a>{% else %}<span class="btn ghost icon sm" aria-hidden="true">‹</span>{% endif %}
+      {% if older %}<a class="btn ghost icon sm" href="{% chart_url storefront genre older %}" title="Previous capture, {{ older|date:'M j' }}" aria-label="Previous capture">‹</a>{% else %}<span class="btn ghost icon sm" aria-hidden="true">‹</span>{% endif %}
       <label class="sr-only" for="ch-day">Day</label>
       <select id="ch-day" name="day">{% for d in captured %}<option value="{{ d|date:'Y-m-d' }}"{% if d == day %} selected{% endif %}>{{ d|date:"M j, Y" }}</option>{% endfor %}</select>
-      {% if newer %}<a class="btn ghost icon sm" href="{% chart_url storefront genre newer days %}" title="Next capture, {{ newer|date:'M j' }}" aria-label="Next capture">›</a>{% else %}<span class="btn ghost icon sm" aria-hidden="true">›</span>{% endif %}
+      {% if newer %}<a class="btn ghost icon sm" href="{% chart_url storefront genre newer %}" title="Next capture, {{ newer|date:'M j' }}" aria-label="Next capture">›</a>{% else %}<span class="btn ghost icon sm" aria-hidden="true">›</span>{% endif %}
     </span>
-    <nav class="seg" aria-label="Compare with">
-      {% for w in windows %}<a href="{% chart_url storefront genre day w %}"{% if w == days %} aria-current="page"{% endif %} title="Movement since {{ w }} day{{ w|pluralize }} before">{% if w == 1 %}vs day before{% else %}vs {{ w }}d{% endif %}</a>{% endfor %}
-    </nav>
     {% endif %}
-    <label class="only-noads"><input type="checkbox" id="only-noads"> No-ads apps only</label>
     {% if not demo %}<span class="ch-actions">
       <button type="button" class="btn{% if any_capture %} outline{% endif %} sm" id="ch-fetch" data-url="{% url 'charts_fetch' storefront genre %}" title="Ask the App Store for this category's free, paid and grossing charts now"><span>{% if captured %}Refetch{% else %}Fetch charts{% endif %}</span></button>
     </span>{% endif %}
@@ -57,7 +53,6 @@
     {% if column.rest %}<details class="ch-more"><summary>Show {{ column.head|length|add:1 }}–{{ column.rows|length }}</summary>
       <ol class="chart" start="{{ column.head|length|add:1 }}">{% for r in column.rest %}{% include "aso/_chart_row.html" with kind=column.kind %}{% endfor %}</ol>
     </details>{% endif %}
-    <p class="ch-empty-filter muted" hidden>No app in the top {{ column.head|length }} says no ads.</p>
     {% endif %}
   </section>
   {% endfor %}
@@ -66,7 +61,7 @@
 <div class="two">
   <section class="card fade">
     <h2>Movers</h2>
-    <p class="sub">{% if columns.0.compare_day or columns.1.compare_day or columns.2.compare_day %}Across the three charts, since {% if days == 1 %}the capture before{% else %}{{ days }} days before{% endif %}.{% else %}Nothing to compare yet: movement shows once there is an earlier capture inside the window.{% endif %}</p>
+    <p class="sub">{% if columns.0.compare_day or columns.1.compare_day or columns.2.compare_day %}Across the three charts, since the fetch before ({{ columns.0.compare_day|default:columns.1.compare_day|default:columns.2.compare_day|date:"M j" }}).{% else %}Nothing to compare yet: movement shows once this category has been fetched on an earlier day.{% endif %}</p>
     <div class="movers">
       {% for title, items, sign in mover_lists %}
       <div><h3>{{ title }}</h3>
@@ -105,7 +100,6 @@
   .ch-controls .filters { gap: 8px 10px; }
   .day-pick { display: inline-flex; align-items: center; gap: 2px; }
   .day-pick span.btn { opacity: .35; }
-  .only-noads { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
   .ch-actions { display: inline-flex; gap: 8px; margin-left: auto; }
   .ch-note { margin: 10px 0 0; }
   .ch-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; margin: 14px 0; }
@@ -134,8 +128,6 @@
   .trk:hover, .trk:focus-visible, .trk[aria-expanded="true"] { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
   .trk .lucide { width: 13px; height: 13px; }
   .ch-more summary { margin-top: 8px; }
-  html.noads-only .cr:not([data-ads="none"]) { display: none; }
-  html.noads-only .ch-col:not(:has(.cr[data-ads="none"])) .ch-empty-filter { display: block; }
   .ch-err { font-size: 12px; color: var(--destructive); padding: 2px 0 4px 62px; }
   .movers { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 4px 18px; }
   .movers h3, .card h3 { font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 10px 0 6px; }
@@ -161,30 +153,17 @@
 <script>
   (() => {
     const csrf = () => document.cookie.match(/(?:^|; )csrftoken=([^;]+)/)?.[1] ?? "";
-    // The pickers: a storefront or category opens its newest capture; a day keeps the window
+    // The pickers: a storefront or category opens its newest fetch; a day opens that fetch
     const pick = document.getElementById("chart-pick");
     const go = (withDay) => {
       const f = new FormData(pick);
       let url = pick.dataset.base.replace("/xx/0/", `/${f.get("storefront")}/${f.get("genre")}/`);
       if (withDay && f.get("day")) url += `${f.get("day")}/`;
-      const days = {{ days }};
-      if (withDay && days !== 1) url += `${days}d/`;
       location.href = url;
     };
     pick.querySelector("[name=storefront]").addEventListener("change", () => go(false));
     pick.querySelector("[name=genre]").addEventListener("change", () => go(false));
     pick.querySelector("[name=day]")?.addEventListener("change", () => go(true));
-
-    // No-ads apps only: per browser
-    const only = document.getElementById("only-noads");
-    const apply = () => document.documentElement.classList.toggle("noads-only", only.checked);
-    try { only.checked = localStorage.getItem("chartsNoAds") === "1"; } catch (e) {}
-    apply();
-    only.addEventListener("change", () => {
-      apply();
-      if (only.checked) document.querySelectorAll(".ch-more").forEach(d => { d.open = true; });
-      try { localStorage.setItem("chartsNoAds", only.checked ? "1" : "0"); } catch (e) {}
-    });
 
     // Fetch charts / Refetch: the store answers in a few seconds, then show the new fetch
     document.getElementById("ch-fetch")?.addEventListener("click", async (e) => {
