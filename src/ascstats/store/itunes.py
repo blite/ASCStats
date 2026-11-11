@@ -8,6 +8,7 @@ import plistlib
 import re
 import time
 from collections import Counter
+from dataclasses import dataclass
 
 import httpx
 
@@ -187,10 +188,49 @@ def _subtitles(data, apple_id: str) -> tuple[Counter, bool]:
     return found, seen
 
 
-def subtitle(apple_id: int, storefront: str, http: httpx.Client) -> str | None:
-    """The subtitle under the app's name on its App Store page, "" when it has none, or None
-    when the page could not be read. Lookup leaves the subtitle out, so this reads the web
-    page: the data the page is built from, else its header."""
+def _accessibility(data) -> list[str] | None:
+    """The accessibility features the page's own Accessibility section lists, in the store's
+    order; [] when it says the developer has not indicated any; None when it has no such
+    section. The section is in the page's ``shelfMapping``: the other apps the page lists
+    carry none."""
+    stack = [data]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            shelves = node.get("shelfMapping")
+            if isinstance(shelves, dict):
+                break
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+    else:
+        return None
+    header, features = shelves.get("accessibilityHeader"), shelves.get("accessibilityFeatures")
+    found: list[str] = []
+    for item in (features or {}).get("items") or []:
+        for feature in (item or {}).get("features") or []:
+            title = (feature or {}).get("title")
+            if isinstance(title, str) and title.strip() and title.strip() not in found:
+                found.append(title.strip())
+    if found:
+        return found
+    return [] if isinstance(header, dict) or isinstance(features, dict) else None
+
+
+@dataclass
+class StorePage:
+    """What an App Store page shows that Lookup leaves out. Each is None when the page could
+    not tell: ``subtitle`` is "" for an app without one, ``accessibility`` [] for an app whose
+    developer has declared no accessibility features."""
+
+    subtitle: str | None
+    accessibility: list[str] | None
+
+
+def page(apple_id: int, storefront: str, http: httpx.Client) -> StorePage:
+    """Read the app's App Store web page: the subtitle under its name, and the accessibility
+    features its developer declares. Both come from the data the page is built from; the
+    subtitle falls back to the page's header."""
     url = PAGE_URL.format(storefront=storefront, apple_id=apple_id)
     response = _get(
         http, url, {}, f"{storefront} page {apple_id}",
@@ -198,17 +238,26 @@ def subtitle(apple_id: int, storefront: str, http: httpx.Client) -> str | None:
         follow=True,  # /app/id123 redirects to the page named after the app
     )  # fmt: skip
     text = response.text
+    found_subtitle: str | None = None
+    accessibility: list[str] | None = None
     if m := _SERVER_DATA.search(text):
         try:
             data = json.loads(m.group(1))
         except ValueError:
             data = None
         if data is not None:
+            accessibility = _accessibility(data)
             found, seen = _subtitles(data, str(apple_id))
             if found:
-                return found.most_common(1)[0][0]
-            if seen:  # the app is there, with no subtitle
-                return ""
-    if m := _HEADER_SUBTITLE.search(text):
-        return html.unescape(re.sub(r"<[^>]+>", "", m.group(1))).strip()
-    return None
+                found_subtitle = found.most_common(1)[0][0]
+            elif seen:  # the app is there, with no subtitle
+                found_subtitle = ""
+    if found_subtitle is None and (m := _HEADER_SUBTITLE.search(text)):
+        found_subtitle = html.unescape(re.sub(r"<[^>]+>", "", m.group(1))).strip()
+    return StorePage(found_subtitle, accessibility)
+
+
+def subtitle(apple_id: int, storefront: str, http: httpx.Client) -> str | None:
+    """The subtitle under the app's name on its App Store page, "" when it has none, or None
+    when the page could not be read (``page``)."""
+    return page(apple_id, storefront, http).subtitle

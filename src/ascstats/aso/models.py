@@ -24,6 +24,10 @@ class Competitor(models.Model):
     description = models.TextField(blank=True)
     screenshots = models.JSONField(default=list, blank=True, help_text="iPhone screenshot URLs")
     languages = models.JSONField(default=list, blank=True, help_text="ISO codes, sorted")
+    accessibility = models.JSONField(
+        null=True, blank=True,
+        help_text="features its store page declares, in order; [] none, null unread",
+    )  # fmt: skip
     listing_storefront = models.CharField(
         max_length=2, blank=True, help_text="the storefront the kept listing is from"
     )
@@ -102,7 +106,8 @@ class CompetitorRelease(models.Model):
 
 class ListingChange(models.Model):
     """One field of a competitor's listing that changed between two daily snapshots: its
-    name, subtitle, description, screenshots, price, category, seller or languages. The
+    name, subtitle, description, screenshots, price, category, seller, languages or the
+    accessibility features its store page declares. The
     first snapshot is the baseline, so a competitor's changes start the day after."""
 
     class Field(models.TextChoices):
@@ -114,13 +119,16 @@ class ListingChange(models.Model):
         GENRE = "primary_genre", "Category"
         SELLER = "seller", "Seller"
         LANGUAGES = "languages", "Languages"
+        ACCESSIBILITY = "accessibility", "Accessibility"
 
     competitor = models.ForeignKey(
         Competitor, on_delete=models.CASCADE, related_name="changes", db_index=False
     )
     date = models.DateField()
     field = models.CharField(max_length=20, choices=Field.choices)
-    before = models.JSONField(help_text="text, or a list for screenshots and languages")
+    before = models.JSONField(
+        help_text="text, or a list for screenshots, languages and accessibility"
+    )
     after = models.JSONField()
     storefront = models.CharField(max_length=2)
     version = models.CharField(max_length=50, blank=True, help_text="version on sale after")

@@ -288,8 +288,9 @@ def store_listing(competitor: Competitor, r: dict, day: date, storefront: str = 
 
 
 def _due_for_subtitle(day: date) -> list[Competitor]:
-    """Followed competitors whose subtitle is worth reading today: those that shipped a
-    version since it was read, then those never read, then the month-old; none twice a day."""
+    """Followed competitors whose store page is worth reading today: those that shipped a
+    version since it was read, then those never read, then those whose accessibility
+    features were never read, then the month-old; none twice a day."""
     followed = Competitor.objects.filter(tracked_for__is_active=True).distinct()
     stale = day - timedelta(days=SUBTITLE_EVERY)
     out = []
@@ -300,21 +301,45 @@ def _due_for_subtitle(day: date) -> list[Competitor]:
             out.append((1, c))
         elif c.version and c.version != c.subtitle_version:
             out.append((0, c))
-        elif c.subtitle_read_on <= stale:
+        elif c.accessibility is None:
             out.append((2, c))
+        elif c.subtitle_read_on <= stale:
+            out.append((3, c))
     return [c for _, c in sorted(out, key=lambda o: (o[0], o[1].subtitle_read_on or day))]
 
 
-def _keep_subtitle(competitor: Competitor, found: str, day: date, storefront: str) -> None:
-    if (
-        competitor.subtitle_read_on is not None
-        and found != competitor.subtitle
-        and storefront == competitor.listing_storefront
-    ):
-        _record(competitor, day, "subtitle", competitor.subtitle, found, storefront)
-    competitor.subtitle, competitor.subtitle_read_on = found, day
-    competitor.subtitle_version = competitor.version
-    competitor.save(update_fields=["subtitle", "subtitle_read_on", "subtitle_version"])
+def _keep_page(competitor: Competitor, found: store.StorePage, day: date, storefront: str) -> None:
+    """Keep what a read of the store page found: its subtitle and the accessibility features
+    it declares, each noted as a change when it moved since the last read. A part the page
+    did not tell (None) keeps what was kept; with no subtitle the page counts as unread."""
+    fields = []
+    same_store = storefront == competitor.listing_storefront
+    if found.accessibility is not None:
+        if (
+            competitor.accessibility is not None
+            and found.accessibility != competitor.accessibility
+            and same_store
+        ):
+            _record(competitor, day, "accessibility", competitor.accessibility,
+                    found.accessibility, storefront)  # fmt: skip
+        competitor.accessibility = found.accessibility
+        fields.append("accessibility")
+    if found.subtitle is not None:
+        if (
+            competitor.subtitle_read_on is not None
+            and found.subtitle != competitor.subtitle
+            and same_store
+        ):
+            _record(competitor, day, "subtitle", competitor.subtitle, found.subtitle, storefront)
+        competitor.subtitle, competitor.subtitle_read_on = found.subtitle, day
+        competitor.subtitle_version = competitor.version
+        fields += ["subtitle", "subtitle_read_on", "subtitle_version"]
+    if fields:
+        competitor.save(update_fields=fields)
+
+
+def _synthetic_page(listing: dict) -> store.StorePage:
+    return store.StorePage(listing["subtitle"], listing.get("accessibility"))
 
 
 def read_subtitles(
@@ -324,10 +349,10 @@ def read_subtitles(
     pause: float = store.PAUSE,
     limit: int = SUBTITLE_PAGES,
 ) -> int:
-    """Read competitors' subtitles from their store pages (a daily store step, after the
-    keyword searches): every one never read, then up to ``limit`` re-reads; returns the pages
-    read. Following a competitor reads it at once (``read_new``), so the never-read are only
-    those whose first read failed."""
+    """Read competitors' store pages for their subtitles and declared accessibility features
+    (a daily store step, after the keyword searches): every one never read, then up to
+    ``limit`` re-reads; returns the pages read. Following a competitor reads it at once
+    (``read_new``), so the never-read are only those whose first read failed."""
     day = day or timezone.localdate()
     source = source or settings.ASC_SOURCE
     due = _due_for_subtitle(day)
@@ -339,7 +364,7 @@ def read_subtitles(
                 rival = synthetic.rival_by_apple_id(c.apple_id)
             except KeyError:
                 continue
-            _keep_subtitle(c, synthetic.rival_listing(rival, day)["subtitle"], day, "us")
+            _keep_page(c, _synthetic_page(synthetic.rival_listing(rival, day)), day, "us")
         return len(due)
     read = failures = 0
     with store.client(transport) as client:
@@ -348,7 +373,7 @@ def read_subtitles(
                 time.sleep(pause)
             front = c.listing_storefront or "us"
             try:
-                found = store.subtitle(c.apple_id, front, client)
+                found = store.page(c.apple_id, front, client)
             except store.StoreError as error:
                 log.warning("subtitle: %s", error)
                 failures += 1
@@ -358,10 +383,11 @@ def read_subtitles(
                 continue
             failures = 0
             read += 1
-            if found is None:
+            if found.subtitle is None:
                 log.warning("subtitle: no subtitle found on %s's page", c.apple_id)
-                continue
-            _keep_subtitle(c, found, day, front)
+            if found.accessibility is None:
+                log.warning("accessibility: no Accessibility section on %s's page", c.apple_id)
+            _keep_page(c, found, day, front)
     log.info("subtitles: %d pages read of %d due", read, len(due))
     return read
 
@@ -386,7 +412,7 @@ def read_new(
         if competitor.listing_seen_on is None:
             store_listing(competitor, listing, day, front)
         if competitor.subtitle_read_on is None:
-            _keep_subtitle(competitor, listing["subtitle"], day, front)
+            _keep_page(competitor, _synthetic_page(listing), day, front)
         return "read"
     with store.client(transport) as client:
         try:
@@ -398,9 +424,7 @@ def read_new(
                 if pause:
                     time.sleep(pause)
             if competitor.subtitle_read_on is None:
-                subtitle = store.subtitle(competitor.apple_id, front, client)
-                if subtitle is not None:
-                    _keep_subtitle(competitor, subtitle, day, front)
+                _keep_page(competitor, store.page(competitor.apple_id, front, client), day, front)
         except store.StoreError as error:
             log.warning("reading %s: %s", competitor.apple_id, error)
             return "store error"
@@ -753,13 +777,13 @@ def _words(text: str) -> set[str]:
 
 def describe(change: ListingChange) -> dict:
     """One change, ready to show: a word diff for text, both sets for screenshots, the codes
-    added and removed for languages; and for the name and subtitle, the words that are new
-    or gone, since those are the ones a search reads."""
+    added and removed for languages and accessibility features; and for the name and
+    subtitle, the words that are new or gone, since those are the ones a search reads."""
     out = {"field": change.field, "label": change.get_field_display(), "change": change}
     if change.field == ListingChange.Field.SCREENSHOTS:
         return out | {"kind": "shots", "before": change.before[:6], "after": change.after[:6],
                       "count": (len(change.before), len(change.after))}  # fmt: skip
-    if change.field == ListingChange.Field.LANGUAGES:
+    if change.field in (ListingChange.Field.LANGUAGES, ListingChange.Field.ACCESSIBILITY):
         old, new = set(change.before), set(change.after)
         return out | {"kind": "list", "added": sorted(new - old), "removed": sorted(old - new)}
     out |= {"kind": "text", "runs": word_diff(change.before, change.after)}

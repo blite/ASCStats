@@ -20,6 +20,7 @@
     <div><dt>On the App Store since</dt><dd>{% if rival.released_on %}{{ rival.released_on|date:"M j, Y" }}{% else %}<span class="muted">–</span>{% endif %}</dd></div>
     <div><dt>Followed since</dt><dd>{{ rival.created_at|date:"M j, Y" }}</dd></div>
     <div class="langs"><dt>Languages{% if languages %} · {{ languages|length }}{% endif %}<button type="button" class="info" aria-label="About languages" data-tip="Languages&#10;The languages the app itself supports, as its US listing reports them. Highlighted: the languages your listings are in (English, German, Spanish, French, Italian and Portuguese).&#10;It does not say whether its store listing is translated: Ratings by store and the listing in each store tell that.">{% icon "info" %}</button></dt><dd>{% for l in languages %}<span class="lang{% if l.yours %} yours{% endif %}" title="{{ l.code }}">{{ l.name }}</span>{% empty %}<span class="muted">–</span>{% endfor %}</dd></div>
+    <div class="langs"><dt>Accessibility{% if rival.accessibility %} · {{ rival.accessibility|length }}{% endif %}<button type="button" class="info" aria-label="About accessibility" data-tip="Accessibility&#10;The accessibility features the developer says the app supports, as its App Store page lists them (VoiceOver, Larger Text, Sufficient Contrast and the rest). Apple shows what the developer declares; it does not test the app.&#10;Read with the subtitle: when a version ships, and at least once a month.">{% icon "info" %}</button></dt><dd>{% if rival.accessibility %}{% for f in rival.accessibility %}<span class="lang">{{ f }}</span>{% endfor %}{% elif rival.accessibility is not None %}<span class="muted">None declared</span>{% else %}<span class="muted">–</span>{% endif %}</dd></div>
   </dl>
 </section>
 
@@ -113,7 +114,7 @@
 <section class="card fade">
   <div class="card-head">
     <div>
-      <h2>History<button type="button" class="info" aria-label="About the history" data-tip="History&#10;The versions {{ rival.name }} shipped, dated by the release date its listing gives, with their notes; and each day its listing changed: name, subtitle, description, screenshots, price, category, seller and languages.&#10;The listing only carries the current version, and changes count from the day after it was first seen, so the history starts when you began following it.">{% icon "info" %}</button></h2>
+      <h2>History<button type="button" class="info" aria-label="About the history" data-tip="History&#10;The versions {{ rival.name }} shipped, dated by the release date its listing gives, with their notes; and each day its listing changed: name, subtitle, description, screenshots, price, category, seller, languages and declared accessibility features.&#10;The listing only carries the current version, and changes count from the day after it was first seen, so the history starts when you began following it.">{% icon "info" %}</button></h2>
       <p class="sub">Everything recorded since {{ since|date:"M j, Y" }}, newest first: {{ releases }} version{{ releases|pluralize }} and {{ changed_days }} day{{ changed_days|pluralize }} of listing changes.</p>
     </div>
   </div>

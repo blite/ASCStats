@@ -91,6 +91,8 @@ RIVALS = [
         edits=(
             (date(2026, 5, 4), {"subtitle": "Star map & satellite tracker",
                                 "languages": ["DE", "EN", "FR"], "shots": 1}),
+            (date(2026, 9, 14), {"accessibility": ["VoiceOver", "Larger Text", "Dark Interface",
+                                                   "Reduced Motion"]}),
         ),
     ),
     SyntheticRival(
@@ -158,9 +160,10 @@ def _screenshot(apple_id: int, set_no: int, n: int) -> str:
 
 
 def rival_text(rival: SyntheticRival, day: date) -> dict:
-    """The listing's text on ``day``: subtitle, description, screenshots, languages, price."""
+    """The listing's text on ``day``: subtitle, description, screenshots, languages, price, and
+    the accessibility features its store page declares."""
     out = {"subtitle": rival.subtitle, "about": rival.about, "shots": 0, "languages": ["EN"],
-           "price": rival.price}  # fmt: skip
+           "price": rival.price, "accessibility": ["Larger Text", "Dark Interface"]}  # fmt: skip
     for when, edit in rival.edits:
         if when <= day:
             out |= edit | {"shots": out["shots"] + edit.get("shots", 0)}
@@ -168,8 +171,9 @@ def rival_text(rival: SyntheticRival, day: date) -> dict:
 
 
 def rival_listing(rival: SyntheticRival, day: date) -> dict:
-    """An iTunes Lookup result for a competitor on ``day``, with its subtitle (which Lookup
-    leaves out: ``store.subtitle`` reads it from the web page)."""
+    """An iTunes Lookup result for a competitor on ``day``, with its subtitle and declared
+    accessibility features (which Lookup leaves out: ``store.page`` reads them from the web
+    page)."""
     version, released, _, notes = rival_release_on(rival, day)
     text = rival_text(rival, day)
     return {
@@ -186,6 +190,7 @@ def rival_listing(rival: SyntheticRival, day: date) -> dict:
         "screenshotUrls": [_screenshot(rival.apple_id, text["shots"], n) for n in range(4)],
         "languageCodesISO2A": text["languages"],
         "subtitle": text["subtitle"],
+        "accessibility": text["accessibility"],
     }
 
 
