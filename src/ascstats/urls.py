@@ -3,6 +3,7 @@ from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
 from ascstats.api import api
+from ascstats.mcp import server as mcp
 from ascstats.stats import converters, views  # noqa: F401  (registers <appid:…>)
 from ascstats.stats.charts import ALL
 
@@ -43,4 +44,5 @@ urlpatterns = [
     path("", include("ascstats.aso.urls")),  # each app's Competitors and Keywords tabs
     path("admin/", admin.site.urls),
     path("api/", api.urls),
+    path("mcp/", mcp.endpoint, name="mcp"),  # agents, with a bearer token (MCP_TOKEN)
 ]

@@ -29,6 +29,7 @@ spec:
             - configMapRef: {name: ascstats-config}
             - secretRef: {name: asc-settings, optional: true}  # overrides the ConfigMap
             - secretRef: {name: ascstats-app}
+            - secretRef: {name: ascstats-mcp, optional: true}  # MCP_TOKEN: turns on /mcp/
       containers:
         - name: web
           image: ascstats

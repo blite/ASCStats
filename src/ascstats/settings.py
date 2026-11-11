@@ -117,6 +117,8 @@ S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL") or None  # MinIO; unset for 
 # Report source: "asc" talks to App Store Connect, "synthetic" generates fake but realistic files.
 ASC_SOURCE = os.environ.get("ASC_SOURCE", "synthetic")
 ASC_VENDOR_NUMBER = os.environ.get("ASC_VENDOR_NUMBER", "")
+# The MCP server at /mcp/ (ascstats.mcp): agents send it as a bearer token. Unset: it is off.
+MCP_TOKEN = os.environ.get("MCP_TOKEN", "")
 
 # --- Background jobs (stats/jobs.py) -----------------------------------------------------
 
