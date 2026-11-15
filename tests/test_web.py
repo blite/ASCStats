@@ -439,3 +439,24 @@ def test_calendar_and_finished_weeks_open_their_day(client, seeded):
         link = f'href="/day/{w.end}/7d/"'
         assert (link in page) == (not w.partial)
     assert latest - timedelta(days=1) >= first
+
+
+def test_overview_charts_follow_the_period_and_leave_hidden_apps_out(client, seeded):
+    from ascstats.stats.models import App
+
+    home = client.get("/").content.decode()
+    assert "Every app, one chart" in home
+    one = home.split("Every app, one chart")[1].split("Every release, every app")[0]
+    assert 'href="/app/1000000003/"' in one  # every listed app has a line
+    App.objects.filter(apple_id=1000000003).update(is_hidden=True)
+    home = client.get("/").content.decode()
+    charts = home.split("Every app, one chart")[1].split("Ratings and reviews")[0]
+    assert 'href="/app/1000000003/"' not in charts  # neither chart draws a hidden app
+    assert "Hidden apps are left out." in charts
+    assert "last 7 days" in client.get("/7d/").content.decode().split("Every app, one chart")[1]
+
+
+def test_stats_tab_has_a_keywords_card(client, seeded):
+    stats = client.get("/app/1000000001/").content.decode()
+    card = stats.split("<h2>Keywords</h2>")[1].split("</section>")[0]
+    assert 'href="/app/1000000001/keywords/"' in card  # it links to the Keywords tab

@@ -204,6 +204,18 @@ def app_keywords_delete(request, apple_id):
     return redirect("app_keywords", apple_id)
 
 
+@require_POST
+def app_keywords_refresh(request, apple_id):
+    """Search every keyword an idea tracks again (the Refresh button on its Keywords tab).
+    Answers with how many will be searched and about how long it takes, for the page to wait
+    that long and reload."""
+    app = _editable(apple_id)
+    count = app.keywords.count()
+    if count:
+        jobs.refresh_keywords.enqueue(app.pk)
+    return JsonResponse({"count": count, "seconds": round(count * store.PAUSE) + 3})
+
+
 def _suggest(request, app, storefront, found: dict | None, deep: bool = False):
     context = {"app": app, "front": storefront, "deep": deep} | (found or {})
     return render(request, "aso/_suggest.html", context | {"looked": found is not None})
@@ -347,6 +359,18 @@ def dashboard_tiles(apps: list[App]) -> tuple[str, kw.Summary] | None:
     """The Overview's keyword tiles, across every app; none until some app tracks a keyword."""
     found = kw.summary(apps)
     return ("aso/_keyword_tiles.html", found) if found.tracked else None
+
+
+APP_CARD_ROWS = 8  # keywords the Stats tab's card lists, best ranked first
+
+
+def app_card(app: App) -> tuple[str, dict]:
+    """The Keywords card on an app's Stats tab: its keyword tiles and best-ranked keywords
+    in every storefront, linking to its Keywords tab."""
+    found = kw.board(app)
+    context = {"summary": kw.summary([app]), "rows": found["rows"][:APP_CARD_ROWS]}
+    context |= {"more": max(len(found["rows"]) - APP_CARD_ROWS, 0), "limit": found["limit"]}
+    return "aso/_app_keywords_card.html", context | {"date": found["date"]}
 
 
 def export_paths(app: App) -> list[str]:

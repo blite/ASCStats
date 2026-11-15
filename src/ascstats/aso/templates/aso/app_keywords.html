@@ -9,6 +9,7 @@
       <p class="sub">Top {{ limit }} in App Store search{% if date %} · {{ date|date:"M j, Y" }}{% endif %}</p>
     </div>
     <div class="filters">
+      {% if not demo and app.is_idea and rows %}<button type="button" class="btn outline sm" data-refresh="{% url 'app_keywords_refresh' app.apple_id %}" title="Search all {{ total }} keyword{{ total|pluralize }} again now: an idea's keywords are searched only when added or refreshed">{% icon "refresh" %}<span>Keywords</span></button>{% endif %}
       {% if not demo %}<a class="btn outline sm" href="{% url 'app_keywords_manage' app.apple_id %}">{% icon "keywords" %}Manage keywords</a>{% endif %}
     </div>
   </div>
@@ -83,6 +84,8 @@
 {% if front and rk.rivals %}{% include "aso/_rival_keywords.html" %}{% endif %}
 {% if rows %}{% include "aso/_app_entry_assets.html" %}{% endif %}
 <style>
+  [data-refresh].busy svg { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   /* a pill per storefront, the one shown filled */
   .fronts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0 14px; }
   .fronts a { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 14px; border: 1px solid var(--border);
@@ -229,6 +232,30 @@
           picks.forEach((p, i) => p.checked = before[i]); picks[0].dispatchEvent(new Event("change"));
         } }, {once: true});
         form.requestSubmit();
+      }
+    });
+  })();
+
+  // An idea's Refresh button: search its keywords again, then reload once the searches have had time.
+  (() => {
+    const button = document.querySelector("[data-refresh]");
+    if (!button) return;
+    const label = button.querySelector("span");
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      button.classList.add("busy");
+      label.textContent = "Searching…";
+      try {
+        const r = await fetch(button.dataset.refresh, {method: "POST", headers: {"X-CSRFToken": csrf()}});
+        if (!r.ok) throw new Error(r.status);
+        const {count, seconds} = await r.json();
+        label.textContent = `Searching ${count} keyword${count === 1 ? "" : "s"}…`;
+        setTimeout(() => location.reload(), Math.min(seconds, 180) * 1000);
+      } catch (e) {
+        button.disabled = false;
+        button.classList.remove("busy");
+        label.textContent = "Keywords";
+        alert("Couldn't start the search. Try again in a moment.");
       }
     });
   })();

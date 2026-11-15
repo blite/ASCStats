@@ -1,0 +1,30 @@
+{% load humanize stats_extras %}{% with s=card.summary %}
+<section class="card fade">
+  <div class="card-head">
+    <div>
+      <h2>Keywords</h2>
+      <p class="sub">{% if s.tracked %}Where {{ app.name }} ranks in App Store search, best first{% if card.date %} · {{ card.date|date:"M j, Y" }}{% endif %}. <strong>{{ s.top10|intcomma }}</strong> of {{ s.tracked|intcomma }} in the top 10{% if s.compared %}, <span class="kwc-mv up">↑{{ s.up }}</span> <span class="kwc-mv down">↓{{ s.down }}</span> in 7 days{% endif %}.{% else %}{{ app.name }} doesn't track any keywords yet.{% endif %}</p>
+    </div>
+    <a class="btn outline sm" href="{% url 'app_keywords' app.apple_id %}">{% icon "keywords" %}{% if s.tracked %}All keywords{% else %}Add keywords{% endif %} →</a>
+  </div>
+  {% if card.rows %}
+  <div class="scroll">
+    <table class="kwc">
+      <tr><th>Keyword</th><th>Store</th><th class="num">Rank</th><th class="num">7 days</th><th>Last 30 days</th></tr>
+      {% for r in card.rows %}<tr>
+        <td><a href="{% url 'app_keywords_front' app.apple_id r.keyword.storefront %}">{{ r.keyword.term }}</a></td>
+        <td class="muted">{{ r.keyword.storefront|upper }}</td>
+        <td class="num">{% if r.rank %}<strong>#{{ r.rank }}</strong>{% elif r.date %}<span class="muted">{{ card.limit }}+</span>{% else %}<span class="muted">next search</span>{% endif %}</td>
+        <td class="num">{% if r.change %}<span class="chip {% if r.change > 0 %}up{% else %}down{% endif %}">{% if r.change > 0 %}▲ {{ r.change }}{% else %}▼ {{ r.change|stringformat:"d"|cut:"-" }}{% endif %}</span>{% elif r.change == 0 %}<span class="muted">–</span>{% endif %}</td>
+        <td>{% if r.spark %}<svg viewBox="0 0 100 24" width="100" height="24" aria-label="Rank over the last 30 days{% if r.best %}, best #{{ r.best }}{% endif %}">{% for l in r.spark %}<polyline points="{{ l }}" fill="none" stroke="var(--chart-1)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>{% endfor %}</svg>{% endif %}</td>
+      </tr>{% endfor %}
+    </table>
+  </div>
+  {% if card.more %}<p class="sub" style="margin:8px 0 0"><a href="{% url 'app_keywords' app.apple_id %}">{{ card.more }} more keyword{{ card.more|pluralize }} on the Keywords tab →</a></p>{% endif %}
+  {% endif %}
+</section>
+<style>
+  .kwc td { vertical-align: middle; } .kwc svg { display: block; }
+  .kwc-mv.up { color: var(--up); } .kwc-mv.down { color: var(--down); }
+</style>
+{% endwith %}

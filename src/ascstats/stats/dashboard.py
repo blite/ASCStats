@@ -185,9 +185,61 @@ def weekly(end: date, weeks: int = WEEK_ROWS) -> dict:
     }
 
 
-# --- release scoreboard (one lane per app) -------------------------------------------------
+# --- the charts over the period: release lanes, and every app on one chart ----------------
 
 LANE_X0, LANE_X1, LANE_H, LANE_TOP = 200, 1020, 50, 28
+MIN_CHART_DAYS = 7  # a one-day period is drawn with the week to it: one point is no line
+SMOOTH_FROM = 32  # spans this long or longer are drawn as a 7-day average, shorter ones raw
+WARM_UP = 6  # days before the span the 7-day average reads, so its first days are whole
+
+
+def chart_start(end: date, period: Period) -> date:
+    """The first day the Overview's charts draw for ``period``."""
+    return min(period.start, end - timedelta(days=MIN_CHART_DAYS - 1))
+
+
+def _per_app_daily(apps: list[App], start: date, end: date) -> dict[int, dict[date, int]]:
+    """Downloads per app per day (all platforms), in one query."""
+    out: dict[int, dict[date, int]] = defaultdict(dict)
+    rows = (
+        UtcDay.objects.filter(ACTIVE_ROWS, app__in=apps, date__range=(start, end))
+        .values_list("app", "date")
+        .annotate(Sum("downloads"))
+    )
+    for app_id, day, n in rows:
+        out[app_id][day] = n or 0
+    return out
+
+
+def _drawn(daily: dict[date, int], span: list[date]) -> list[float]:
+    """The values a chart draws over ``span``: raw for a short span, else a 7-day average
+    that reads the days before the span, so it does not start low (none before the app's
+    first day with data, so it does not start low on all time either)."""
+    if len(span) < SMOOTH_FROM:
+        return [float(daily.get(d, 0)) for d in span]
+    first = min(daily, default=span[0])  # before an app's first day there is nothing to average
+    lead = max(span[0] - timedelta(days=WARM_UP), min(first, span[0]))
+    warm = (span[0] - lead).days
+    return smooth([daily.get(d, 0) for d in _days(lead, span[-1])])[warm:]
+
+
+def _xticks(start: date, end: date, x) -> list[dict]:
+    """Day labels for a short span, Mondays for a month, months for a year, quarters beyond."""
+    n = (end - start).days + 1
+    if n <= 10:
+        return [{"x": x(d), "label": f"{d:%b} {d.day}"} for d in _days(start, end)]
+    if n <= 31:
+        return [
+            {"x": x(d), "label": f"{d:%b} {d.day}"} for d in _days(start, end) if d.weekday() == 0
+        ]
+    months = 1 if n <= 400 else 3
+    ticks, month = [], date(start.year, start.month, 1)
+    while month <= end:
+        if month >= start and (month.month - 1) % months == 0:
+            label = f"{month:%b}" if month.month != 1 else f"{month:%b %Y}"
+            ticks.append({"x": x(month), "label": label})
+        month = date(month.year + month.month // 12, month.month % 12 + 1, 1)
+    return ticks
 
 
 @dataclass
@@ -207,39 +259,38 @@ class Scoreboard:
     height: int
     releases: list[dict]  # flat list for the table view, newest first
     counts: dict[str, int]
+    smoothed: bool = True
 
 
-def scoreboard(end: date, days: int = 365) -> Scoreboard:
-    start = end - timedelta(days=days - 1)
+def scoreboard(end: date, start: date | None = None, apps: list[App] | None = None) -> Scoreboard:
+    """One lane per app with downloads from ``start`` (a year before ``end`` by default) to
+    ``end``, busiest first, and a dot on each iOS release in it. ``apps``: the active apps
+    by default."""
+    start = start or end - timedelta(days=364)
     span = _days(start, end)
     step = (LANE_X1 - LANE_X0) / max(len(span) - 1, 1)
 
     def x(day: date) -> float:
         return round(LANE_X0 + (day - start).days * step, 1)
 
-    totals = dict(
-        UtcDay.objects.filter(ACTIVE_ROWS, date__range=(start, end))
-        .values_list("app")
-        .annotate(Sum("downloads"))
-    )
-    apps = sorted(
-        (a for a in App.objects.active() if totals.get(a.pk, 0) > 0),
-        key=lambda a: -totals[a.pk],
-    )
+    pool = list(App.objects.active()) if apps is None else apps
+    lead = start - timedelta(days=WARM_UP)
+    per_app = _per_app_daily(pool, lead, end)
+    totals = {a.pk: sum(v for d, v in per_app[a.pk].items() if d >= start) for a in pool}
+    apps = sorted((a for a in pool if totals[a.pk] > 0), key=lambda a: -totals[a.pk])
     lanes, releases = [], []
     counts = {"up": 0, "down": 0, "neutral": 0, "unknown": 0}
     for n, app in enumerate(apps):
         top = LANE_TOP + n * LANE_H
         base, height = top + LANE_H - 10, LANE_H - 18
-        daily = _daily("downloads", start, end, app=app)
-        series = smooth([daily.get(d, 0) for d in span])
+        series = _drawn(per_app[app.pk], span)
         peak = max(series) or 1
-        pts = [(LANE_X0 + i * step, base - height * v / peak) for i, v in enumerate(series)]
+        pts = [(LANE_X0 + i * step, base - height * max(v, 0) / peak) for i, v in enumerate(series)]
         line = " ".join(f"{px:.1f},{py:.1f}" for px, py in pts)
         area = f"M{LANE_X0},{base} L" + line.replace(" ", " L") + f" L{LANE_X1},{base} Z"
         lane = Lane(app, top, area, line, totals[app.pk])
         for impact in version_impact(app, platform=IOS, since=start):
-            if not impact.before_days:
+            if not impact.before_days or impact.released_on > end:
                 continue
             kind, verdict = _effect(impact)
             counts[kind] += 1
@@ -260,15 +311,80 @@ def scoreboard(end: date, days: int = 365) -> Scoreboard:
                 }
             )
         lanes.append(lane)
-    ticks = []
-    month = date(start.year, start.month, 1)
-    while month <= end:
-        if month >= start:
-            label = f"{month:%b}" if month.month != 1 else f"{month:%b %Y}"
-            ticks.append({"x": x(month), "label": label})
-        month = date(month.year + month.month // 12, month.month % 12 + 1, 1)
     releases.sort(key=lambda r: r["impact"].released_on, reverse=True)
-    return Scoreboard(lanes, ticks, LANE_TOP + len(lanes) * LANE_H + 24, releases, counts)
+    height = LANE_TOP + len(lanes) * LANE_H + 24
+    return Scoreboard(
+        lanes, _xticks(start, end, x), height, releases, counts, len(span) >= SMOOTH_FROM
+    )
+
+
+TW, TH, T_L, T_R, T_T, T_B = 1040, 320, 52, 16, 14, 30
+COLORS = [f"var(--chart-{i})" for i in range(1, 6)]  # the busiest apps; the rest share --other
+
+
+def together(end: date, start: date, apps: list[App]) -> dict:
+    """Every app's daily downloads on one chart with one axis, busiest app first, so the apps
+    read against each other rather than each against its own peak."""
+    span = _days(start, end)
+    per_app = _per_app_daily(apps, start - timedelta(days=WARM_UP), end)
+    totals = {a.pk: sum(v for d, v in per_app[a.pk].items() if d >= start) for a in apps}
+    shown = sorted((a for a in apps if totals[a.pk] > 0), key=lambda a: -totals[a.pk])
+    drawn = {a.pk: _drawn(per_app[a.pk], span) for a in shown}
+    peak = max([v for s in drawn.values() for v in s] + [1])
+    top, tick_values = nice_axis(peak)
+    plot_w, plot_h = TW - T_L - T_R, TH - T_T - T_B
+    base = T_T + plot_h
+    step = plot_w / max(len(span) - 1, 1)
+
+    def x(day: date) -> float:
+        return round(T_L + (day - start).days * step, 1)
+
+    def y(v: float) -> float:
+        return round(base - plot_h * max(v, 0) / top, 1)
+
+    series = []
+    for n, app in enumerate(shown):
+        color = COLORS[n] if n < len(COLORS) else "var(--other)"
+        points = " ".join(f"{x(d)},{y(v)}" for d, v in zip(span, drawn[app.pk], strict=True))
+        series.append(
+            {"app": app, "color": color, "points": points, "total": totals[app.pk], "rank": n}
+        )
+    series.reverse()  # the busiest is drawn last, on top
+    smoothed = len(span) >= SMOOTH_FROM
+    hits = []
+    for i, day in enumerate(span):
+        values = sorted(((drawn[a.pk][i], a.name) for a in shown), reverse=True)
+        lines = [
+            f"{name}: {v:,.0f}" if not smoothed else f"{name}: {v:,.1f}" for v, name in values[:8]
+        ]
+        if len(values) > 8:
+            lines.append(f"{len(values) - 8} more: {sum(v for v, _ in values[8:]):,.0f}")
+        hits.append(
+            {
+                "x": round(x(day) - step / 2, 1),
+                "w": round(step, 2),
+                "tip": _fmt_day(day)
+                + (" · 7-day average" if smoothed else "")
+                + "\n"
+                + "\n".join(lines),
+            }
+        )
+    return {
+        "series": series,
+        "legend": series[::-1],
+        "hits": hits,
+        "grid": [{"y": y(v), "label": f"{v:,.0f}"} for v in tick_values],
+        "xticks": _xticks(start, end, x),
+        "width": TW,
+        "height": TH,
+        "pad_l": T_L,
+        "plot_r": TW - T_R,
+        "pad_t": T_T,
+        "base": base,
+        "plot_h": plot_h,
+        "smoothed": smoothed,
+        "start": start,
+    }
 
 
 # --- pipeline health calendar --------------------------------------------------------------

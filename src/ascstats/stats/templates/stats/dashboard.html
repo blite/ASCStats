@@ -36,11 +36,11 @@
     {% endfor %}
     <div class="card tile fade" style="animation-delay: 300ms">
       <div class="label">iOS releases this year</div>
-      <div class="value">{{ board.releases|length }}</div>
+      <div class="value">{{ year.releases|length }}</div>
       <div class="split">
-        <span class="key"><span class="dot up"></span>{{ board.counts.up }} lifted</span>
-        <span class="key"><span class="dot down"></span>{{ board.counts.down }} hurt</span>
-        <span class="key"><span class="dot neutral"></span>{{ board.counts.neutral }} noise</span>
+        <span class="key"><span class="dot up"></span>{{ year.counts.up }} lifted</span>
+        <span class="key"><span class="dot down"></span>{{ year.counts.down }} hurt</span>
+        <span class="key"><span class="dot neutral"></span>{{ year.counts.neutral }} noise</span>
       </div>
       <div class="note">downloads vs each app's own pre-release trend</div>
     </div>
@@ -81,11 +81,36 @@
   </section>
   {% endwith %}
 
+  {% with tg=together %}
+  <section class="card fade">
+    <div class="card-head">
+      <div>
+        <h2>Every app, one chart</h2>
+        <p class="sub">Daily downloads for each app, {% if period.days < chart_days %}the {{ chart_days }} days to {{ end|date:"M j" }}{% else %}{{ period.label }}{% endif %}{% if tg.smoothed %} (7-day average){% endif %}, on one scale so the apps read against each other. Hover for a day's numbers; click a line or a name for the app's page.{% if hidden_count %} Hidden apps are left out.{% endif %}</p>
+      </div>
+    </div>
+    {% if tg.series %}
+    <div class="scroll">
+      <svg viewBox="0 0 {{ tg.width }} {{ tg.height }}" style="min-width: 680px" role="img" aria-label="Daily downloads per app, {% if period.days < chart_days %}the {{ chart_days }} days to {{ end|date:"M j" }}{% else %}{{ period.label }}{% endif %}">
+        {% for g in tg.grid %}<line class="{% if forloop.first %}axis{% else %}hair{% endif %}" x1="{{ tg.pad_l }}" y1="{{ g.y }}" x2="{{ tg.plot_r }}" y2="{{ g.y }}"/>
+        <text class="tick" x="{{ tg.pad_l|add:'-8' }}" y="{{ g.y }}" dy="4" text-anchor="end">{{ g.label }}</text>{% endfor %}
+        {% for t in tg.xticks %}<text class="tick" x="{{ t.x }}" y="{{ tg.height|add:'-8' }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
+        {% for h in tg.hits %}<rect class="tg-hit" x="{{ h.x }}" y="{{ tg.pad_t }}" width="{{ h.w }}" height="{{ tg.plot_h }}" data-tip="{{ h.tip }}"/>{% endfor %}
+        {% for s in tg.series %}<a class="tg-line" href="{% url 'app' s.app.apple_id %}" aria-label="{{ s.app.name }}: open the app page"><polyline class="reveal" points="{{ s.points }}" style="stroke: {{ s.color }}"{% if s.rank >= 5 %} stroke-width="1.2"{% endif %}/></a>{% endfor %}
+      </svg>
+    </div>
+    <div class="split tg-legend" aria-label="Legend">
+      {% for s in tg.legend %}<a class="key" href="{% url 'app' s.app.apple_id %}"><span class="sw" style="background: {{ s.color }}"></span>{{ s.app.name|truncatechars:26 }} <span class="muted">{{ s.total|intcomma }}</span></a>{% endfor %}
+    </div>
+    {% else %}<p class="muted">No downloads in this period.</p>{% endif %}
+  </section>
+  {% endwith %}
+
   <section class="card fade">
     <div class="card-head">
       <div>
         <h2>Every release, every app</h2>
-        <p class="sub">Each lane is one app's daily downloads over the past year (7-day average, scaled to its own peak). Each dot is an iOS release, colored by whether downloads beat the trend the app was already on. Click a lane for the app's page.</p>
+        <p class="sub">Each lane is one app's daily downloads, {% if period.days < chart_days %}the {{ chart_days }} days to {{ end|date:"M j" }}{% else %}{{ period.label }}{% endif %}{% if board.smoothed %} (7-day average){% endif %}, scaled to its own peak. Each dot is an iOS release, colored by whether downloads beat the trend the app was already on. Click a lane for the app's page.{% if hidden_count %} Hidden apps are left out.{% endif %}</p>
       </div>
       <div class="split" aria-label="Legend">
         <span class="key"><span class="dot up"></span>Lifted downloads</span>
@@ -95,7 +120,7 @@
       </div>
     </div>
     <div class="scroll">
-      <svg viewBox="0 0 1040 {{ board.height }}" style="min-width: 760px" role="img" aria-label="Daily downloads per app over the past year with release markers">
+      <svg viewBox="0 0 1040 {{ board.height }}" style="min-width: 760px" role="img" aria-label="Daily downloads per app with release markers, {% if period.days < chart_days %}the {{ chart_days }} days to {{ end|date:"M j" }}{% else %}{{ period.label }}{% endif %}">
         {% for t in board.ticks %}<line class="hair" x1="{{ t.x }}" y1="18" x2="{{ t.x }}" y2="{{ board.height|add:'-20' }}"/>
         <text class="tick" x="{{ t.x }}" y="{{ board.height|add:'-4' }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
         {% for lane in board.lanes %}
@@ -114,13 +139,19 @@
       </svg>
     </div>
     <details>
-      <summary>Table view: all {{ board.releases|length }} releases</summary>
+      <summary>Table view: {% if board.releases %}all {{ board.releases|length }} release{{ board.releases|length|pluralize }}{% else %}no releases in this period{% endif %}</summary>
       <table>
         <tr><th>App</th><th>Version</th><th>Released</th><th>Effect</th></tr>
         {% for r in board.releases %}<tr><td><a href="{% url 'app' r.apple_id %}">{{ r.app }}</a></td><td>{{ r.impact.version }}</td><td>{{ r.impact.released_on|date:"M j, Y" }}</td><td>{{ r.verdict }}</td></tr>{% endfor %}
       </table>
     </details>
   </section>
+  <style>
+    .tg-hit { fill: transparent; } .tg-hit:hover { fill: var(--grid); opacity: .5; }
+    .tg-line polyline { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .tg-line:hover polyline, .tg-line:focus-visible polyline { stroke-width: 3.5; }
+    .tg-legend a { text-decoration: none; } .tg-legend a:hover { text-decoration: underline; }
+  </style>
 
   {% with act=activity %}
   <section class="card fade">

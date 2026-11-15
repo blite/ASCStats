@@ -48,7 +48,10 @@ def dashboard(request, days=DEFAULT_PERIOD, day=None):
     end = day or latest
     period = _period(end, days, dated=day is not None)
     tiles = d.tiles(end, period)
-    board = d.scoreboard(end)
+    year = d.scoreboard(end)  # the releases tile and the hero's best release: the year to end
+    listed = list(App.objects.listed())  # the charts follow the period and leave hidden apps out
+    since = d.chart_start(end, period)
+    board = d.scoreboard(end, since, listed)
     apps = list(App.objects.active())
     step = timedelta(days=1)
 
@@ -67,13 +70,17 @@ def dashboard(request, days=DEFAULT_PERIOD, day=None):
         "period": period,
         "tiles": tiles,
         "board": board,
+        "year": year,
+        "together": d.together(end, since, listed),
+        "chart_days": (end - since).days + 1,
+        "hidden_count": App.objects.active().filter(is_hidden=True).count(),
         "weekly": d.weekly(end),
         "calendar": d.pipeline_calendar(latest, first=first, selected=day),
         "activity": rt.recent_activity(apps, end, period.days, upto=day),
         "app_count": len(apps),
         "more_tiles": [t for hook in extensions.dashboard_tiles if (t := hook(apps))],
         "best": max(
-            (r for r in board.releases if r["kind"] == "up"),
+            (r for r in year.releases if r["kind"] == "up"),
             key=lambda r: r["impact"].deltas[1].change_pct,
             default=None,
         ),
@@ -106,6 +113,7 @@ def app_page(request, apple_id):
         "tiles": d.tiles(end, Period(end, 30), app=app) if end else [],
         "revenue": r.app_revenue(app, end) if end else None,
         "funnel": f.app_funnel(app, funnel_end) if (funnel_end := f.last_day()) else None,
+        "more_cards": [c for hook in extensions.app_cards if (c := hook(app))],
     }
     return render(request, "stats/app.html", context)
 

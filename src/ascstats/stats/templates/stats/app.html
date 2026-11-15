@@ -50,6 +50,7 @@
   </form>
   <div id="chart"><p class="muted">Loading…</p></div>
 </section>
+{% for template, more in more_cards %}{% include template with card=more %}{% endfor %}
 
 <section class="card fade">
   <div class="card-head">

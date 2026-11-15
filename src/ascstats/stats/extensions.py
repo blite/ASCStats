@@ -3,7 +3,7 @@
 ``aso`` (competitors, keywords) uses them all: its competitors ride in the ratings snapshot's
 Lookup requests, its keyword searches follow it in the daily store job, its tables refresh
 cached pages, the synthetic seed creates its demo data, and the static export renders its
-pages, and its keyword tiles join the Overview's.
+pages, its keyword tiles join the Overview's, and its keywords card joins each app's Stats tab.
 """
 
 from __future__ import annotations
@@ -37,3 +37,6 @@ daily_store_steps: list[Callable[[], None]] = []  # jobs.store_daily, after the 
 # the Overview, after its tiles: (template, tile) for more, given the active apps; None: none.
 # The template is included with ``tile`` set.
 dashboard_tiles: list[Callable[[list], tuple[str, object] | None]] = []
+# an app's Stats tab, after its Downloads chart: (template, card) for more cards, given the app;
+# None: none. The template is included with ``card`` set.
+app_cards: list[Callable[[object], tuple[str, object] | None]] = []

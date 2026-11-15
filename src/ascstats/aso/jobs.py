@@ -14,6 +14,14 @@ def search_keyword(keyword_id: int) -> int:
     return keywords.snapshot(only=[keyword]) if keyword else 0
 
 
+@task(queue_name="store", priority=50)
+def refresh_keywords(app_id: int) -> int:
+    """Search every keyword an idea tracks again now: an idea's keywords are searched once,
+    when added, and after that only when asked (the Refresh button on its Keywords tab)."""
+    found = Keyword.objects.filter(tracked_for__pk=app_id).order_by("storefront", "term")
+    return keywords.snapshot(only=list(found), again=True)
+
+
 @task(queue_name="store", priority=40)  # after a just-added keyword's search
 def scan_competitor(scan_id: int) -> str:
     """Search the terms a competitor seems to aim at (``rival_keywords.run``): about three

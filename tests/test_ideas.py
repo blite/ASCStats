@@ -96,3 +96,29 @@ def test_idea_pages(client, apps):
     real = client.post(f"/app/{idea.apple_id}/real/", {"app": "6700000001"})
     assert real.url == "/app/6700000001/keywords/"
     assert client.get(f"/app/{SNAKE}/real/").url == f"/app/{SNAKE}/keywords/"  # not an idea
+
+
+@pytest.mark.django_db(transaction=True)
+def test_an_idea_s_keywords_refresh_on_request(client, apps):
+    from django.utils import timezone
+
+    from ascstats.aso.models import KeywordSnapshot
+    from tests.test_jobs import work
+
+    idea = idea_apps.create("Worm Garden")
+    keywords.add(idea, "worm garden, snake game")
+    tab = client.get(f"/app/{idea.apple_id}/keywords/").content.decode()
+    refresh = f'data-refresh="/app/{idea.apple_id}/keywords/refresh/"'
+    assert refresh in tab  # the button shows once it tracks keywords
+    today = timezone.localdate()
+    keywords.snapshot(only=list(idea.keywords.all()))
+    first = set(KeywordSnapshot.objects.values_list("pk", flat=True))
+    assert client.get(f"/app/{idea.apple_id}/keywords/refresh/").status_code == 405
+    answer = client.post(f"/app/{idea.apple_id}/keywords/refresh/").json()
+    assert answer["count"] == 2 and answer["seconds"] > 0
+    work()
+    again = KeywordSnapshot.objects.filter(date=today)
+    assert again.count() == 2  # searched again today, replacing the morning's results
+    assert not first & set(again.values_list("pk", flat=True))
+    snake = client.get(f"/app/{SNAKE}/keywords/").content.decode()
+    assert "data-refresh=" not in snake  # a real app's keywords are searched every day

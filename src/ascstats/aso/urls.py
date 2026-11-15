@@ -45,6 +45,11 @@ urlpatterns = [
         name="app_keywords_manage",
     ),
     path(
+        "app/<appid:apple_id>/keywords/refresh/",
+        views.app_keywords_refresh,
+        name="app_keywords_refresh",
+    ),
+    path(
         "app/<appid:apple_id>/keywords/delete/",
         views.app_keywords_delete,
         name="app_keywords_delete",

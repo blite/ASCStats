@@ -3,7 +3,7 @@
 {% block content %}
 <section class="hero app-hero fade">
   <h1>{% if app.icon_url %}<img src="{{ app.icon_url }}" alt="" width="56" height="56">{% endif %}{{ app.name }}</h1>
-  {% if app.is_idea %}<p class="sub"><span class="badge">Idea</span> Research only: not on the App Store, keywords searched once when added.{% if not demo %} <a href="{% url 'app_make_real' app.apple_id %}">Make it a real app</a>{% endif %}</p>
+  {% if app.is_idea %}<p class="sub"><span class="badge">Idea</span> Research only: not on the App Store, keywords searched when added and whenever you refresh them.{% if not demo %} <a href="{% url 'app_make_real' app.apple_id %}">Make it a real app</a>{% endif %}</p>
   {% elif app.primary_genre or app.released_on %}<p class="sub">{{ app.primary_genre }}{% if app.primary_genre and app.released_on %} · {% endif %}{% if app.released_on %}On the App Store since {{ app.released_on|date:"M j, Y" }}{% endif %}</p>{% endif %}
 </section>
 <nav class="tablist" aria-label="{{ app.name }}" data-app-tab="{% if tab != "stats" %}{{ tab }}/{% endif %}">
