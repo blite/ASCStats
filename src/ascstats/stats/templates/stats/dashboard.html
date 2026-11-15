@@ -96,7 +96,7 @@
         {% for g in tg.grid %}<line class="{% if forloop.first %}axis{% else %}hair{% endif %}" x1="{{ tg.pad_l }}" y1="{{ g.y }}" x2="{{ tg.plot_r }}" y2="{{ g.y }}"/>
         <text class="tick" x="{{ tg.pad_l|add:'-8' }}" y="{{ g.y }}" dy="4" text-anchor="end">{{ g.label }}</text>{% endfor %}
         {% for t in tg.xticks %}<text class="tick" x="{{ t.x }}" y="{{ tg.height|add:'-6' }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
-        {% for b in tg.bars %}<g class="tg-bar" data-tip="{{ b.tip }}">
+        {% for b in tg.bars %}<g class="tg-bar" data-tip="{{ b.tip }}" data-tip-sw="{{ b.swatches }}">
           <rect x="{{ b.hit_x }}" y="{{ tg.pad_t }}" width="{{ b.hit_w }}" height="{{ tg.plot_h }}" fill="transparent"/>
           {% for r in b.rects %}<rect class="{{ r.cls }} rise" x="{{ r.x }}" y="{{ r.y }}" width="{{ r.w }}" height="{{ r.h }}" rx="{% if r.w > 6 %}1.5{% else %}0.5{% endif %}" style="animation-delay: {{ forloop.parentloop.counter0 }}0ms"/>{% endfor %}
         </g>{% endfor %}

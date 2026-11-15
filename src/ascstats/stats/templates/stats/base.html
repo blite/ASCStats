@@ -147,6 +147,7 @@
            border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-size: 12.5px; line-height: 1.45;
            box-shadow: 0 8px 28px rgba(0,0,0,.18); max-width: 300px; }
     #tip .t { font-weight: 650; }
+    #tip .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
     #tip div + div { margin-top: 4px; }
     /* an ⓘ next to a heading: its explanation shows in #tip on hover or focus */
     .info { display: inline-flex; vertical-align: middle; margin-left: 4px; padding: 2px; border: 0; border-radius: 6px; background: none;
@@ -307,10 +308,15 @@
   markTheme();
 
   // One tooltip for every chart; works for content htmx swaps in later (event delegation).
+  // data-tip-sw, "|"-separated and line for line with data-tip, puts a legend swatch of that
+  // color class (c1…c5, other) before a line; an empty entry, none.
   const tip = document.getElementById("tip");
   function show(el, x, y) {
+    const swatches = (el.dataset.tipSw || "").split("|");
     tip.replaceChildren(...el.dataset.tip.split("\n").map((line, i) => {
-      const d = document.createElement("div"); d.textContent = line; if (i === 0) d.className = "t"; return d;
+      const d = document.createElement("div"); d.textContent = line; if (i === 0) d.className = "t";
+      if (swatches[i]) d.prepend(Object.assign(document.createElement("span"), {className: `sw ${swatches[i]}`}));
+      return d;
     }));
     tip.hidden = false;
     const r = tip.getBoundingClientRect();

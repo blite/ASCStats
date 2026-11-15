@@ -363,6 +363,7 @@ def together(end: date, start: date, apps: list[App]) -> dict:
             _fmt_day(days[0]) if len(days) == 1 else f"{_fmt_day(days[0])} to {_fmt_day(days[-1])}"
         )
         tip = [when, f"{sum(stack):,} downloads"]
+        swatches = ["", ""]  # one per tip line: the app's color before its line
         rects = []
         for s, v in zip(series, stack, strict=True):
             if v > 0:
@@ -372,8 +373,15 @@ def together(end: date, start: date, apps: list[App]) -> dict:
                               "h": round(max(h - 1, 0.8), 1), "cls": s["cls"]})  # fmt: skip
                 y -= h
                 tip.append(f"{s['name']}: {v:,}")
+                swatches.append(s["cls"])
         bars.append(
-            {"rects": rects, "tip": "\n".join(tip), "hit_x": round(x, 1), "hit_w": round(slot, 2)}
+            {
+                "rects": rects,
+                "tip": "\n".join(tip),
+                "swatches": "|".join(swatches),
+                "hit_x": round(x, 1),
+                "hit_w": round(slot, 2),
+            }
         )
 
     def xc(day: date) -> float:  # the middle of the bar holding ``day``
