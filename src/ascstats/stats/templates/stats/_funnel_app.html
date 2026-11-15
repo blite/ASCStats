@@ -19,14 +19,19 @@
 
 <h3 style="margin:18px 0 2px;font-size:16px">Where impressions come from, and how each source converts</h3>
 <p class="sub">Left: each source's share of unique impressions by week. Right: each source's install rate. If the blended rate drops while no source got worse, the mix shifted (browse usually converts below search).{% if mix.folded %} Folded into Other for having fewer than 5 downloads: {{ mix.folded|join:", " }}.{% endif %}</p>
-<div class="split" aria-label="Legend" style="margin-bottom:6px">{% for s in mix.lines %}<span class="key"><span class="sw {{ s.cls }}"></span>{{ s.src }} · <strong>{{ s.latest }}</strong>{% if s.latest_thin %} <span class="muted">(thin)</span>{% endif %}</span>{% endfor %}<span class="muted">install rate, last 4 weeks</span></div>
-<div class="two" style="grid-template-columns:1fr 1fr">
-  <svg viewBox="0 0 {{ mix.w }} {{ mix.h }}" role="img" aria-label="Share of unique impressions by source">
+<div class="split" aria-label="Legend" style="margin-bottom:6px">{% for s in mix.stacks %}<span class="key"><span class="sw {{ s.cls }}"></span>{{ s.src }}</span>{% endfor %}</div>
+<div class="two" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+  <div style="min-width:0">
+  <div style="font-size:13px;margin-bottom:4px"><strong>Share of impressions</strong> <span class="muted">last 4 weeks: {% for s in mix.stacks %}{% if s.share >= 0.5 %}{{ s.src }} {{ s.share|floatformat:0 }}%{% if not forloop.last %} · {% endif %}{% endif %}{% endfor %}</span></div>
+  <svg viewBox="0 0 {{ mix.w }} {{ mix.h }}" style="display:block;width:100%;height:auto" role="img" aria-label="Share of unique impressions by source">
     {% for s in mix.stacks %}<path class="{{ s.cls }}" d="{{ s.path }}" stroke="var(--card)" stroke-width="1" data-tip="{{ s.src }}&#10;{{ s.share|floatformat:0 }}% of impressions, last 4 weeks"/>{% endfor %}
     <text class="tick" x="0" y="14">100%</text><text class="tick" x="0" y="{{ mix.h|add:'-20' }}">0%</text>
     {% for m in mix.months %}<text class="tick" x="{{ m.x }}" y="{{ mix.h|add:'-2' }}" text-anchor="middle">{{ m.label }}</text>{% endfor %}
   </svg>
-  <svg viewBox="0 0 {{ mix.w }} {{ mix.h }}" role="img" aria-label="Install rate by source">
+  </div>
+  <div style="min-width:0">
+  <div style="font-size:13px;margin-bottom:4px"><strong>Install rate</strong> <span class="muted">last 4 weeks: {% for s in mix.lines %}{{ s.src }} {{ s.latest }}{% if s.latest_thin %} (thin){% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</span></div>
+  <svg viewBox="0 0 {{ mix.w }} {{ mix.h }}" style="display:block;width:100%;height:auto" role="img" aria-label="Install rate by source">
     {% for g in mix.grid %}<line class="{% if forloop.first %}axis{% else %}hair{% endif %}" x1="36" y1="{{ g.y }}" x2="{{ mix.w }}" y2="{{ g.y }}"/><text class="tick" x="30" y="{{ g.y }}" dy="4" text-anchor="end">{{ g.label }}</text>{% endfor %}
     {% for s in mix.lines %}
       {% if s.points %}<polyline points="{{ s.points }}" fill="none" style="stroke: var(--{{ s.cls }})" stroke-width="2" stroke-linejoin="round"/>{% endif %}
@@ -34,6 +39,7 @@
     {% endfor %}
     {% for m in mix.months %}<text class="tick" x="{{ m.x }}" y="{{ mix.h|add:'-2' }}" text-anchor="middle">{{ m.label }}</text>{% endfor %}
   </svg>
+  </div>
 </div>
 <details>
   <summary>Table view: weekly rates</summary>
