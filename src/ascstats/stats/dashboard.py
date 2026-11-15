@@ -318,72 +318,82 @@ def scoreboard(end: date, start: date | None = None, apps: list[App] | None = No
     )
 
 
-TW, TH, T_L, T_R, T_T, T_B = 1040, 320, 52, 16, 14, 30
-COLORS = [f"var(--chart-{i})" for i in range(1, 6)]  # the busiest apps; the rest share --other
+TW, TH, T_L, T_R, T_T, T_B = 1040, 300, 52, 8, 12, 28
+SLOTS = 5  # apps with a color of their own, as on Revenue; the rest stack as "Other"
+DAILY_UP_TO = 92  # days drawn a bar a day; a longer span is drawn a bar a week
 
 
 def together(end: date, start: date, apps: list[App]) -> dict:
-    """Every app's daily downloads on one chart with one axis, busiest app first, so the apps
-    read against each other rather than each against its own peak."""
+    """Every app's downloads in one bar chart, each bar stacked by app as on the Revenue
+    page: the busiest apps at the bottom in a color each, the rest together as "Other". A
+    bar a day, or a week (the newest ending on ``end``) for a span longer than a quarter."""
     span = _days(start, end)
-    per_app = _per_app_daily(apps, start - timedelta(days=WARM_UP), end)
-    totals = {a.pk: sum(v for d, v in per_app[a.pk].items() if d >= start) for a in apps}
-    shown = sorted((a for a in apps if totals[a.pk] > 0), key=lambda a: -totals[a.pk])
-    drawn = {a.pk: _drawn(per_app[a.pk], span) for a in shown}
-    peak = max([v for s in drawn.values() for v in s] + [1])
-    top, tick_values = nice_axis(peak)
-    plot_w, plot_h = TW - T_L - T_R, TH - T_T - T_B
-    base = T_T + plot_h
-    step = plot_w / max(len(span) - 1, 1)
-
-    def x(day: date) -> float:
-        return round(T_L + (day - start).days * step, 1)
-
-    def y(v: float) -> float:
-        return round(base - plot_h * max(v, 0) / top, 1)
-
-    series = []
-    for n, app in enumerate(shown):
-        color = COLORS[n] if n < len(COLORS) else "var(--other)"
-        points = " ".join(f"{x(d)},{y(v)}" for d, v in zip(span, drawn[app.pk], strict=True))
+    per_app = _per_app_daily(apps, start, end)
+    totals = {a.pk: sum(per_app[a.pk].values()) for a in apps}
+    ranked = sorted((a for a in apps if totals[a.pk] > 0), key=lambda a: -totals[a.pk])
+    series = [
+        {"name": a.name, "cls": f"c{i + 1}", "ids": {a.pk}, "app": a}
+        for i, a in enumerate(ranked[:SLOTS])
+    ]
+    if rest := ranked[SLOTS:]:
+        n = len(rest)
         series.append(
-            {"app": app, "color": color, "points": points, "total": totals[app.pk], "rank": n}
-        )
-    series.reverse()  # the busiest is drawn last, on top
-    smoothed = len(span) >= SMOOTH_FROM
-    hits = []
-    for i, day in enumerate(span):
-        values = sorted(((drawn[a.pk][i], a.name) for a in shown), reverse=True)
-        lines = [
-            f"{name}: {v:,.0f}" if not smoothed else f"{name}: {v:,.1f}" for v, name in values[:8]
-        ]
-        if len(values) > 8:
-            lines.append(f"{len(values) - 8} more: {sum(v for v, _ in values[8:]):,.0f}")
-        hits.append(
             {
-                "x": round(x(day) - step / 2, 1),
-                "w": round(step, 2),
-                "tip": _fmt_day(day)
-                + (" · 7-day average" if smoothed else "")
-                + "\n"
-                + "\n".join(lines),
+                "name": f"Other ({n} app{'s' if n != 1 else ''})",
+                "cls": "other",
+                "ids": {a.pk for a in rest},
+                "app": None,
             }
         )
+    size = 1 if len(span) <= DAILY_UP_TO else 7
+    buckets = [span[max(i - size + 1, 0) : i + 1] for i in range(len(span) - 1, -1, -size)][::-1]
+    stacks = [
+        [sum(per_app[pk].get(d, 0) for pk in s["ids"] for d in days) for s in series]
+        for days in buckets
+    ]
+    top, tick_values = nice_axis(max([*(sum(st) for st in stacks), 1]))
+    plot_w, plot_h = TW - T_L - T_R, TH - T_T - T_B
+    slot = plot_w / len(buckets)
+    gap = min(2.0, slot * 0.15)
+    base = T_T + plot_h
+    bars = []
+    for i, (days, stack) in enumerate(zip(buckets, stacks, strict=True)):
+        x, y = T_L + i * slot, base
+        when = (
+            _fmt_day(days[0]) if len(days) == 1 else f"{_fmt_day(days[0])} to {_fmt_day(days[-1])}"
+        )
+        tip = [when, f"{sum(stack):,} downloads"]
+        rects = []
+        for s, v in zip(series, stack, strict=True):
+            if v > 0:
+                h = plot_h * v / top
+                rects.append({"x": round(x + gap, 1), "y": round(y - h + 0.5, 1),
+                              "w": round(max(slot - 2 * gap, 0.6), 1),
+                              "h": round(max(h - 1, 0.8), 1), "cls": s["cls"]})  # fmt: skip
+                y -= h
+                tip.append(f"{s['name']}: {v:,}")
+        bars.append(
+            {"rects": rects, "tip": "\n".join(tip), "hit_x": round(x, 1), "hit_w": round(slot, 2)}
+        )
+
+    def xc(day: date) -> float:  # the middle of the bar holding ``day``
+        i = next(n for n, days in enumerate(buckets) if days[-1] >= day)
+        return round(T_L + (i + 0.5) * slot, 1)
+
     return {
         "series": series,
-        "legend": series[::-1],
-        "hits": hits,
-        "grid": [{"y": y(v), "label": f"{v:,.0f}"} for v in tick_values],
-        "xticks": _xticks(start, end, x),
+        "bars": bars,
+        "weekly": size == 7,
+        "grid": [
+            {"y": round(base - plot_h * v / top, 1), "label": f"{v:,.0f}"} for v in tick_values
+        ],
+        "xticks": _xticks(start, end, xc),
         "width": TW,
         "height": TH,
         "pad_l": T_L,
         "plot_r": TW - T_R,
         "pad_t": T_T,
-        "base": base,
         "plot_h": plot_h,
-        "smoothed": smoothed,
-        "start": start,
     }
 
 

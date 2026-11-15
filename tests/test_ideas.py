@@ -115,7 +115,8 @@ def test_an_idea_s_keywords_refresh_on_request(client, apps):
     first = set(KeywordSnapshot.objects.values_list("pk", flat=True))
     assert client.get(f"/app/{idea.apple_id}/keywords/refresh/").status_code == 405
     answer = client.post(f"/app/{idea.apple_id}/keywords/refresh/").json()
-    assert answer["count"] == 2 and answer["seconds"] > 0
+    assert answer["count"] == 2
+    assert answer["seconds"] > 0
     work()
     again = KeywordSnapshot.objects.filter(date=today)
     assert again.count() == 2  # searched again today, replacing the morning's results

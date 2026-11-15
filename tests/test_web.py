@@ -447,7 +447,9 @@ def test_overview_charts_follow_the_period_and_leave_hidden_apps_out(client, see
     home = client.get("/").content.decode()
     assert "Every app, one chart" in home
     one = home.split("Every app, one chart")[1].split("Every release, every app")[0]
-    assert 'href="/app/1000000003/"' in one  # every listed app has a line
+    assert 'href="/app/1000000003/"' in one  # every listed app has a key
+    assert 'class="tg-bar"' in one
+    assert "Synthetic Stargazer: " in one
     App.objects.filter(apple_id=1000000003).update(is_hidden=True)
     home = client.get("/").content.decode()
     charts = home.split("Every app, one chart")[1].split("Ratings and reviews")[0]

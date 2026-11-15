@@ -86,21 +86,21 @@
     <div class="card-head">
       <div>
         <h2>Every app, one chart</h2>
-        <p class="sub">Daily downloads for each app, {% if period.days < chart_days %}the {{ chart_days }} days to {{ end|date:"M j" }}{% else %}{{ period.label }}{% endif %}{% if tg.smoothed %} (7-day average){% endif %}, on one scale so the apps read against each other. Hover for a day's numbers; click a line or a name for the app's page.{% if hidden_count %} Hidden apps are left out.{% endif %}</p>
+        <p class="sub">Downloads {% if tg.weekly %}a week{% else %}a day{% endif %}, {% if period.days < chart_days %}the {{ chart_days }} days to {{ end|date:"M j" }}{% else %}{{ period.label }}{% endif %}, each bar stacked by app. Hover a bar for the breakdown; click a name for the app's page.{% if hidden_count %} Hidden apps are left out.{% endif %}</p>
       </div>
+      <div class="split" aria-label="Legend">{% for s in tg.series %}{% if s.app %}<a class="key tg-key" href="{% url 'app' s.app.apple_id %}">{% else %}<span class="key">{% endif %}<span class="sw {{ s.cls }}"></span>{{ s.name|truncatechars:26 }}{% if s.app %}</a>{% else %}</span>{% endif %}{% endfor %}</div>
     </div>
     {% if tg.series %}
     <div class="scroll">
-      <svg viewBox="0 0 {{ tg.width }} {{ tg.height }}" style="min-width: 680px" role="img" aria-label="Daily downloads per app, {% if period.days < chart_days %}the {{ chart_days }} days to {{ end|date:"M j" }}{% else %}{{ period.label }}{% endif %}">
+      <svg viewBox="0 0 {{ tg.width }} {{ tg.height }}" style="min-width: 680px" role="img" aria-label="Downloads by app, {% if period.days < chart_days %}the {{ chart_days }} days to {{ end|date:"M j" }}{% else %}{{ period.label }}{% endif %}">
         {% for g in tg.grid %}<line class="{% if forloop.first %}axis{% else %}hair{% endif %}" x1="{{ tg.pad_l }}" y1="{{ g.y }}" x2="{{ tg.plot_r }}" y2="{{ g.y }}"/>
         <text class="tick" x="{{ tg.pad_l|add:'-8' }}" y="{{ g.y }}" dy="4" text-anchor="end">{{ g.label }}</text>{% endfor %}
-        {% for t in tg.xticks %}<text class="tick" x="{{ t.x }}" y="{{ tg.height|add:'-8' }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
-        {% for h in tg.hits %}<rect class="tg-hit" x="{{ h.x }}" y="{{ tg.pad_t }}" width="{{ h.w }}" height="{{ tg.plot_h }}" data-tip="{{ h.tip }}"/>{% endfor %}
-        {% for s in tg.series %}<a class="tg-line" href="{% url 'app' s.app.apple_id %}" aria-label="{{ s.app.name }}: open the app page"><polyline class="reveal" points="{{ s.points }}" style="stroke: {{ s.color }}"{% if s.rank >= 5 %} stroke-width="1.2"{% endif %}/></a>{% endfor %}
+        {% for t in tg.xticks %}<text class="tick" x="{{ t.x }}" y="{{ tg.height|add:'-6' }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
+        {% for b in tg.bars %}<g class="tg-bar" data-tip="{{ b.tip }}">
+          <rect x="{{ b.hit_x }}" y="{{ tg.pad_t }}" width="{{ b.hit_w }}" height="{{ tg.plot_h }}" fill="transparent"/>
+          {% for r in b.rects %}<rect class="{{ r.cls }} rise" x="{{ r.x }}" y="{{ r.y }}" width="{{ r.w }}" height="{{ r.h }}" rx="{% if r.w > 6 %}1.5{% else %}0.5{% endif %}" style="animation-delay: {{ forloop.parentloop.counter0 }}0ms"/>{% endfor %}
+        </g>{% endfor %}
       </svg>
-    </div>
-    <div class="split tg-legend" aria-label="Legend">
-      {% for s in tg.legend %}<a class="key" href="{% url 'app' s.app.apple_id %}"><span class="sw" style="background: {{ s.color }}"></span>{{ s.app.name|truncatechars:26 }} <span class="muted">{{ s.total|intcomma }}</span></a>{% endfor %}
     </div>
     {% else %}<p class="muted">No downloads in this period.</p>{% endif %}
   </section>
@@ -147,10 +147,8 @@
     </details>
   </section>
   <style>
-    .tg-hit { fill: transparent; } .tg-hit:hover { fill: var(--grid); opacity: .5; }
-    .tg-line polyline { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-    .tg-line:hover polyline, .tg-line:focus-visible polyline { stroke-width: 3.5; }
-    .tg-legend a { text-decoration: none; } .tg-legend a:hover { text-decoration: underline; }
+    .tg-bar:hover rect:not([fill]) { filter: brightness(1.12); }
+    .tg-key { text-decoration: none; } .tg-key:hover { text-decoration: underline; }
   </style>
 
   {% with act=activity %}
