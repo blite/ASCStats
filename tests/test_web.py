@@ -445,21 +445,23 @@ def test_overview_charts_follow_the_period_and_leave_hidden_apps_out(client, see
     from ascstats.stats.models import App
 
     home = client.get("/").content.decode()
-    assert "Every app, one chart" in home
-    one = home.split("Every app, one chart")[1].split("Every release, every app")[0]
+    assert "<h2>Downloads</h2>" in home
+    one = home.split("<h2>Downloads</h2>")[1].split("Every release, every app")[0]
     assert 'href="/app/1000000003/"' in one  # every listed app has a key
     assert 'class="tg-bar"' in one
     assert "Synthetic Stargazer: " in one
     assert 'data-tip-sw="||c1|c2|c3"' in one  # each app's line in the tip has its color
     App.objects.filter(apple_id=1000000003).update(is_hidden=True)
     home = client.get("/").content.decode()
-    charts = home.split("Every app, one chart")[1].split("Ratings and reviews")[0]
+    charts = home.split("<h2>Downloads</h2>")[1].split("Ratings and reviews")[0]
     assert 'href="/app/1000000003/"' not in charts  # neither chart draws a hidden app
     assert "Hidden apps are left out." in charts
-    assert "last 7 days" in client.get("/7d/").content.decode().split("Every app, one chart")[1]
+    assert "last 7 days" in client.get("/7d/").content.decode().split("<h2>Downloads</h2>")[1]
 
 
 def test_stats_tab_has_a_keywords_card(client, seeded):
     stats = client.get("/app/1000000001/").content.decode()
     card = stats.split("<h2>Keywords</h2>")[1].split("</section>")[0]
     assert 'href="/app/1000000001/keywords/"' in card  # it links to the Keywords tab
+    tiles = stats.split('class="grid4"')[1].split("</section>")[0].split("<section")[0]
+    assert '<a href="/app/1000000001/keywords/" class="card tile kwtile' in tiles  # top row

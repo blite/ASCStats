@@ -361,6 +361,13 @@ def dashboard_tiles(apps: list[App]) -> tuple[str, kw.Summary] | None:
     return ("aso/_keyword_tiles.html", found) if found.tracked else None
 
 
+def app_tiles(app: App) -> tuple[str, kw.Summary] | None:
+    """The keyword tiles at the top of an app's Stats tab, opening its Keywords tab; none
+    until it tracks a keyword."""
+    found = kw.summary([app])
+    return ("aso/_keyword_tiles.html", found) if found.tracked else None
+
+
 APP_CARD_ROWS = 8  # keywords the Stats tab's card lists, best ranked first
 
 

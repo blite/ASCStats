@@ -49,3 +49,4 @@ class AsoConfig(AppConfig):
         extensions.export_paths.append(views.export_paths)
         extensions.dashboard_tiles.append(views.dashboard_tiles)
         extensions.app_cards.append(views.app_card)
+        extensions.app_tiles.append(views.app_tiles)

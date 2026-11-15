@@ -114,6 +114,7 @@ def app_page(request, apple_id):
         "revenue": r.app_revenue(app, end) if end else None,
         "funnel": f.app_funnel(app, funnel_end) if (funnel_end := f.last_day()) else None,
         "more_cards": [c for hook in extensions.app_cards if (c := hook(app))],
+        "more_tiles": [t for hook in extensions.app_tiles if (t := hook(app))],
     }
     return render(request, "stats/app.html", context)
 

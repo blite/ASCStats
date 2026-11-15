@@ -37,6 +37,9 @@ daily_store_steps: list[Callable[[], None]] = []  # jobs.store_daily, after the 
 # the Overview, after its tiles: (template, tile) for more, given the active apps; None: none.
 # The template is included with ``tile`` set.
 dashboard_tiles: list[Callable[[list], tuple[str, object] | None]] = []
+# an app's Stats tab, after its own tiles: (template, tile), given the app; None: none. The
+# template is included with ``tile`` set and ``link`` true (each tile opens the app's tab).
+app_tiles: list[Callable[[object], tuple[str, object] | None]] = []
 # an app's Stats tab, after its Downloads chart: (template, card) for more cards, given the app;
 # None: none. The template is included with ``card`` set.
 app_cards: list[Callable[[object], tuple[str, object] | None]] = []

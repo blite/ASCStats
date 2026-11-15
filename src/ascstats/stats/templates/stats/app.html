@@ -33,6 +33,7 @@
     <div class="note">Net of refunds, in USD as Apple converts them</div>
   </div>
   {% endwith %}
+  {% for template, more in more_tiles %}{% include template with tile=more link=1 %}{% endfor %}
 </div>
 
 <section class="card">

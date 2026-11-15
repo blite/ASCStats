@@ -85,7 +85,7 @@
   <section class="card fade">
     <div class="card-head">
       <div>
-        <h2>Every app, one chart</h2>
+        <h2>Downloads</h2>
         <p class="sub">Downloads {% if tg.weekly %}a week{% else %}a day{% endif %}, {% if period.days < chart_days %}the {{ chart_days }} days to {{ end|date:"M j" }}{% else %}{{ period.label }}{% endif %}, each bar stacked by app. Hover a bar for the breakdown; click a name for the app's page.{% if hidden_count %} Hidden apps are left out.{% endif %}</p>
       </div>
       <div class="split" aria-label="Legend">{% for s in tg.series %}{% if s.app %}<a class="key tg-key" href="{% url 'app' s.app.apple_id %}">{% else %}<span class="key">{% endif %}<span class="sw {{ s.cls }}"></span>{{ s.name|truncatechars:26 }}{% if s.app %}</a>{% else %}</span>{% endif %}{% endfor %}</div>
