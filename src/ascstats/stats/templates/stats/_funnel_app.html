@@ -22,7 +22,7 @@
 <div class="split" aria-label="Legend" style="margin-bottom:6px">{% for s in mix.stacks %}<span class="key"><span class="sw {{ s.cls }}"></span>{{ s.src }}</span>{% endfor %}</div>
 <div class="two" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
   <div style="min-width:0">
-  <div style="font-size:13px;margin-bottom:4px"><strong>Share of impressions</strong> <span class="muted">last 4 weeks: {% for s in mix.stacks %}{% if s.share >= 0.5 %}{{ s.src }} {{ s.share|floatformat:0 }}%{% if not forloop.last %} · {% endif %}{% endif %}{% endfor %}</span></div>
+  <div style="font-size:13px;margin-bottom:4px"><strong>Share of impressions</strong> <span class="muted">last 4 weeks: {{ mix.share_summary }}</span></div>
   <svg viewBox="0 0 {{ mix.w }} {{ mix.h }}" style="display:block;width:100%;height:auto" role="img" aria-label="Share of unique impressions by source">
     {% for s in mix.stacks %}<path class="{{ s.cls }}" d="{{ s.path }}" stroke="var(--card)" stroke-width="1" data-tip="{{ s.src }}&#10;{{ s.share|floatformat:0 }}% of impressions, last 4 weeks"/>{% endfor %}
     <text class="tick" x="0" y="14">100%</text><text class="tick" x="0" y="{{ mix.h|add:'-20' }}">0%</text>

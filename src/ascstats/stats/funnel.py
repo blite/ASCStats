@@ -571,6 +571,9 @@ def source_mix(app: App, end: date) -> dict:
     months = month_ticks([ws for ws, _ in weeks], xc, min_gap=38)
     return {
         "stacks": stacks,
+        "share_summary": " \u00b7 ".join(
+            f"{s['src']} {s['share']:.0f}%" for s in stacks if s["share"] >= 0.5
+        ),
         "lines": lines,
         "grid": grid,
         "months": months,
