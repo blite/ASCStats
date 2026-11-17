@@ -30,9 +30,10 @@ log = logging.getLogger(__name__)
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")  # newest first
 SERVER_INFO = {"name": "ascstats", "title": "ASCStats", "version": "1"}
 INSTRUCTIONS = (
-    "ASCStats tracks the user's own App Store apps, the competitors each follows, and the "
-    "App Store searches they rank in. Call list_apps first to find an app; every other tool "
-    "takes the app's Apple ID or a part of its name. Everything is read-only."
+    "ASCStats tracks the user's own App Store apps, the competitors each follows, the "
+    "App Store searches they rank in, and which of their in-app purchases sell. Call "
+    "list_apps first to find an app; every other tool takes the app's Apple ID or a part of "
+    "its name. Everything is read-only."
 )
 
 PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS, INTERNAL_ERROR = (

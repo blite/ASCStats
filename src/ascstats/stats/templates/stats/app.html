@@ -87,6 +87,23 @@
   {% if rv.unconverted %}<p class="muted" style="font-size:12px;margin:8px 0 0">Not converted (no ECB rate): {% for c, v in rv.unconverted %}{{ v }} {{ c }}{% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
   {% endwith %}{% else %}<p class="muted">No proceeds in the past year: this app has earned nothing from paid downloads or in-app purchases.</p>{% endif %}
 </section>
+{% if iap.products %}
+<section class="card fade">
+  <div class="card-head">
+    <div>
+      <h2>In-app purchases</h2>
+      <p class="sub">Every product since {{ iap.start|date:"M j, Y" }}, best-selling first: units net of refunds, from the sales report (Pacific days); proceeds in USD at each day's ECB rate.</p>
+    </div>
+  </div>
+  <div class="scroll">
+    <table>
+      <tr><th>Product</th><th class="num">Units</th><th class="num">Refunds</th><th class="num">Proceeds</th><th class="num">Last sale</th></tr>
+      {% for p in iap.products %}<tr><td>{{ p.name|truncatechars:40 }}<div class="muted" style="font-size:12px">{{ p.sku }}</div></td><td class="num"><strong>{{ p.units|intcomma }}</strong></td><td class="num">{{ p.refunds|intcomma }}</td><td class="num">{{ p.usd|money }}</td><td class="num">{{ p.last_sale|date:"M j, Y"|default:"–" }}</td></tr>{% endfor %}
+    </table>
+  </div>
+  {% if iap.unconverted %}<p class="muted" style="font-size:12px;margin:8px 0 0">Not converted (no ECB rate): {% for c, v in iap.unconverted.items %}{{ v }} {{ c }}{% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+</section>
+{% endif %}
 {% if funnel %}{% with cv=funnel.conversion lk=funnel.leak %}
 <section class="card fade">
   <div class="card-head">

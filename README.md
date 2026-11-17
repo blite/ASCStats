@@ -173,6 +173,18 @@ delta carries a Welch t-score and the dashboard only bolds |t| ≥ 2. Update row
 dated and compared per platform, split on the report's `Device` column (`Desktop` is
 a Mac; product types are no guide, since iPhone updates arrive as `F7` too).
 
+### Which in-app purchases sell?
+
+`stats/products.py` rolls an app's in-app purchase lines in `SalesRow` (those with a
+`Parent Identifier`) up per product: units net of refunds, refunded units, developer proceeds
+in USD (each day's amount at that day's ECB rate; currencies without one are listed apart),
+and first and last sale. Products are grouped by **SKU**, not title, because Apple reports one
+product under its display name on some days and under the bare SKU on others; the display name
+is the newest title that is not the SKU. The app's Stats tab shows every product, all time, in
+an *In-app purchases* card, and the MCP server answers `list_iap_sales(app, days?)` (all time,
+or the last `days` days of sales data). Days are the sales report's Pacific days, so totals can
+differ slightly from the Revenue card's UTC, Apple-converted proceeds.
+
 ## Quick start (Docker Compose)
 
 ```bash

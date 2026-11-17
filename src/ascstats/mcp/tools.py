@@ -1,5 +1,6 @@
 """What the MCP server lets an agent ask: your apps, their competitors, one competitor in
-depth, which languages the market supports, and the keywords you track. Every tool only
+depth, which languages the market supports, the keywords you track, and which in-app
+purchases sell best. Every tool only
 reads; the one live request is ``localization_report``'s Lookup of your own app.
 
 Each tool takes plain JSON arguments and answers a JSON-ready dict. An app is named by its
@@ -18,6 +19,7 @@ from ascstats.aso import competitors as cp
 from ascstats.aso import keywords as kw
 from ascstats.aso import rival_keywords
 from ascstats.aso.models import Competitor, CompetitorSnapshot
+from ascstats.stats import products as iap
 from ascstats.stats.models import DOWNLOAD_ROWS, App, RatingSnapshot, SalesRow
 from ascstats.stats.territories import name as country_name
 
@@ -531,6 +533,49 @@ def list_keywords(app: str, storefront: str | None = None) -> dict:
     }
 
 
+def list_iap_sales(app: str, days: int | None = None) -> dict:
+    found = _app(app)
+    if days is not None:
+        try:
+            days = int(days)
+        except TypeError, ValueError:
+            raise ToolError("days must be a whole number of days, e.g. 30.") from None
+        if days < 1:
+            raise ToolError("days must be 1 or more; leave it out for all time.")
+    sales = iap.iap_sales(found, days)
+    return {
+        "app": {"apple_id": found.apple_id, "name": found.name},
+        "period": {"days": days, "start": sales["start"], "through": sales["end"]}
+        if sales["end"]
+        else None,
+        "note": "From the Sales & Trends sales report (Pacific days), one row per product SKU, "
+        "best-selling first. units is net of refunds; refunds counts refunded units. "
+        "proceeds_usd is developer proceeds (after Apple's commission, before tax) net of "
+        "refunds, converted from each storefront's currency at that day's ECB rate; "
+        "proceeds_unconverted holds currencies without a rate. names lists every title the "
+        "report used for the product."
+        if sales["end"]
+        else f"{found.name} has no in-app purchase sales.",
+        "total_units": sales["units"],
+        "total_proceeds_usd": sales["usd"],
+        "total_proceeds_unconverted": sales["unconverted"],
+        "products": [
+            {
+                "sku": p.sku,
+                "name": p.name,
+                "names": p.titles,
+                "units": p.units,
+                "refunds": p.refunds,
+                "proceeds_usd": p.usd,
+                "proceeds_unconverted": p.unconverted,
+                "first_sale": p.first_sale,
+                "last_sale": p.last_sale,
+            }
+            for p in sales["products"]
+        ],
+    }
+
+
 TOOLS = [
     Tool(
         "list_apps",
@@ -582,6 +627,23 @@ TOOLS = [
         },
         ["app"],
         list_keywords,
+    ),
+    Tool(
+        "list_iap_sales",
+        "An app's in-app purchases by product (SKU), best-selling first: units sold net of "
+        "refunds, refunds, developer proceeds in USD, and first and last sale dates. Answers "
+        '"which packs sell best". All time unless days is given.',
+        APP_ARG
+        | {
+            "days": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Only the last this many days of sales data, e.g. 30 or 90; "
+                "all time if left out.",
+            }
+        },
+        ["app"],
+        list_iap_sales,
     ),
 ]
 BY_NAME = {t.name: t for t in TOOLS}

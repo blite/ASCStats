@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from . import dashboard as d
 from . import extensions
 from . import funnel as f
+from . import products as pr
 from . import rating_trends as rtr
 from . import ratings as rt
 from . import revenue as r
@@ -112,6 +113,7 @@ def app_page(request, apple_id):
         "windows": WINDOWS,
         "tiles": d.tiles(end, Period(end, 30), app=app) if end else [],
         "revenue": r.app_revenue(app, end) if end else None,
+        "iap": pr.iap_sales(app),
         "funnel": f.app_funnel(app, funnel_end) if (funnel_end := f.last_day()) else None,
         "more_cards": [c for hook in extensions.app_cards if (c := hook(app))],
         "more_tiles": [t for hook in extensions.app_tiles if (t := hook(app))],

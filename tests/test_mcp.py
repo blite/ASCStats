@@ -67,6 +67,7 @@ def test_the_handshake_and_the_tool_list(mcp):
     listed = rpc(mcp, "tools/list")["result"]["tools"]
     assert {t["name"] for t in listed} == {
         "list_apps", "list_competitors", "get_competitor", "localization_report", "list_keywords",
+        "list_iap_sales",
     }  # fmt: skip
     for t in listed:
         assert t["inputSchema"]["type"] == "object"
